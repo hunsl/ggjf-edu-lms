@@ -1,5 +1,8 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import * as XLSX from "xlsx";
+/* ── React hooks (CDN global) ── */
+const { useState, useMemo, useEffect, useRef, useCallback } = React;
+/* ── XLSX (CDN global) ── */
+// XLSX is loaded via CDN script tag in index.html
+
 
 /* ══════════════════════════════════════════════════════════
    Supabase REST API — fetch 직접 호출 (라이브러리 불필요)
@@ -3939,7 +3942,7 @@ const NAV_ITEMS = [
 /* ═══════════════════════════════════════════════════════════
    APP ROOT
 ═══════════════════════════════════════════════════════════ */
-export default function App() {
+function App() {
   // ══ 모든 훅은 조건문 전에 선언 (Rules of Hooks) ══
   const [accounts,    setAccounts]   = useState(INIT_ACCOUNTS);
   const [currentUser, setCurrentUser] = useState(null);
@@ -4294,3 +4297,7 @@ export default function App() {
     </>
   );
 }
+
+/* ── 앱 마운트 ── */
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);

@@ -91,6 +91,19 @@ const fromCourse = c => ({
   links: c.links||[],
 });
 
+const toAccount = r => r ? ({
+  id: r.id,
+  name: r.name||"",
+  role: r.role||"staff",
+  pw: r.pw||"",
+}) : null;
+
+const fromAccount = a => ({
+  name: a.name||"",
+  role: a.role||"staff",
+  pw: a.pw||"",
+});
+
 /* ═══════════════════════════════════════════════════════════
    GLOBAL STYLES
 ═══════════════════════════════════════════════════════════ */
@@ -1336,6 +1349,113 @@ const AttendanceMgmt = ({ students, courses }) => {
   // ── 출결 기록 (입실/퇴실 분리) ──
   const [records, setRecords] = useState({}); // { studentId: { in:{time,status}, out:{time} } }
 
+  // ── Supabase에서 출결 데이터 로드 ──
+  useEffect(() => {
+    if (!course || !date) return;
+    const loadAttendance = async () => {
+      try {
+        const courseStudentIds = courseStudents.map(s => s.id);
+        if (courseStudentIds.length === 0) return;
+
+        const { data, error } = await sbGet(
+          "attendance",
+          `select=*&student_id=in.(${courseStudentIds.join(",")})&date=eq.${date}`
+        );
+        if (error) throw error;
+
+        // 데이터를 records 형태로 변환
+        const newRecords = {};
+        (data || []).forEach(att => {
+          if (!newRecords[att.student_id]) newRecords[att.student_id] = {};
+          const [h, m] = att.time.split(":").map(Number);
+          const mins = h * 60 + m;
+          if (att.type === "in") {
+            newRecords[att.student_id].in = { time: att.time, mins };
+          } else if (att.type === "out") {
+            newRecords[att.student_id].out = { time: att.time };
+          }
+        });
+        setRecords(newRecords);
+        console.log(`✅ ${date} 출결 데이터 로드 완료:`, Object.keys(newRecords).length, "명");
+      } catch (err) {
+        console.error("출결 로드 오류:", err);
+      }
+    };
+    loadAttendance();
+  }, [course, date]);
+
+  // ── 실시간 출결 업데이트 구독 ──
+  useEffect(() => {
+    if (!course || !date) return;
+    
+    const channel = `realtime:public:attendance`;
+    const ws = new WebSocket(
+      `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1?apikey=${SB_KEY}&vsn=1.0.0`
+    );
+
+    ws.onopen = () => {
+      console.log(`🔔 출결 실시간 구독 시작 (${date})`);
+      ws.send(JSON.stringify({
+        topic: channel,
+        event: "phx_join",
+        payload: {
+          config: {
+            postgres_changes: [{
+              event: "*",
+              schema: "public",
+              table: "attendance",
+              filter: `date=eq.${date}`
+            }]
+          }
+        },
+        ref: Date.now().toString()
+      }));
+
+      const heartbeat = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            topic: "phoenix",
+            event: "heartbeat",
+            payload: {},
+            ref: Date.now().toString()
+          }));
+        } else {
+          clearInterval(heartbeat);
+        }
+      }, 30000);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.event === "postgres_changes") {
+          const { eventType, new: newRecord } = msg.payload.data;
+          if (eventType === "INSERT" || eventType === "UPDATE") {
+            const [h, m] = newRecord.time.split(":").map(Number);
+            const mins = h * 60 + m;
+            setRecords(prev => ({
+              ...prev,
+              [newRecord.student_id]: {
+                ...(prev[newRecord.student_id] || {}),
+                [newRecord.type]: newRecord.type === "in" 
+                  ? { time: newRecord.time, mins }
+                  : { time: newRecord.time }
+              }
+            }));
+            console.log(`🔔 실시간 출결: ${newRecord.type} - 학생 ID ${newRecord.student_id}`);
+          }
+        }
+      } catch (err) {
+        console.error("실시간 메시지 파싱 오류:", err);
+      }
+    };
+
+    ws.onerror = (err) => console.error("❌ 출결 구독 오류:", err);
+    ws.onclose = () => console.warn("🔌 출결 구독 종료");
+
+    return () => ws.close();
+  }, [course, date]);
+
   // 상태 계산 (입실 시각 → 출석/지각/결석)
   const calcStatus = (inMins) => {
     if (inMins === null) return "A";
@@ -1725,6 +1845,45 @@ const AttendanceMgmt = ({ students, courses }) => {
               })}
             </tbody>
           </table>
+          
+          {/* 수동 입력 저장 버튼 */}
+          <div style={{ padding:"14px 18px", borderTop:`1px solid ${T.bd}`, 
+            display:"flex", gap:10, justifyContent:"flex-end", alignItems:"center" }}>
+            <div style={{ fontSize:11, color:T.mu }}>
+              {Object.keys(manualAtt).length}명 입력됨
+            </div>
+            <Btn onClick={async ()=>{
+              if(Object.keys(manualAtt).length === 0) {
+                alert("입력된 출결이 없습니다");
+                return;
+              }
+              try {
+                const now = new Date();
+                const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                
+                // 수동 입력은 입실 기록으로 저장
+                const records = Object.entries(manualAtt).map(([studentId, status]) => ({
+                  student_id: parseInt(studentId),
+                  date: date,
+                  type: 'in',
+                  time: time,
+                  status: status, // O, L, A, E
+                  created_at: now.toISOString()
+                }));
+
+                const { error } = await sbInsert("attendance", records);
+                if (error) throw error;
+
+                alert(`✅ ${records.length}명 출결 저장 완료`);
+                setManualAtt({});
+              } catch(err) {
+                alert("저장 오류: " + (err.message || JSON.stringify(err)));
+              }
+            }}>
+              <Icon n="check" s={13}/>
+              출결 저장
+            </Btn>
+          </div>
         </Card>
       )}
     </div>
@@ -4043,6 +4202,25 @@ function App() {
   const [loading,    setLoading]    = useState(true);   // 최초 로딩 상태
   const [dbError,    setDbError]    = useState("");     // DB 연결 오류
 
+  // ── 계정 로드 (앱 시작 시 1회) ──
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        const { data, error } = await sbGet("accounts", "select=*&order=id");
+        if (error) throw error;
+        if (data && data.length > 0) {
+          setAccounts(data.map(toAccount));
+          console.log("✅ 계정 로드 완료:", data.length, "개");
+        }
+      } catch (err) {
+        console.error("❌ 계정 로드 실패:", err);
+        // 실패 시 기본 계정 사용
+        setAccounts(INIT_ACCOUNTS);
+      }
+    };
+    loadAccounts();
+  }, []);
+
   // ── Supabase 최초 데이터 로드 ──
   useEffect(() => {
     if (!currentUser) return;
@@ -4075,28 +4253,49 @@ function App() {
     realtimeManager.subscribe("students", {
       onInsert: (newRecord) => {
         setStudents(prev => {
-          if (prev.find(s => s.id === newRecord.id)) return prev;
+          // 이미 있으면 업데이트, 없으면 추가 (중복 방지 개선)
+          const existing = prev.find(s => s.id === newRecord.id);
+          if (existing) {
+            console.log("🔄 훈련생 업데이트 (실시간):", newRecord.name);
+            return prev.map(s => s.id === newRecord.id ? toStudent(newRecord) : s);
+          }
+          console.log("🆕 훈련생 추가 (실시간):", newRecord.name);
           return [...prev, toStudent(newRecord)];
         });
-        console.log("🆕 훈련생 추가:", newRecord.name);
       },
       onUpdate: (newRecord) => {
         setStudents(prev => prev.map(s => 
           s.id === newRecord.id ? toStudent(newRecord) : s
         ));
-        console.log("✏️ 훈련생 수정:", newRecord.name);
+        console.log("✏️ 훈련생 수정 (실시간):", newRecord.name);
       },
       onDelete: (oldRecord) => {
         setStudents(prev => prev.filter(s => s.id !== oldRecord.id));
-        console.log("🗑️ 훈련생 삭제:", oldRecord.name);
+        console.log("🗑️ 훈련생 삭제 (실시간):", oldRecord.name);
       }
     });
 
     // 과정 실시간 구독
     realtimeManager.subscribe("courses", {
-      onInsert: (newRecord) => setCourses(prev => [...prev, toCourse(newRecord)]),
-      onUpdate: (newRecord) => setCourses(prev => prev.map(c => c.id===newRecord.id ? toCourse(newRecord) : c)),
-      onDelete: (oldRecord) => setCourses(prev => prev.filter(c => c.id !== oldRecord.id))
+      onInsert: (newRecord) => {
+        setCourses(prev => {
+          const existing = prev.find(c => c.id === newRecord.id);
+          if (existing) {
+            console.log("🔄 과정 업데이트 (실시간):", newRecord.name);
+            return prev.map(c => c.id === newRecord.id ? toCourse(newRecord) : c);
+          }
+          console.log("🆕 과정 추가 (실시간):", newRecord.name);
+          return [...prev, toCourse(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setCourses(prev => prev.map(c => c.id===newRecord.id ? toCourse(newRecord) : c));
+        console.log("✏️ 과정 수정 (실시간):", newRecord.name);
+      },
+      onDelete: (oldRecord) => {
+        setCourses(prev => prev.filter(c => c.id !== oldRecord.id));
+        console.log("🗑️ 과정 삭제 (실시간):", oldRecord.name);
+      }
     });
 
     return () => realtimeManager.unsubscribeAll();
@@ -4105,11 +4304,14 @@ function App() {
   // ── 훈련생 CRUD ──
   const addStudents = useCallback(async (newOnes) => {
     const { data, error } = await sbInsert("students", newOnes.map(fromStudent));
-    if (error) { alert("저장 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => {
-      const ids = new Set((data||[]).map(r=>r.id));
-      return [...prev.filter(s=>!ids.has(s.id)), ...(data||[]).map(toStudent)];
-    });
+    if (error) { 
+      alert("저장 오류: " + (error.message||JSON.stringify(error))); 
+      console.error("❌ 학생 저장 실패:", error);
+      return; 
+    }
+    
+    console.log("✅ 학생 저장 완료:", (data||[]).length, "명 - 실시간 구독이 자동 반영");
+    // 실시간 구독이 자동으로 추가하므로 여기서는 아무것도 안 함
   }, []);
 
   const updateStudent = useCallback(async (updated) => {
@@ -4140,19 +4342,35 @@ function App() {
   // ── 과정 CRUD ──
   const addCourse = useCallback(async (c) => {
     const { data, error } = await sbInsert("courses", fromCourse(c));
-    if (error) { alert("과정 저장 오류: " + (error.message||JSON.stringify(error))); return; }
-    setCourses(prev => [...prev, toCourse(data)]);
+    if (error) { 
+      alert("과정 저장 오류: " + (error.message||JSON.stringify(error))); 
+      console.error("❌ 과정 저장 실패:", error);
+      return; 
+    }
+    
+    console.log("✅ 과정 저장 완료:", data?.name, "- 실시간 구독이 자동 반영");
+    // 실시간 구독이 자동으로 추가하므로 여기서는 아무것도 안 함
   }, []);
 
   const updateCourse = useCallback(async (c) => {
     const { error } = await sbUpdate("courses", `id=eq.${c.id}`, fromCourse(c));
-    if (error) { alert("과정 수정 오류: " + (error.message||JSON.stringify(error))); return; }
+    if (error) { 
+      alert("과정 수정 오류: " + (error.message||JSON.stringify(error))); 
+      console.error("❌ 과정 수정 실패:", error);
+      return; 
+    }
+    console.log("✅ 과정 수정 완료:", c.name);
     setCourses(prev => prev.map(x => x.id===c.id ? c : x));
   }, []);
 
   const deleteCourse = useCallback(async (id) => {
     const { error } = await sbDelete("courses", `id=eq.${id}`);
-    if (error) { alert("과정 삭제 오류: " + (error.message||JSON.stringify(error))); return; }
+    if (error) { 
+      alert("과정 삭제 오류: " + (error.message||JSON.stringify(error))); 
+      console.error("❌ 과정 삭제 실패:", error);
+      return; 
+    }
+    console.log("✅ 과정 삭제 완료: ID", id);
     setCourses(prev => prev.filter(c => c.id!==id));
   }, []);
 
@@ -4238,7 +4456,36 @@ function App() {
         <AccountMgmt
           accounts={accounts}
           currentUser={currentUser}
-          onSave={updated => { setAccounts(updated); setCurrentUser(prev=>updated.find(a=>a.id===prev.id)||prev); }}
+          onSave={async (updated) => { 
+            try {
+              // 기존 계정 전체 삭제 후 재생성 (간단한 방식)
+              // 실제 운영에서는 개별 CRUD 권장
+              console.log("💾 계정 저장 중...");
+              
+              // 로컬 state 먼저 업데이트
+              setAccounts(updated);
+              setCurrentUser(prev => updated.find(a => a.id === prev.id) || prev);
+              
+              // Supabase 동기화는 백그라운드에서
+              // (실패해도 로컬은 작동하도록)
+              setTimeout(async () => {
+                try {
+                  // 기존 데이터 삭제
+                  await sbDelete("accounts", "id=gte.0");
+                  
+                  // 새 데이터 삽입
+                  const { error } = await sbInsert("accounts", updated.map(fromAccount));
+                  if (error) throw error;
+                  
+                  console.log("✅ 계정 저장 완료:", updated.length, "개");
+                } catch (err) {
+                  console.error("❌ 계정 저장 실패 (로컬은 유지):", err);
+                }
+              }, 100);
+            } catch (err) {
+              console.error("계정 저장 오류:", err);
+            }
+          }}
           onClose={()=>setShowAccMgr(false)}
         />
       )}

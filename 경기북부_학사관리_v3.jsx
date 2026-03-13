@@ -1331,7 +1331,8 @@ const AttendanceMgmt = ({ students, courses }) => {
   const qrToken   = `${course.code}-${date}-${qrType.toUpperCase()}-2026GJF`;
   const qrData    = `https://check.gjf.or.kr/attend?c=${course.code}&d=${date}&type=${qrType}&t=${qrToken}`;
   const qrColor   = qrType === "in" ? "2563EB" : "9A3412";
-  const qrUrl     = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}&bgcolor=ffffff&color=${qrColor}&margin=12`;
+  // quickchart.io: CORS 없이 QR 이미지 생성
+  const qrUrl     = `https://quickchart.io/qr?text=${encodeURIComponent(qrData)}&size=200&margin=2&dark=${qrColor}`;
 
   // ── 출결 기록 (입실/퇴실 분리) ──
   const [records, setRecords] = useState({}); // { studentId: { in:{time,status}, out:{time} } }
@@ -2579,8 +2580,7 @@ const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
   );
 };
 
-const InstructorMgmt = ({ courses }) => {
-  const [instructors, setInst] = useState(SEED_INSTRUCTORS);
+const InstructorMgmt = ({ courses, instructors, setInstructors }) => {
   const [editTarget, setEdit]  = useState(null);
   const [isNew, setIsNew]      = useState(false);
   const [search, setSearch]    = useState("");
@@ -2593,12 +2593,12 @@ const InstructorMgmt = ({ courses }) => {
   });
 
   const handleSave = inst => {
-    if(isNew) setInst(p=>[...p, inst]);
-    else      setInst(p=>p.map(x=>x.id===inst.id?inst:x));
+    if(isNew) setInstructors(p=>[...p, inst]);
+    else      setInstructors(p=>p.map(x=>x.id===inst.id?inst:x));
   };
   const handleDel = id => {
     if(!window.confirm("강사를 삭제하시겠습니까?")) return;
-    setInst(p=>p.filter(x=>x.id!==id));
+    setInstructors(p=>p.filter(x=>x.id!==id));
   };
 
   const typeColors = {"주강사":T.p,"보조강사":T.ok,"외래강사":"#7C3AED","운영요원":T.warn};
@@ -2727,6 +2727,11 @@ const SEED_ROOMS = [
   { id:1, name:"101호 강의실", addr:"의정부시 청사로 1", capacity:25, equip:"빔프로젝터·PC 25대·화이트보드" },
   { id:2, name:"세미나실 A",   addr:"의정부시 청사로 1", capacity:15, equip:"TV·노트북 연결" },
   { id:3, name:"컴퓨터실",     addr:"양주시 남면로 20",  capacity:20, equip:"PC 20대·프린터" },
+];
+const SEED_BOOKINGS = [
+  { id:1, roomId:1, courseId:1, label:"초등 피지컬 코딩",   start:"2026-06-01", end:"2026-07-15", color:BOOKING_COLORS[0] },
+  { id:2, roomId:1, courseId:7, label:"행정회계 사무 OA",   start:"2026-03-02", end:"2026-05-28", color:BOOKING_COLORS[1] },
+  { id:3, roomId:3, courseId:4, label:"ERP·지게차",         start:"2026-03-04", end:"2026-05-30", color:BOOKING_COLORS[3] },
 ];
 /* ── BookModal: 강의 일정 추가/수정 (독립 컴포넌트) ── */
 const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => {
@@ -2897,21 +2902,15 @@ const RoomModal = ({ room, onClose, setRooms }) => {
 
 const BOOKING_COLORS = ["#EA580C","#C2410C","#7C2D12","#9A3412","#DC2626","#2563EB","#7C3AED","#059669"];
 
-const RoomMgmt = ({ courses }) => {
+const RoomMgmt = ({ courses, rooms, setRooms, bookings, setBookings }) => {
   const today = new Date();
   const [year,  setYear]  = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // 0-based
-  const [rooms,    setRooms]    = useState(SEED_ROOMS);
-  const [bookings, setBookings] = useState([
-    { id:1, roomId:1, courseId:1, label:"초등 피지컬 코딩",   start:"2026-06-01", end:"2026-07-15", color:BOOKING_COLORS[0] },
-    { id:2, roomId:1, courseId:7, label:"행정회계 사무 OA",   start:"2026-03-02", end:"2026-05-28", color:BOOKING_COLORS[1] },
-    { id:3, roomId:3, courseId:4, label:"ERP·지게차",         start:"2026-03-04", end:"2026-05-30", color:BOOKING_COLORS[3] },
-  ]);
+  const [month, setMonth] = useState(today.getMonth());
   const [showRoomModal, setShowRM] = useState(false);
-  const [showBookModal, setShowBM] = useState(null); // null | { roomId, date }
+  const [showBookModal, setShowBM] = useState(null);
   const [editRoom,  setEditRoom]  = useState(null);
   const [editBook,  setEditBook]  = useState(null);
-  const [selRoom,   setSelRoom]   = useState(0); // 0 = 전체
+  const [selRoom,   setSelRoom]   = useState(0);
 
   // 달력 날짜 생성
   const firstDay = new Date(year, month, 1).getDay();
@@ -3945,19 +3944,50 @@ const NAV_ITEMS = [
 function App() {
   // ══ 모든 훅은 조건문 전에 선언 (Rules of Hooks) ══
   const [accounts,    setAccounts]   = useState(INIT_ACCOUNTS);
-  const [currentUser, setCurrentUser] = useState(null);
+  // ── 로그인 유지: 새로고침해도 세션 유지 ──
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { const u = sessionStorage.getItem("gjf_user"); return u ? JSON.parse(u) : null; }
+    catch { return null; }
+  });
   const [showAccMgr,  setShowAccMgr] = useState(false);
   const [piDismissed, setPiDismissed] = useState(false);
 
   const [page,       setPage]       = useState("dash");
   const [collapsed,  setCollapsed]  = useState(false);
-  const [students,   setStudents]   = useState([]);
-  const [courses,    setCourses]    = useState(COURSES); // 로딩 전 시드로 표시
+  const [students,   setStudents]   = useState(() => {
+    try { const v = sessionStorage.getItem("gjf_students"); return v ? JSON.parse(v) : SEED_STUDENTS; }
+    catch { return SEED_STUDENTS; }
+  });
+  const [courses,    setCourses]    = useState(() => {
+    try { const v = sessionStorage.getItem("gjf_courses"); return v ? JSON.parse(v) : COURSES; }
+    catch { return COURSES; }
+  });
+  // ── 강사·강의실·예약: sessionStorage로 탭 이동/새로고침 유지 ──
+  const [instructors, setInstructors] = useState(() => {
+    try { const v = sessionStorage.getItem("gjf_instructors"); return v ? JSON.parse(v) : SEED_INSTRUCTORS; }
+    catch { return SEED_INSTRUCTORS; }
+  });
+  const [rooms, setRooms] = useState(() => {
+    try { const v = sessionStorage.getItem("gjf_rooms"); return v ? JSON.parse(v) : SEED_ROOMS; }
+    catch { return SEED_ROOMS; }
+  });
+  const [bookings, setBookings] = useState(() => {
+    try { const v = sessionStorage.getItem("gjf_bookings"); return v ? JSON.parse(v) : SEED_BOOKINGS; }
+    catch { return SEED_BOOKINGS; }
+  });
   const [editTarget, setEditTarget] = useState(null);
   const [showNew,    setShowNew]    = useState(false);
   const [showDataMgr,setShowDataMgr]= useState(false);
-  const [loading,    setLoading]    = useState(true);   // 최초 로딩 상태
-  const [dbError,    setDbError]    = useState("");     // DB 연결 오류
+  const [loading,    setLoading]    = useState(false);
+  const [dbError,    setDbError]    = useState("");
+  const [dbReady,    setDbReady]    = useState(false); // DB 연결 성공 여부
+
+  // ── 변경 시 sessionStorage 자동 저장 ──
+  useEffect(() => { try { sessionStorage.setItem("gjf_instructors", JSON.stringify(instructors)); } catch{} }, [instructors]);
+  useEffect(() => { try { sessionStorage.setItem("gjf_rooms",       JSON.stringify(rooms));       } catch{} }, [rooms]);
+  useEffect(() => { try { sessionStorage.setItem("gjf_bookings",    JSON.stringify(bookings));    } catch{} }, [bookings]);
+  useEffect(() => { try { sessionStorage.setItem("gjf_students",    JSON.stringify(students));    } catch{} }, [students]);
+  useEffect(() => { try { sessionStorage.setItem("gjf_courses",     JSON.stringify(courses));     } catch{} }, [courses]);
 
   // ── Supabase 최초 데이터 로드 ──
   useEffect(() => {
@@ -3970,12 +4000,15 @@ function App() {
           sbGet("courses", "select=*&order=id"),
           sbGet("students", "select=*&order=id"),
         ]);
-        if (cRes.error) throw cRes.error;
-        if (sRes.error) throw sRes.error;
-        if (cRes.data && cRes.data.length > 0) setCourses(cRes.data.map(toCourse));
-        setStudents((sRes.data || []).map(toStudent));
+        // 테이블 오류(미생성 등)면 로컬 시드 유지
+        if (cRes.error) { console.warn("courses 테이블 오류:", cRes.error); }
+        else if (cRes.data && cRes.data.length > 0) setCourses(cRes.data.map(toCourse));
+
+        if (sRes.error) { console.warn("students 테이블 오류:", sRes.error); }
+        else { setStudents((sRes.data || []).map(toStudent)); setDbReady(true); }
       } catch (e) {
-        setDbError("DB 연결 오류: " + (e.message || JSON.stringify(e)));
+        setDbError("DB 연결 실패 — 로컬 데이터로 동작 중");
+        console.error("DB load error:", e);
       } finally {
         setLoading(false);
       }
@@ -3983,81 +4016,114 @@ function App() {
     load();
   }, [currentUser]);
 
-  // ── 폴링: 10초마다 훈련생 변경 감지 (실시간 대체) ──
+  // ── 폴링: 30초마다 훈련생 변경 감지 (DB 연결된 경우만) ──
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !dbReady) return;
     const poll = setInterval(async () => {
-      const { data } = await sbGet("students", "select=*&order=id");
-      if (data) setStudents(data.map(toStudent));
-    }, 10000);
+      const { data, error } = await sbGet("students", "select=*&order=id");
+      if (!error && data) setStudents(data.map(toStudent));
+    }, 30000);
     return () => clearInterval(poll);
-  }, [currentUser]);
+  }, [currentUser, dbReady]);
 
   // ── 훈련생 CRUD ──
   const addStudents = useCallback(async (newOnes) => {
-    const { data, error } = await sbInsert("students", newOnes.map(fromStudent));
-    if (error) { alert("저장 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => {
-      const ids = new Set((data||[]).map(r=>r.id));
-      return [...prev.filter(s=>!ids.has(s.id)), ...(data||[]).map(toStudent)];
-    });
-  }, []);
+    // 로컬 즉시 반영 (임시 ID 부여)
+    const withTempId = newOnes.map((s, i) => ({ ...s, id: s.id || Date.now() + i }));
+    setStudents(prev => [...prev, ...withTempId]);
+    // DB 저장 시도
+    if (dbReady) {
+      const { data, error } = await sbInsert("students", newOnes.map(fromStudent));
+      if (error) {
+        console.warn("DB 저장 실패 (로컬만 유지):", error);
+        return;
+      }
+      // DB에서 받은 실제 ID로 교체
+      if (data) {
+        const dbRows = Array.isArray(data) ? data : [data];
+        setStudents(prev => {
+          const tempIds = new Set(withTempId.map(s => s.id));
+          return [...prev.filter(s => !tempIds.has(s.id)), ...dbRows.map(toStudent)];
+        });
+      }
+    }
+  }, [dbReady]);
 
   const updateStudent = useCallback(async (updated) => {
-    const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
-    if (error) { alert("수정 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => prev.map(s => s.id===updated.id ? updated : s));
-  }, []);
+    setStudents(prev => prev.map(s => s.id===updated.id ? updated : s)); // 즉시 반영
+    if (dbReady) {
+      const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
+      if (error) console.warn("DB 수정 실패:", error);
+    }
+  }, [dbReady]);
 
   const deleteStudent = useCallback(async (id) => {
     if (!window.confirm("이 훈련생을 삭제하시겠습니까?")) return;
-    const { error } = await sbDelete("students", `id=eq.${id}`);
-    if (error) { alert("삭제 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => prev.filter(s => s.id!==id));
-  }, []);
+    setStudents(prev => prev.filter(s => s.id!==id)); // 즉시 반영
+    if (dbReady) {
+      const { error } = await sbDelete("students", `id=eq.${id}`);
+      if (error) console.warn("DB 삭제 실패:", error);
+    }
+  }, [dbReady]);
 
   const resetData = useCallback(async () => {
-    const { error } = await sbDelete("students", "id=gte.0");
-    if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents([]);
-  }, []);
+    if (dbReady) {
+      const { error } = await sbDelete("students", "id=gte.0");
+      if (error) console.warn("DB 초기화 실패:", error);
+    }
+  }, [dbReady]);
 
   const resetCoursStudents = useCallback(async (cid) => {
-    const { error } = await sbDelete("students", `cid=eq.${cid}`);
-    if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.filter(s => s.cid !== cid));
-  }, []);
+    if (dbReady) {
+      const { error } = await sbDelete("students", `cid=eq.${cid}`);
+      if (error) console.warn("DB 과정 초기화 실패:", error);
+    }
+  }, [dbReady]);
 
   // ── 과정 CRUD ──
   const addCourse = useCallback(async (c) => {
-    const { data, error } = await sbInsert("courses", fromCourse(c));
-    if (error) { alert("과정 저장 오류: " + (error.message||JSON.stringify(error))); return; }
-    setCourses(prev => [...prev, toCourse(data)]);
-  }, []);
+    const tempId = Date.now();
+    setCourses(prev => [...prev, { ...c, id: tempId }]);
+    if (dbReady) {
+      const { data, error } = await sbInsert("courses", fromCourse(c));
+      if (error) { console.warn("과정 DB 저장 실패:", error); return; }
+      if (data) setCourses(prev => prev.map(x => x.id===tempId ? toCourse(data) : x));
+    }
+  }, [dbReady]);
 
   const updateCourse = useCallback(async (c) => {
-    const { error } = await sbUpdate("courses", `id=eq.${c.id}`, fromCourse(c));
-    if (error) { alert("과정 수정 오류: " + (error.message||JSON.stringify(error))); return; }
     setCourses(prev => prev.map(x => x.id===c.id ? c : x));
-  }, []);
+    if (dbReady) {
+      const { error } = await sbUpdate("courses", `id=eq.${c.id}`, fromCourse(c));
+      if (error) console.warn("과정 DB 수정 실패:", error);
+    }
+  }, [dbReady]);
 
   const deleteCourse = useCallback(async (id) => {
-    const { error } = await sbDelete("courses", `id=eq.${id}`);
-    if (error) { alert("과정 삭제 오류: " + (error.message||JSON.stringify(error))); return; }
     setCourses(prev => prev.filter(c => c.id!==id));
-  }, []);
+    if (dbReady) {
+      const { error } = await sbDelete("courses", `id=eq.${id}`);
+      if (error) console.warn("과정 DB 삭제 실패:", error);
+    }
+  }, [dbReady]);
 
   // ── 로그인 전이면 LoginScreen 표시 ──
   if (!currentUser) {
     return (
       <>
         <GStyle/>
-        <LoginScreen accounts={accounts} onLogin={user => { setCurrentUser(user); setPiDismissed(false); }}/>
+        <LoginScreen accounts={accounts} onLogin={user => {
+          sessionStorage.setItem("gjf_user", JSON.stringify(user));
+          setCurrentUser(user);
+          setPiDismissed(false);
+        }}/>
       </>
     );
   }
 
-  // ── 로딩 화면 ──
+  // ── 로딩 화면 (DB 조회 중) ──
   if (loading) {
     return (
       <>
@@ -4096,8 +4162,8 @@ function App() {
       case "dash":        return <Dashboard students={students} courses={courses}/>;
       case "courses":     return <CourseList courses={courses} onAdd={addCourse} onUpdate={updateCourse} onDelete={deleteCourse}/>;
       case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
-      case "instructors": return <InstructorMgmt courses={courses}/>;
-      case "rooms":       return <RoomMgmt courses={courses}/>;
+      case "instructors": return <InstructorMgmt courses={courses} instructors={instructors} setInstructors={setInstructors}/>;
+      case "rooms":       return <RoomMgmt courses={courses} rooms={rooms} setRooms={setRooms} bookings={bookings} setBookings={setBookings}/>;
       case "attendance":  return <AttendanceMgmt students={students} courses={courses}/>;
       case "completion":  return <CompletionMgmt students={students} courses={courses}/>;
       case "cert":        return <CertMgmt students={students} courses={courses}/>;
@@ -4235,7 +4301,7 @@ function App() {
                     👤 계정 관리
                   </button>
                 )}
-                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) setCurrentUser(null); }}
+                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) { sessionStorage.removeItem("gjf_user"); setCurrentUser(null); } }}
                   style={{ width:"100%", padding:"6px 0", borderRadius:7,
                     border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)",
                     color:"rgba(255,255,255,.7)", cursor:"pointer", fontSize:11, fontWeight:600 }}>
@@ -4256,6 +4322,11 @@ function App() {
                 <span style={{ color:T.p, fontWeight:700 }}>경기도일자리재단 북부사업본부</span>
                 <span style={{ margin:"0 6px", color:T.bd }}>·</span>
                 직업교육 학사관리시스템 v2026
+                <span style={{ marginLeft:8, fontSize:9, fontWeight:700, padding:"2px 7px",
+                  borderRadius:4, background: dbReady ? "#D1FAE5" : "#FEF3C7",
+                  color: dbReady ? "#065F46" : "#92400E" }}>
+                  {dbReady ? "🟢 DB연결" : "🟡 로컬모드"}
+                </span>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 {/* 개인정보 상시 아이콘 */}

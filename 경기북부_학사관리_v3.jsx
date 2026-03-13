@@ -2723,6 +2723,7 @@ const InstructorMgmt = ({ courses, instructors, setInstructors }) => {
 /* ═══════════════════════════════════════════════════════════
    ④ ROOM MANAGEMENT  강의실관리  (월간 캘린더)
 ═══════════════════════════════════════════════════════════ */
+const BOOKING_COLORS = ["#EA580C","#C2410C","#7C2D12","#9A3412","#DC2626","#2563EB","#7C3AED","#059669"];
 const SEED_ROOMS = [
   { id:1, name:"101호 강의실", addr:"의정부시 청사로 1", capacity:25, equip:"빔프로젝터·PC 25대·화이트보드" },
   { id:2, name:"세미나실 A",   addr:"의정부시 청사로 1", capacity:15, equip:"TV·노트북 연결" },
@@ -2900,7 +2901,7 @@ const RoomModal = ({ room, onClose, setRooms }) => {
   );
 };
 
-const BOOKING_COLORS = ["#EA580C","#C2410C","#7C2D12","#9A3412","#DC2626","#2563EB","#7C3AED","#059669"];
+/* BOOKING_COLORS는 SEED_ROOMS 위로 이동됨 */
 
 const RoomMgmt = ({ courses, rooms, setRooms, bookings, setBookings }) => {
   const today = new Date();

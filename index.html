@@ -4034,28 +4034,35 @@ function App() {
   useEffect(() => { try { sessionStorage.setItem("gjf_students",    JSON.stringify(students));    } catch{} }, [students]);
   useEffect(() => { try { sessionStorage.setItem("gjf_courses",     JSON.stringify(courses));     } catch{} }, [courses]);
 
-  // ── Supabase 최초 데이터 로드 ──
+  // ── Supabase 백그라운드 데이터 로드 (UI를 막지 않음) ──
   useEffect(() => {
     if (!currentUser) return;
+    setDbError("");
     const load = async () => {
-      setLoading(true);
-      setDbError("");
       try {
         const [cRes, sRes] = await Promise.all([
           sbGet("courses", "select=*&order=id"),
           sbGet("students", "select=*&order=id"),
         ]);
-        // 테이블 오류(미생성 등)면 로컬 시드 유지
-        if (cRes.error) { console.warn("courses 테이블 오류:", cRes.error); }
-        else if (cRes.data && cRes.data.length > 0) setCourses(cRes.data.map(toCourse));
-
-        if (sRes.error) { console.warn("students 테이블 오류:", sRes.error); }
-        else { setStudents((sRes.data || []).map(toStudent)); setDbReady(true); }
+        // 과정: DB에 데이터가 있을 때만 교체
+        if (!cRes.error && cRes.data && cRes.data.length > 0) {
+          setCourses(cRes.data.map(toCourse));
+          console.log("✅ 과정 DB 로드:", cRes.data.length, "개");
+        } else {
+          console.log("과정 DB 없음/오류 → 로컬 시드 유지");
+        }
+        // 훈련생: DB에 데이터가 있을 때만 교체 (빈배열이면 시드 유지!)
+        if (!sRes.error && sRes.data && sRes.data.length > 0) {
+          setStudents(sRes.data.map(toStudent));
+          console.log("✅ 훈련생 DB 로드:", sRes.data.length, "명");
+        } else {
+          console.log("훈련생 DB 없음/오류 → 로컬 시드 유지");
+        }
+        setDbReady(true);
       } catch (e) {
-        setDbError("DB 연결 실패 — 로컬 데이터로 동작 중");
-        console.error("DB load error:", e);
-      } finally {
-        setLoading(false);
+        console.warn("DB 로드 실패 — 로컬 시드로 동작:", e.message);
+        setDbError("로컬 모드");
+        setDbReady(false);
       }
     };
     load();
@@ -4073,34 +4080,37 @@ function App() {
 
   // ── 훈련생 CRUD ──
   const addStudents = useCallback(async (newOnes) => {
-    // 로컬 즉시 반영 (임시 ID 부여)
-    const withTempId = newOnes.map((s, i) => ({ ...s, id: s.id || Date.now() + i }));
+    // ① 로컬 즉시 반영 (임시 음수 ID로 충돌 방지)
+    const withTempId = newOnes.map((s, i) => ({ ...s, id: -(Date.now() + i) }));
     setStudents(prev => [...prev, ...withTempId]);
-    // DB 저장 시도
-    if (dbReady) {
+    // ② DB 저장 항상 시도 (dbReady 무관)
+    try {
       const { data, error } = await sbInsert("students", newOnes.map(fromStudent));
       if (error) {
-        console.warn("DB 저장 실패 (로컬만 유지):", error);
+        console.warn("DB 저장 실패 (로컬 유지):", error.message || error);
         return;
       }
-      // DB에서 받은 실제 ID로 교체
+      // DB에서 받은 실제 ID로 임시 ID 교체
       if (data) {
-        const dbRows = Array.isArray(data) ? data : [data];
+        const dbRows = (Array.isArray(data) ? data : [data]).map(toStudent);
         setStudents(prev => {
           const tempIds = new Set(withTempId.map(s => s.id));
-          return [...prev.filter(s => !tempIds.has(s.id)), ...dbRows.map(toStudent)];
+          return [...prev.filter(s => !tempIds.has(s.id)), ...dbRows];
         });
+        console.log("✅ 훈련생 DB 저장 완료:", dbRows.length, "명");
       }
+    } catch(e) {
+      console.warn("DB 저장 오류 (로컬 유지):", e.message);
     }
-  }, [dbReady]);
+  }, []);
 
   const updateStudent = useCallback(async (updated) => {
     setStudents(prev => prev.map(s => s.id===updated.id ? updated : s)); // 즉시 반영
-    if (dbReady) {
+    try {
       const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
-      if (error) console.warn("DB 수정 실패:", error);
-    }
-  }, [dbReady]);
+      if (error) console.warn("DB 수정 실패 (로컬 유지):", error.message);
+    } catch(e) { console.warn("DB 수정 오류:", e.message); }
+  }, []);
 
   const deleteStudent = useCallback(async (id) => {
     if (!window.confirm("이 훈련생을 삭제하시겠습니까?")) return;
@@ -4109,7 +4119,7 @@ function App() {
       const { error } = await sbDelete("students", `id=eq.${id}`);
       if (error) console.warn("DB 삭제 실패:", error);
     }
-  }, [dbReady]);
+  }, []);
 
   const resetData = useCallback(async () => {
     setStudents([]);
@@ -4117,7 +4127,7 @@ function App() {
       const { error } = await sbDelete("students", "id=gte.0");
       if (error) console.warn("DB 초기화 실패:", error);
     }
-  }, [dbReady]);
+  }, []);
 
   const resetCoursStudents = useCallback(async (cid) => {
     setStudents(prev => prev.filter(s => s.cid !== cid));
@@ -4125,18 +4135,22 @@ function App() {
       const { error } = await sbDelete("students", `cid=eq.${cid}`);
       if (error) console.warn("DB 과정 초기화 실패:", error);
     }
-  }, [dbReady]);
+  }, []);
 
   // ── 과정 CRUD ──
   const addCourse = useCallback(async (c) => {
-    const tempId = Date.now();
-    setCourses(prev => [...prev, { ...c, id: tempId }]);
-    if (dbReady) {
+    const tempId = -(Date.now());
+    setCourses(prev => [...prev, { ...c, id: tempId }]);  // 로컬 즉시 반영
+    try {
       const { data, error } = await sbInsert("courses", fromCourse(c));
-      if (error) { console.warn("과정 DB 저장 실패:", error); return; }
-      if (data) setCourses(prev => prev.map(x => x.id===tempId ? toCourse(data) : x));
-    }
-  }, [dbReady]);
+      if (error) { console.warn("과정 DB 저장 실패 (로컬 유지):", error.message); return; }
+      if (data) {
+        const dbC = toCourse(Array.isArray(data) ? data[0] : data);
+        setCourses(prev => prev.map(x => x.id === tempId ? dbC : x));
+        console.log("✅ 과정 DB 저장:", c.name);
+      }
+    } catch(e) { console.warn("과정 DB 저장 오류:", e.message); }
+  }, []);
 
   const updateCourse = useCallback(async (c) => {
     setCourses(prev => prev.map(x => x.id===c.id ? c : x));
@@ -4144,7 +4158,7 @@ function App() {
       const { error } = await sbUpdate("courses", `id=eq.${c.id}`, fromCourse(c));
       if (error) console.warn("과정 DB 수정 실패:", error);
     }
-  }, [dbReady]);
+  }, []);
 
   const deleteCourse = useCallback(async (id) => {
     setCourses(prev => prev.filter(c => c.id!==id));
@@ -4152,7 +4166,7 @@ function App() {
       const { error } = await sbDelete("courses", `id=eq.${id}`);
       if (error) console.warn("과정 DB 삭제 실패:", error);
     }
-  }, [dbReady]);
+  }, []);
 
   // ── 로그인 전이면 LoginScreen 표시 ──
   if (!currentUser) {
@@ -4168,39 +4182,7 @@ function App() {
     );
   }
 
-  // ── 로딩 화면 (DB 조회 중) ──
-  if (loading) {
-    return (
-      <>
-        <GStyle/>
-        <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column",
-          alignItems:"center", justifyContent:"center",
-          background:"linear-gradient(135deg,#7C2D12,#EA580C,#FFF7ED)",
-          fontFamily:"'Pretendard',-apple-system,sans-serif" }}>
-          <div style={{ width:56, height:56, borderRadius:16, background:"rgba(255,255,255,.2)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:26, marginBottom:20, animation:"ping 1.5s ease infinite" }}>🎓</div>
-          <div style={{ fontSize:15, fontWeight:800, color:"#fff", marginBottom:8 }}>
-            데이터를 불러오는 중…
-          </div>
-          <div style={{ fontSize:12, color:"rgba(255,255,255,.6)" }}>
-            Supabase 연결 중 · 잠시만 기다려 주세요
-          </div>
-          {dbError && (
-            <div style={{ marginTop:20, padding:"12px 20px", background:"#FEF2F2",
-              borderRadius:10, fontSize:12, color:"#DC2626", maxWidth:340, textAlign:"center" }}>
-              ⚠️ {dbError}<br/>
-              <button onClick={()=>window.location.reload()}
-                style={{ marginTop:8, padding:"5px 14px", borderRadius:7, border:"none",
-                  background:"#DC2626", color:"#fff", cursor:"pointer", fontSize:11, fontWeight:700 }}>
-                새로고침
-              </button>
-            </div>
-          )}
-        </div>
-      </>
-    );
-  }
+  // ── DB 로딩 중에도 UI 표시 (백그라운드 로드) ──
 
   const renderPage = () => {
     switch(page) {

@@ -91,7 +91,8 @@
     const SUPABASE_URL      = "https://YOUR_PROJECT.supabase.co";  // ← 수정 필요
     const SUPABASE_ANON_KEY = "YOUR_ANON_KEY";                     // ← 수정 필요
 
-    const sbClient = (typeof window !== "undefined" && window.supabase && SUPABASE_URL !== "https://YOUR_PROJECT.supabase.co")
+    const SB_CONFIGURED = SUPABASE_URL !== "https://YOUR_PROJECT.supabase.co";
+    const sbClient = (typeof window !== "undefined" && window.supabase && SB_CONFIGURED)
       ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
       : null;
 
@@ -119,6 +120,7 @@
 
     // ── Supabase REST helper ─────────────────────────────────────────────────
     const sbFetch = async (path, options = {}) => {
+      if (!SB_CONFIGURED) throw new Error("Supabase가 설정되지 않았습니다");
       const headers = {
         "apikey":        SUPABASE_ANON_KEY,
         "Authorization": "Bearer " + SUPABASE_ANON_KEY,
@@ -183,11 +185,15 @@
 
     // ── Realtime 구독 훅 ─────────────────────────────────────────────────────
     const useRealtimeSync = (table, callback) => {
+      const callbackRef = useRef(callback);
+      useEffect(() => { callbackRef.current = callback; });
       useEffect(() => {
         if (!sbClient) return;
         const channel = sbClient
           .channel("realtime:" + table)
-          .on("postgres_changes", { event: "*", schema: "public", table }, callback)
+          .on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
+            callbackRef.current(payload);
+          })
           .subscribe();
         return () => { sbClient.removeChannel(channel); };
       }, [table]);
@@ -671,22 +677,21 @@
       const courseStudents = students.filter((s) => s.cid === course.id);
 
       // DB에서 해당 날짜 출석 로드 (Supabase 연동 시)
-      const loadAttendance = async () => {
+      const loadAttendance = () => {
         setLoading(true);
-        try {
-          const rows = await dbAPI.attendance.getByDate(course.id, date);
-          const map = {};
-          rows.forEach((r) => { map[r.studentId] = r; });
-          setRecords(map);
-        } catch (e) {
-          // Supabase 미연동 시 기존 로컬 상태 유지
-          console.warn("출석 로드 실패 (Supabase 미연동):", e.message);
-        } finally {
-          setLoading(false);
-        }
+        dbAPI.attendance.getByDate(course.id, date)
+          .then((rows) => {
+            const map = {};
+            rows.forEach((r) => { map[r.studentId] = r; });
+            setRecords(map);
+          })
+          .catch((e) => {
+            console.warn("출석 로드 실패 (Supabase 미연동):", e.message);
+          })
+          .finally(() => { setLoading(false); });
       };
 
-      useEffect(() => { loadAttendance(); }, [course.id, date]);
+      useEffect(loadAttendance, [course.id, date]);
 
       // Realtime 구독: attendance 테이블 변경 시 즉시 UI 갱신
       useRealtimeSync("attendance", (payload) => {
@@ -725,6 +730,7 @@
       const absentCnt  = Object.values(records).filter((r) => r.status === "A").length;
       const pendingCnt = courseStudents.length - Object.keys(records).length;
       const checkedCnt = courseStudents.length - pendingCnt;
+      const checkInPct = courseStudents.length ? Math.round(checkedCnt / courseStudents.length * 100) : 0;
 
       return (
         <div className="page">
@@ -814,10 +820,10 @@
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                 <span style={{ fontSize: 11, color: T.mu }}>입실 진행률</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: T.p }}>
-                  {courseStudents.length ? Math.round(checkedCnt / courseStudents.length * 100) : 0}%
+                  {checkInPct}%
                 </span>
               </div>
-              <RBar r={courseStudents.length ? checkedCnt / courseStudents.length * 100 : 0} h={8}/>
+              <RBar r={checkInPct} h={8}/>
             </div>
           </Card>
         </div>

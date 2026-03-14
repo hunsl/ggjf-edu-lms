@@ -1,12 +1,1 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Index</title>
-</head>
-<body>
-    <h1>Welcome to the 경기북부 학사관리 ERP</h1>
-    <p>프로덕션 버전입니다!</p>
-</body>
-</html>
+<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>경기북부 직업교육 학사관리시스템</title>\n    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>\n    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>\n    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.15.0/babel.min.js"></script>\n    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>\n    <style>\n        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }\n        header { background-color: #333; color: #fff; padding: 10px; text-align: center; }\n        .tab { display: inline-block; margin: 10px; padding: 10px; background-color: #fff; border: 1px solid #ccc; cursor: pointer; }\n        .login { margin: 20px; padding: 10px; background-color: #fff; border: 1px solid #ccc;}\n    </style>\n</head>\n<body>\n    <header>\n        <h1>경기북부 직업교육 학사관리시스템</h1>\n    </header>\n    <div id="app"></div>\n    <script type="text/babel">\n        const { useState } = React;\n        function App() {\n            const [activeTab, setActiveTab] = useState('Dashboard');\n            return (\n                <div>\n                    <div>\n                        {['Dashboard', 'Courses', 'Students', 'Instructors', 'Rooms', 'Attendance', 'Completion', 'Certificates', 'Accounts'].map(tab => (\n                            <div key={tab} className="tab" onClick={() => setActiveTab(tab)}>{tab}</div>\n                        ))}                                     \n                    </div>\n                    <h2>{activeTab}</h2>\n                    <div>{/* Content for {activeTab} goes here */}</div>\n                    <div className="login">\n                        <h3>Login</h3>\n                        <input type="text" placeholder="Username" />\n                        <input type="password" placeholder="Password" />\n                        <button>Login</button>\n                    </div>\n                </div>\n            );\n        }\n        ReactDOM.render(<App />, document.getElementById('app'));\n    <\/script>\n</body>\n</html>

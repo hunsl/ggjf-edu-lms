@@ -1,243 +1,1111 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>경기북부 직업교육 학사관리시스템 v2026</title>
-  <meta name="description" content="경기도일자리재단 북부사업본부 직업교육 학사관리"/>
-  
-  <!-- 폰트 -->
-  <link rel="preconnect" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"/>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"/>
-  
-  <!-- React -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  
-  <!-- 유틸리티 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode/minified/html5-qrcode.min.js"></script>
-  
-  <!-- Supabase REST API (라이브러리 없이 fetch 사용) -->
-  <script>
-    // Supabase 설정 (애노드 레벨에서 미리 정의)
-    window.SUPABASE_CONFIG = {
-      url: "https://vqkjakgbrsnsererwmma.supabase.co",
-      key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM"
-    };
-  </script>
-
+  <script src="https://cdn.jsdelivr.net/npm/qrcode.js@1.5.3/qrcode.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body, #root { height: 100%; font-family: 'Pretendard', -apple-system, sans-serif; }
-    body { background: #F8F9FA; -webkit-font-smoothing: antialiased; overflow: hidden; }
-    
-    #loading {
-      position: fixed; inset: 0;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #7C2D12 0%, #EA580C 50%, #FED7AA 100%);
-      color: white; z-index: 9999;
-      animation: fadeOut 0.6s ease-in-out 2s forwards;
+    /* ═══════════════════════════════════════════════════════════
+       🎨 MASTER DESIGN SYSTEM v2026
+    ═══════════════════════════════════════════════════════════ */
+    :root {
+      /* Brand */
+      --p: #EA580C;
+      --p-dark: #C2410C;
+      --p-light: #FB923C;
+      --p-soft: #FFF7ED;
+      --sb: #7C2D12;
+      --sb-dark: #451A03;
+      
+      /* Semantic */
+      --ok: #059669;
+      --warn: #D97706;
+      --danger: #DC2626;
+      --info: #2563EB;
+      --purple: #8B5CF6;
+      
+      /* Neutral */
+      --tx: #1E293B;
+      --tx-sub: #334155;
+      --mu: #64748B;
+      --mu-light: #94A3B8;
+      --bd: #E2E8F0;
+      --bd-light: #F1F5F9;
+      --s1: #FFFFFF;
+      --s2: #F8FAFC;
+      --s3: #F1F5F9;
+      
+      /* Geo */
+      --radius-sm: 8px;
+      --radius-md: 16px;
+      --radius-lg: 28px;
+      --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
     }
-    @keyframes fadeOut { to { opacity: 0; pointer-events: none; } }
-    #loading .spinner { width: 60px; height: 60px; border: 4px solid rgba(255,255,255,0.3);
-      border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #loading .text { margin-top: 20px; font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body, #root {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Pretendard', -apple-system, sans-serif;
+      background: var(--s2);
+      color: var(--tx);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--sb) 0%, var(--p) 40%, var(--p-light) 70%, var(--p-soft) 100%);
+      z-index: 9999;
+      transition: opacity 0.8s;
+    }
+
+    .loader-circle {
+      width: 100px;
+      height: 100px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes ping {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      75% { transform: scale(2); opacity: 0; }
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+
+    @keyframes loginBg {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    .page {
+      animation: fadeUp 0.3s var(--ease) both;
+    }
+
+    .row-hover:hover {
+      background: var(--p-soft) !important;
+    }
+
+    .course-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(234, 88, 12, 0.2) !important;
+    }
+
+    .drop-zone.drag-over {
+      border-color: var(--p) !important;
+      background: var(--p-soft) !important;
+      transform: scale(1.02);
+    }
+
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff; overflow: visible; }
+    }
+
+    /* ══ 프리미엄 사이���바 ══ */
+    .sidebar {
+      width: 280px;
+      background: var(--sb);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+      overflow-y: auto;
+    }
+
+    .sidebar-header {
+      padding: 40px 30px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .sidebar-logo {
+      font-size: 24px;
+      font-weight: 950;
+      letter-spacing: -1px;
+      margin-bottom: 8px;
+    }
+
+    .sidebar-subtitle {
+      font-size: 11px;
+      color: var(--p-light);
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 20px;
+      margin: 4px 12px;
+      border-radius: 14px;
+      cursor: pointer;
+      color: rgba(255, 255, 255, 0.55);
+      transition: all 0.2s ease;
+      border: none;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 700;
+      position: relative;
+    }
+
+    .nav-link:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateX(4px);
+    }
+
+    .nav-link.active {
+      color: #fff;
+      background: linear-gradient(135deg, var(--p), var(--p-dark));
+      font-weight: 900;
+      box-shadow: 0 8px 20px rgba(124, 45, 18, 0.35);
+    }
+
+    .nav-link.active::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      width: 4px;
+      height: 20px;
+      background: #fff;
+      border-radius: 0 3px 3px 0;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 20px 0;
+      overflow-y: auto;
+    }
+
+    .sidebar-footer {
+      padding: 24px 20px;
+      background: rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: var(--p);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #fff;
+    }
+
+    .user-info {
+      flex: 1;
+    }
+
+    .user-name {
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .user-rank {
+      font-size: 10px;
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+
+    /* ══ 메인 컨테이너 ══ */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 50px 70px;
+    }
+
+    /* ══ 카드 시스템 ══ */
+    .card {
+      background: var(--s1);
+      border-radius: 12px;
+      border: 1px solid var(--bd);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.03);
+    }
+
+    /* ══ 버튼 시스템 ══ */
+    .btn {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: var(--p);
+      color: #fff;
+      padding: 10px 20px;
+      font-size: 13px;
+    }
+
+    .btn-primary:hover {
+      background: var(--p-dark);
+      box-shadow: 0 8px 16px rgba(234, 88, 12, 0.3);
+    }
+
+    .btn-ghost {
+      background: var(--s2);
+      color: var(--mu);
+      padding: 8px 14px;
+      font-size: 12px;
+    }
+
+    .btn-ghost:hover {
+      background: var(--bd);
+    }
+
+    /* ══ 입력 필드 ══ */
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--bd);
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      background: var(--s2);
+      color: var(--tx);
+      transition: border-color 0.15s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--p);
+      box-shadow: 0 0 0 3px var(--p-soft);
+    }
+
+    /* ══ 테이블 ══ */
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    thead tr {
+      background: var(--s3);
+    }
+
+    th {
+      padding: 14px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--mu);
+      border-bottom: 1px solid var(--bd);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 14px;
+      border-bottom: 1px solid var(--bd-light);
+      font-size: 13px;
+    }
+
+    tbody tr:hover {
+      background: var(--p-soft);
+    }
+
+    /* ══ 섹션 헤더 ══ */
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 3px solid var(--bd-light);
+    }
+
+    .section-title {
+      font-size: 28px;
+      font-weight: 950;
+      color: var(--tx);
+      letter-spacing: -1px;
+    }
+
+    .section-sub {
+      font-size: 13px;
+      color: var(--mu);
+      margin-top: 6px;
+      font-weight: 500;
+    }
+
+    /* ══ 칩 ══ */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .chip-info {
+      background: rgba(37, 99, 235, 0.1);
+      color: var(--info);
+    }
+
+    .chip-success {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--ok);
+    }
+
+    .chip-warn {
+      background: rgba(217, 119, 6, 0.1);
+      color: var(--warn);
+    }
+
+    .chip-danger {
+      background: rgba(220, 38, 38, 0.1);
+      color: var(--danger);
+    }
+
+    /* ══ 프로그레스 바 ══ */
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: var(--bd);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--p), var(--p-light));
+      border-radius: 4px;
+      transition: width 1s var(--ease);
+    }
+
+    /* ══ 모달 ══ */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: var(--s1);
+      border-radius: 16px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+      max-width: 600px;
+      width: 95vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      animation: fadeUp 0.2s var(--ease);
+    }
+
+    .modal-header {
+      background: linear-gradient(135deg, var(--sb), var(--p));
+      color: #fff;
+      padding: 18px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 16px 16px 0 0;
+    }
+
+    .modal-body {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    .modal-footer {
+      padding: 14px 22px;
+      border-top: 1px solid var(--bd);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      background: var(--s2);
+      border-radius: 0 0 16px 16px;
+    }
+
+    /* ══ 반응형 ══ */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 100%;
+        max-height: 60px;
+        flex-direction: row;
+        padding: 0;
+      }
+
+      .sidebar-header {
+        display: none;
+      }
+
+      .nav-link {
+        padding: 10px 12px;
+        font-size: 11px;
+      }
+
+      .content {
+        padding: 20px;
+      }
+
+      .section-title {
+        font-size: 18px;
+      }
+
+      table {
+        font-size: 11px;
+      }
+
+      td, th {
+        padding: 8px;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="loading">
-    <div class="spinner"></div>
-    <div class="text">경기북부 학사관리시스템 v2026</div>
-    <div style="margin-top: 8px; font-size: 12px; opacity: 0.7;">System Initializing...</div>
+    <div class="loader-circle"></div>
+    <div style="margin-top: 30px; font-size: 24px; font-weight: 950; color: #fff; letter-spacing: -1px;">NORTHERN EDU CLOUD ERP</div>
+    <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 10px; letter-spacing: 2px;">INITIALIZING SECURE SYSTEMS...</div>
   </div>
+
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useMemo, useEffect, useRef, useCallback } = React;
 
     /* ═══════════════════════════════════════════════════════════
-       🎨 테마 및 전역 설정
+       🎯 MASTER CONFIGURATION
     ═══════════════════════════════════════════════════════════ */
-    const T = {
-      p: "#EA580C", p_dark: "#C2410C", p_light: "#FB923C", p_bg: "#FFF7ED",
-      sb: "#7C2D12",
-      ok: "#10B981", warn: "#F59E0B", danger: "#EF4444", info: "#3B82F6",
-      text: "#1E293B", text_sub: "#334155", muted: "#64748B", muted_light: "#94A3B8",
-      border: "#E2E8F0", border_light: "#F1F5F9",
-      white: "#FFFFFF", bg: "#F8FAFC", bg_light: "#F1F5F9",
-    };
+    const SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";
+    const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";
 
-    const INIT_ACCOUNTS = [
-      { id: 1, name: "이상훈", role: "admin", pw: "admin1234" },
-      { id: 2, name: "김담당", role: "staff", pw: "gjf2026" },
-      { id: 3, name: "박담당", role: "staff", pw: "gjf2026" },
-    ];
-
-    const SEED_COURSES = [
-      { id: 1, name: "AI 생성형 도구 실무 (1기)", cat: "IT/신직무", code: "IT-01", tgt: 25, current: 24, from: "2026-03-02", to: "2026-06-25", period: "3~6월", method: "블렌디드", hours: 92, cGoal: 23, eGoal: 15 },
-      { id: 2, name: "늘봄 교실 강사 양성 (3기)", cat: "늘봄교실", code: "NB-03", tgt: 30, current: 30, from: "2026-03-10", to: "2026-05-20", period: "3~5월", method: "대면", hours: 140, cGoal: 27, eGoal: 18 },
-      { id: 3, name: "전산세무회계 실무 (2기)", cat: "사무/회계", code: "SM-02", tgt: 20, current: 18, from: "2026-03-15", to: "2026-07-10", period: "3~7월", method: "대면", hours: 200, cGoal: 16, eGoal: 10 },
-      { id: 4, name: "파이썬 데이터 분석 (1기)", cat: "IT/신직무", code: "IT-02", tgt: 20, current: 20, from: "2026-03-01", to: "2026-06-15", period: "3~6월", method: "블렌디드", hours: 108, cGoal: 18, eGoal: 12 },
-      { id: 5, name: "요양보호사 자격 취득 (5기)", cat: "사회복지", code: "SW-05", tgt: 35, current: 32, from: "2026-03-20", to: "2026-05-30", period: "3~5월", method: "대면", hours: 240, cGoal: 29, eGoal: 19 },
-      { id: 6, name: "디지털 마케팅 전문가 (1기)", cat: "IT/신직무", code: "IT-03", tgt: 25, current: 25, from: "2026-04-01", to: "2026-07-30", period: "4~7월", method: "비대면", hours: 120, cGoal: 23, eGoal: 15 },
-      { id: 7, name: "한식 조리 기능사 (2기)", cat: "식품조리", code: "FD-02", tgt: 20, current: 19, from: "2026-03-05", to: "2026-05-15", period: "3~5월", method: "대면", hours: 180, cGoal: 18, eGoal: 12 },
-      { id: 8, name: "쇼핑몰 창업 실무 (3기)", cat: "창업", code: "BZ-03", tgt: 15, current: 15, from: "2026-03-12", to: "2026-06-01", period: "3~6월", method: "블렌디드", hours: 80, cGoal: 14, eGoal: 9 },
-      { id: 9, name: "GTX 연계 물류 관리 (1기)", cat: "물류/유통", code: "LG-01", tgt: 25, current: 23, from: "2026-04-10", to: "2026-08-20", period: "4~8월", method: "대면", hours: 160, cGoal: 21, eGoal: 14 },
-      { id: 10, name: "반도체 공정 기초 (1기)", cat: "제조/기술", code: "MFG-01", tgt: 20, current: 20, from: "2026-03-25", to: "2026-07-15", period: "3~7월", method: "대면", hours: 180, cGoal: 18, eGoal: 12 },
-      { id: 11, name: "드론 정비 및 조종 (2기)", cat: "IT/신직무", code: "IT-04", tgt: 15, current: 14, from: "2026-03-01", to: "2026-05-10", period: "3~5월", method: "대면", hours: 100, cGoal: 14, eGoal: 9 },
-      { id: 12, name: "커피 바리스타 마스터 (4기)", cat: "서비스", code: "SVC-04", tgt: 15, current: 15, from: "2026-03-18", to: "2026-05-10", period: "3~5월", method: "대면", hours: 90, cGoal: 14, eGoal: 9 },
-      { id: 13, name: "웹 디자인 기능사 (1기)", cat: "IT/신직무", code: "IT-05", tgt: 25, current: 25, from: "2026-04-15", to: "2026-08-30", period: "4~8월", method: "비대면", hours: 150, cGoal: 23, eGoal: 15 },
+    const COURSES = [
+      { id: 1, cat: "늘봄강사양성", cc: "#EA580C", name: "초등 피지컬 코딩강사 양성", code: "NB-01", dateFrom: "2026-06-01", dateTo: "2026-07-31", period: "6~7월", method: "블렌디드", hours: 92, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "월, 화, 목", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
+      { id: 2, cat: "늘봄강사양성", cc: "#EA580C", name: "AI 딥러닝 전문강사 양성", code: "NB-02", dateFrom: "2026-06-01", dateTo: "2026-08-31", period: "6~8월", method: "블렌디드", hours: 104, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "월, 수, 금", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
+      { id: 3, cat: "늘봄강사양성", cc: "#EA580C", name: "늘봄학교 창의융합교육강사 양성", code: "NB-03", dateFrom: "2026-04-01", dateTo: "2026-06-30", period: "4~6월", method: "대면", hours: 140, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "월, 화, 목", schedTimeFrom: "09:00", schedTimeTo: "14:00" },
+      { id: 4, cat: "지역연계·기여", cc: "#C2410C", name: "ERP·지게차 물류관리 실무자 양성", code: "JY-01", dateFrom: "2026-03-02", dateTo: "2026-05-29", period: "3~5월", method: "대면", hours: 182, tgt: 15, cGoal: 14, eGoal: 9, schedDays: "월, 화, 수, 목, 금", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
+      { id: 5, cat: "지역연계·기여", cc: "#C2410C", name: "승강기 전문가 양성", code: "JY-02", dateFrom: "2026-05-04", dateTo: "2026-06-26", period: "5~6월", method: "대면", hours: 80, tgt: 15, cGoal: 14, eGoal: 9, schedDays: "월, 화, 목, 금", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
+      { id: 6, cat: "지역연계·기여", cc: "#C2410C", name: "중장년 기회강사 양성", code: "JY-03", dateFrom: "2026-05-01", dateTo: "2026-07-31", period: "5~7월", method: "블렌디드", hours: 83, tgt: 15, cGoal: 14, eGoal: 9, schedDays: "화, 목", schedTimeFrom: "09:30", schedTimeTo: "13:30" },
+      { id: 7, cat: "사무분야", cc: "#9A3412", name: "행정회계 사무 OA (1기)", code: "SM-01", dateFrom: "2026-03-02", dateTo: "2026-05-29", period: "3~5월", method: "대면", hours: 200, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "월, 화, 수, 목, 금", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
+      { id: 8, cat: "사무분야", cc: "#9A3412", name: "행정회계 사무 OA (2기)", code: "SM-02", dateFrom: "2026-07-01", dateTo: "2026-09-30", period: "7~9월", method: "대면", hours: 200, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "월, 화, 수, 목, 금", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
+      { id: 9, cat: "식품분야", cc: "#DC2626", name: "HACCP 전문인력 양성", code: "FD-01", dateFrom: "2026-04-01", dateTo: "2026-05-31", period: "4~5월", method: "대면", hours: 112, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "월, 화, 수, 목", schedTimeFrom: "09:00", schedTimeTo: "14:00" },
+      { id: 10, cat: "IT 신직무", cc: "#F97316", name: "AI 시대의 캐릭터 크리에이터 양성", code: "IT-01", dateFrom: "2026-08-03", dateTo: "2026-09-30", period: "8~9월", method: "비대면", hours: 108, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "월, 수, 금", schedTimeFrom: "10:00", schedTimeTo: "14:00" },
+      { id: 11, cat: "IT 신직무", cc: "#F97316", name: "미지정 공모과정 (IT-A)", code: "IT-02", dateFrom: "", dateTo: "", period: "-", method: "-", hours: 0, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
+      { id: 12, cat: "IT 신직무", cc: "#F97316", name: "미지정 공모과정 (IT-B)", code: "IT-03", dateFrom: "", dateTo: "", period: "-", method: "-", hours: 0, tgt: 15, cGoal: 14, eGoal: 9, schedDays: "", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
+      { id: 13, cat: "IT 신직무", cc: "#F97316", name: "미지정 공모과정 (IT-C)", code: "IT-04", dateFrom: "", dateTo: "", period: "-", method: "-", hours: 0, tgt: 15, cGoal: 14, eGoal: 9, schedDays: "", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
     ];
 
     const SEED_STUDENTS = [
-      { id: 101, cid: 4, name: "김민준", gender: "남", birth: "1992-04-15", phone: "010-1111-2222", city: "의정부", itvScore: 88, itvGrade: "A", itvPass: true, memo: "우수", rate: 94 },
-      { id: 102, cid: 4, name: "이서연", gender: "여", birth: "1997-07-22", phone: "010-2222-3333", city: "양주", itvScore: 72, itvGrade: "B", itvPass: true, memo: "선발", rate: 75 },
-      { id: 103, cid: 4, name: "박지훈", gender: "남", birth: "1990-01-30", phone: "010-3333-4444", city: "포천", itvScore: 65, itvGrade: "C", itvPass: true, memo: "기타", rate: 62 },
-      { id: 104, cid: 8, name: "최수아", gender: "여", birth: "1999-11-05", phone: "010-4444-5555", city: "의정부", itvScore: 95, itvGrade: "A+", itvPass: true, memo: "우수", rate: 97 },
-      { id: 105, cid: 8, name: "정우진", gender: "남", birth: "1995-08-14", phone: "010-5555-6666", city: "남양주", itvScore: 83, itvGrade: "B+", itvPass: true, memo: "선발", rate: 88 },
+      { id: 1, cid: 4, name: "김민준", gender: "남", birth: "1992-04-15", idBack: "1234567", phone: "010-1234-5678", addrCity: "의정부시", edu: "대졸", major: "기계공학", career: "물류창고 2년", unemployment: true, disabled: false, veteran: false, itvDate: "2026-02-14", itvScore: 88, itvGrade: "A", itvPass: true, memo: "취업의지 강함", rate: 94 },
+      { id: 2, cid: 4, name: "이서연", gender: "여", birth: "1997-07-22", idBack: "2345678", phone: "010-2345-6789", addrCity: "양주시", edu: "대졸", major: "경영학", career: "없음", unemployment: false, disabled: false, veteran: false, itvDate: "2026-02-14", itvScore: 72, itvGrade: "B", itvPass: true, memo: "경력 없으나 의지 높음", rate: 75 },
+      { id: 3, cid: 4, name: "박지훈", gender: "남", birth: "1990-01-30", idBack: "3456789", phone: "010-3456-7890", addrCity: "포천시", edu: "고졸", major: "", career: "제조업 5년", unemployment: true, disabled: false, veteran: false, itvDate: "2026-02-15", itvScore: 65, itvGrade: "C", itvPass: true, memo: "실업급여 중", rate: 62 },
+      { id: 4, cid: 4, name: "최수아", gender: "여", birth: "1999-11-05", idBack: "4567890", phone: "010-4567-8901", addrCity: "의정부시", edu: "대졸", major: "교육학", career: "없음", unemployment: false, disabled: false, veteran: false, itvDate: "2026-02-15", itvScore: 95, itvGrade: "A+", itvPass: true, memo: "우수 학습자", rate: 97 },
+      { id: 5, cid: 4, name: "정우진", gender: "남", birth: "1995-08-14", idBack: "5678901", phone: "010-5678-9012", addrCity: "남양주시", edu: "대졸", major: "산업공학", career: "물류업 1년", unemployment: false, disabled: false, veteran: true, itvDate: "2026-02-16", itvScore: 83, itvGrade: "B+", itvPass: true, memo: "국가유공자", rate: 88 },
+      { id: 6, cid: 7, name: "강다은", gender: "여", birth: "1993-03-20", idBack: "6789012", phone: "010-6789-0123", addrCity: "의정부시", edu: "대졸", major: "회계학", career: "사무보조 3년", unemployment: true, disabled: false, veteran: false, itvDate: "2026-02-10", itvScore: 90, itvGrade: "A", itvPass: true, memo: "회계 경력 보유", rate: 91 },
+      { id: 7, cid: 7, name: "윤서준", gender: "남", birth: "1996-12-08", idBack: "7890123", phone: "010-7890-1234", addrCity: "동두천시", edu: "고졸", major: "", career: "편의점 아르바이트", unemployment: false, disabled: true, veteran: false, itvDate: "2026-02-10", itvScore: 70, itvGrade: "B", itvPass: true, memo: "장애 3급", rate: 78 },
+      { id: 8, cid: 1, name: "임지수", gender: "여", birth: "2000-06-17", idBack: "8901234", phone: "010-8901-2345", addrCity: "양주시", edu: "대졸", major: "컴퓨터교육", career: "없음", unemployment: false, disabled: false, veteran: false, itvDate: "2026-02-18", itvScore: 98, itvGrade: "A+", itvPass: true, memo: "코딩 교육 관심 높음", rate: 100 },
+      { id: 9, cid: 1, name: "한예린", gender: "여", birth: "1988-09-11", idBack: "9012345", phone: "010-9012-3456", addrCity: "의정부시", edu: "대학원졸", major: "교육공학", career: "강사 5년", unemployment: false, disabled: false, veteran: false, itvDate: "2026-02-18", itvScore: 87, itvGrade: "A", itvPass: true, memo: "강사 경력 풍부", rate: 83 },
+      { id: 10, cid: 9, name: "오민혁", gender: "남", birth: "1994-02-25", idBack: "0123456", phone: "010-0123-4567", addrCity: "포천시", edu: "고졸", major: "", career: "식품공장 3년", unemployment: true, disabled: false, veteran: false, itvDate: "2026-02-20", itvScore: 60, itvGrade: "C", itvPass: true, memo: "HACCP 경력 있음", rate: 55 },
     ];
 
-    /* ══════════════════════════════════════════���════════════════
-       🔧 미니 컴포넌트 라이브러리
+    /* ═══════════════════════════════════════════════════════════
+       🧩 REUSABLE UI COMPONENTS
     ═══════════════════════════════════════════════════════════ */
-    const Icon = ({ n, s = 20, c = "currentColor" }) => {
-      const paths = {
+    const Icon = ({ name, size = 16, color = "currentColor", style = {} }) => {
+      const icons = {
         dash: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
         book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
-        user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+        people: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></>,
+        cal: <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
         check: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+        award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
+        alert: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
         plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
         x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+        edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
+        search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+        upload: <><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></>,
+        dl: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+        filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>,
+        phone: <><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></>,
       };
-      return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>{paths[n]}</svg>;
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, ...style }}>
+          {icons[name]}
+        </svg>
+      );
     };
 
-    const Btn = ({ children, onClick, variant = "primary", style = {} }) => {
-      const base = { border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, padding: "10px 18px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, transition: "0.2s" };
-      const vars = {
-        primary: { background: T.p, color: "#fff" },
-        ghost: { background: T.bg, color: T.muted },
-        danger: { background: "#FEF2F2", color: T.danger },
+    const Btn = ({ children, onClick, className = "", variant = "primary", style = {} }) => {
+      const cls = `btn btn-${variant} ${className}`;
+      return (
+        <button onClick={onClick} className={cls} style={style}>
+          {children}
+        </button>
+      );
+    };
+
+    const Chip = ({ label, type = "info" }) => {
+      const typeMap = {
+        info: "chip-info",
+        success: "chip-success",
+        warn: "chip-warn",
+        danger: "chip-danger",
       };
-      return <button onClick={onClick} style={{ ...base, ...vars[variant], ...style }}>{children}</button>;
+      return <span className={`chip ${typeMap[type]}`}>{label}</span>;
+    };
+
+    const RBar = ({ rate, height = 5 }) => {
+      const color = rate >= 80 ? "#059669" : rate >= 70 ? "#D97706" : "#DC2626";
+      return (
+        <div className="progress-bar" style={{ height: `${height}px` }}>
+          <div className="progress-fill" style={{ width: `${Math.min(rate, 100)}%`, background: color }} />
+        </div>
+      );
     };
 
     const Card = ({ children, style = {} }) => (
-      <div style={{ background: T.white, borderRadius: 12, border: `1px solid ${T.border}`, boxShadow: "0 1px 4px rgba(0,0,0,0.05)", ...style }}>{children}</div>
-    );
-
-    const Chip = ({ label, bg, color }) => (
-      <span style={{ background: bg, color, fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20 }}>{label}</span>
+      <div className="card" style={style}>
+        {children}
+      </div>
     );
 
     /* ═══════════════════════════════════════════════════════════
-       📊 대시보드
+       📊 DASHBOARD PAGE
     ═══════════════════════════════════════════════════════════ */
-    const Dashboard = ({ courses, students }) => {
-      const total_tgt = courses.reduce((a, c) => a + c.tgt, 0);
-      const total_current = courses.reduce((a, c) => a + c.current, 0);
-      const avg_rate = students.length ? Math.round(students.reduce((a, s) => a + s.rate, 0) / students.length) : 0;
-      const at_risk = students.filter(s => s.rate < 80).length;
+    const Dashboard = ({ students, courses }) => {
+      const totalTgt = courses.reduce((a, b) => a + b.tgt, 0);
+      const totalCG = courses.reduce((a, b) => a + b.cGoal, 0);
+      const totalEG = courses.reduce((a, b) => a + b.eGoal, 0);
+      const avgRate = students.length ? (students.reduce((a, b) => a + b.rate, 0) / students.length).toFixed(1) : 0;
+      const atRisk = students.filter(s => s.rate < 80);
 
       return (
-        <div style={{ animation: "fadeUp 0.4s ease" }}>
-          <div style={{ marginBottom: 30 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 950, color: T.text, letterSpacing: "-1px" }}>사업 통합 관제 대시보드</h1>
-            <p style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>2026년 경기북부 13개 과정 학사 운영 실시간 현황</p>
+        <div className="page">
+          <div className="section-head">
+            <div>
+              <div className="section-title">📊 대시보드</div>
+              <div className="section-sub">2026년 경기북부 13개 과정 학사 운영 현황</div>
+            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 24 }}>
+          {/* KPI 카드 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 30 }}>
             {[
-              { label: "현재 총 훈련생", val: `${total_current}명`, sub: `정원 ${total_tgt}명 대비 ${Math.round(total_current / total_tgt * 100)}%` },
-              { label: "평균 출석률", val: `${avg_rate}%`, sub: "전체 훈련생" },
-              { label: "수료 예정", val: `${students.filter(s => s.rate >= 80).length}명`, sub: "출석률 80% 이상" },
-              { label: "위험군", val: `${at_risk}명`, sub: "출석률 80% 미만" },
-            ].map((k, i) => (
-              <Card key={i} style={{ padding: 20, display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: `${T.p}15`, display: "flex", alignItems: "center", justifyContent: "center", color: T.p, fontSize: 24, flexShrink: 0 }}>📊</div>
+              { label: "총 모집 목표", val: `${totalTgt}명`, sub: `${courses.length}개 과정`, icon: "people", color: "#EA580C" },
+              { label: "수료 목표", val: `${totalCG}명`, sub: "90% 기준", icon: "check", color: "#059669" },
+              { label: "취업 목표", val: `${totalEG}명`, sub: "65% 기준", icon: "award", color: "#D97706" },
+              { label: "위험 훈련생", val: `${atRisk.length}명`, sub: "출석률 80% 미만", icon: "alert", color: "#DC2626" },
+              { label: "평균 출석률", val: `${avgRate}%`, sub: "전체 훈련생", icon: "cal", color: "#2563EB" },
+            ].map((kpi, i) => (
+              <Card key={i} style={{ padding: 24, display: "flex", gap: 16, alignItems: "flex-start" }}>
+                <div style={{ width: 50, height: 50, borderRadius: 12, background: `${kpi.color}15`, color: kpi.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon name={kpi.icon} size={24} color={kpi.color} />
+                </div>
                 <div>
-                  <div style={{ fontSize: 22, fontWeight: 900, color: T.text }}>{k.val}</div>
-                  <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{k.label}</div>
-                  <div style={{ fontSize: 11, color: T.p, marginTop: 2 }}>{k.sub}</div>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: "#1E293B" }}>{kpi.val}</div>
+                  <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>{kpi.label}</div>
+                  <div style={{ fontSize: 11, color: kpi.color, marginTop: 2, fontWeight: 700 }}>{kpi.sub}</div>
                 </div>
               </Card>
             ))}
           </div>
 
-          <Card style={{ padding: 24 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 800, color: T.text, marginBottom: 16 }}>과정별 현황</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-              {courses.slice(0, 6).map(c => (
-                <div key={c.id} style={{ padding: 14, background: T.bg, borderRadius: 10, border: `1px solid ${T.border_light}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{c.name.substring(0, 20)}...</span>
-                    <Chip label={`${c.current}/${c.tgt}`} bg={T.p_bg} color={T.p} />
+          {/* 분야별 현황 */}
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+            <Card style={{ padding: 28 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 20, display: "flex", gap: 8, alignItems: "center" }}>
+                <Icon name="book" size={18} /> 분야별 과정
+              </div>
+              {(() => {
+                const cats = {};
+                courses.forEach(c => {
+                  if (!cats[c.cat]) cats[c.cat] = { color: c.cc, cnt: 0, tgt: 0 };
+                  cats[c.cat].cnt++;
+                  cats[c.cat].tgt += c.tgt;
+                });
+                return Object.entries(cats).map(([cat, info]) => (
+                  <div key={cat} style={{ marginBottom: 18 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{cat}</span>
+                      <span style={{ fontSize: 11, color: "#64748B" }}>{info.cnt}개 · {info.tgt}명</span>
+                    </div>
+                    <RBar rate={(info.tgt / totalTgt) * 100} height={8} />
                   </div>
-                  <div style={{ height: 6, background: T.border, borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ width: `${Math.min(c.current / c.tgt * 100, 100)}%`, height: "100%", background: T.p, borderRadius: 3 }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
+                ));
+              })()}
+            </Card>
+
+            {/* 위험 훈련생 */}
+            <Card style={{ padding: 28 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, display: "flex", gap: 8, alignItems: "center" }}>
+                <Icon name="alert" size={18} /> 위험군
+              </div>
+              {atRisk.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 24, color: "#64748B" }}>안전합니다 🎉</div>
+              ) : (
+                atRisk.sort((a, b) => a.rate - b.rate).map(s => {
+                  const c = courses.find(x => x.id === s.cid);
+                  return (
+                    <div key={s.id} style={{ padding: 12, marginBottom: 8, borderRadius: 8, background: s.rate < 70 ? "#FEF2F2" : "#FFFBEB", border: `1px solid ${s.rate < 70 ? "#FECACA" : "#FDE68A"}` }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#1E293B" }}>{s.name}</div>
+                      <div style={{ fontSize: 10, color: "#64748B", marginTop: 2 }}>{c?.name}</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: s.rate < 70 ? "#DC2626" : "#D97706", marginTop: 4 }}>{s.rate}%</div>
+                    </div>
+                  );
+                })
+              )}
+            </Card>
+          </div>
         </div>
       );
     };
 
     /* ═══════════════════════════════════════════════════════════
-       👥 훈련생 관리
+       🎯 MAIN APP ENGINE
     ═══════════════════════════════════════════════════════════ */
-    const StudentMgmt = ({ students, courses, onAdd }) => {
-      const [filter_course, setFilterCourse] = useState(0);
-      const filtered = filter_course ? students.filter(s => s.cid === filter_course) : students;
+    function App() {
+      const [isLoaded, setIsLoaded] = useState(false);
+      const [currentUser, setCurrentUser] = useState(null);
+      const [currentPage, setCurrentPage] = useState("dash");
+      const [courses, setCourses] = useState(COURSES);
+      const [students, setStudents] = useState(SEED_STUDENTS);
+
+      useEffect(() => {
+        setTimeout(() => {
+          const loader = document.getElementById("loading");
+          if (loader) {
+            loader.style.opacity = "0";
+            setTimeout(() => loader.remove(), 800);
+          }
+          setIsLoaded(true);
+        }, 1500);
+      }, []);
+
+      const handleLogin = (user) => {
+        setCurrentUser(user);
+      };
+
+      const handleLogout = () => {
+        setCurrentUser(null);
+      };
+
+      if (!isLoaded) return null;
+
+      if (!currentUser) {
+        return <LoginPage onLogin={handleLogin} />;
+      }
+
+      const navItems = [
+        { id: "dash", label: "대시보드", icon: "dash" },
+        { id: "courses", label: "과정관리", icon: "book" },
+        { id: "students", label: "훈련생관리", icon: "people" },
+      ];
 
       return (
-        <div style={{ animation: "fadeUp 0.4s ease" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 950, color: T.text, marginBottom: 20, letterSpacing: "-1px" }}>훈련생 관리</h1>
-          
-          <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
-            <select value={filter_course} onChange={e => setFilterCourse(+e.target.value)} style={{ padding: "8px 12px", border: `1px solid ${T.border}`, borderRadius: 8, fontSize: 13, outline: "none", background: T.white, color: T.text, cursor: "pointer" }}>
+        <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+          {/* 사이드바 */}
+          <aside className="sidebar">
+            <div className="sidebar-header">
+              <div className="sidebar-logo">NORTHERN ERP</div>
+              <div className="sidebar-subtitle">Gyeonggi Job Foundation</div>
+            </div>
+
+            <nav className="sidebar-nav">
+              {navItems.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setCurrentPage(item.id)}
+                  className={`nav-link ${currentPage === item.id ? "active" : ""}`}
+                >
+                  <Icon name={item.icon} size={20} color="currentColor" />
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="sidebar-footer">
+              <div className="avatar">{currentUser.name[0]}</div>
+              <div className="user-info">
+                <div className="user-name">{currentUser.name}</div>
+                <div className="user-rank">관리자</div>
+              </div>
+              <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 18 }}>👋</button>
+            </div>
+          </aside>
+
+          {/* 메인 콘텐츠 */}
+          <main className="main">
+            <div className="content">
+              {currentPage === "dash" && <Dashboard students={students} courses={courses} />}
+              {currentPage === "courses" && <CoursesPage courses={courses} setCourses={setCourses} />}
+              {currentPage === "students" && <StudentsPage students={students} setStudents={setStudents} courses={courses} />}
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       🔐 LOGIN PAGE
+    ═══════════════════════════════════════════════════════════ */
+    const LoginPage = ({ onLogin }) => {
+      const [selectedId, setSelectedId] = useState(1);
+      const [password, setPassword] = useState("");
+      const [error, setError] = useState("");
+      const [agreed, setAgreed] = useState(false);
+      const [shaking, setShaking] = useState(false);
+
+      const accounts = [
+        { id: 1, name: "관리자", role: "admin", pw: "admin1234" },
+        { id: 2, name: "김담당", role: "staff", pw: "gjf2026" },
+        { id: 3, name: "이담당", role: "staff", pw: "gjf2026" },
+      ];
+
+      const handleLogin = () => {
+        if (!agreed) {
+          setError("개인정보 동의가 필요합니다");
+          return;
+        }
+        const acc = accounts.find(a => a.id === selectedId);
+        if (!acc || acc.pw !== password) {
+          setError("비밀번호 오류");
+          setShaking(true);
+          setTimeout(() => setShaking(false), 500);
+          setPassword("");
+          return;
+        }
+        onLogin(acc);
+      };
+
+      return (
+        <div style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "linear-gradient(135deg, #7C2D12 0%, #EA580C 40%, #F97316 70%, #FED7AA 100%)",
+          padding: 20,
+        }}>
+          <div style={{ width: "100%", maxWidth: 440, animation: "fadeUp 0.5s ease" }}>
+            <div style={{ textAlign: "center", marginBottom: 32 }}>
+              <div style={{ width: 64, height: 64, borderRadius: 16, background: "rgba(255,255,255,.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 32 }}>
+                🎓
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#fff", letterSpacing: "-0.5px" }}>
+                경기북부 직업교육
+              </div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", marginTop: 6 }}>
+                학사관리시스템 v2026
+              </div>
+            </div>
+
+            <Card style={{ padding: 32 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 24, textAlign: "center" }}>
+                🔐 담당자 로그인
+              </div>
+
+              {/* 담당자 선택 */}
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", display: "block", marginBottom: 8 }}>담당자</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {accounts.map(acc => (
+                    <button
+                      key={acc.id}
+                      onClick={() => setSelectedId(acc.id)}
+                      style={{
+                        flex: 1,
+                        padding: 10,
+                        borderRadius: 8,
+                        border: "none",
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        fontSize: 12,
+                        background: selectedId === acc.id ? "#EA580C" : "#F1F5F9",
+                        color: selectedId === acc.id ? "#fff" : "#64748B",
+                      }}
+                    >
+                      {acc.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 비밀번호 */}
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", display: "block", marginBottom: 6 }}>비밀번호</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError(""); }}
+                  onKeyPress={e => e.key === "Enter" && handleLogin()}
+                  placeholder="비밀번호"
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    border: `1px solid ${error ? "#DC2626" : "#E2E8F0"}`,
+                    borderRadius: 8,
+                    fontSize: 13,
+                    animation: shaking ? "shake 0.4s ease" : "none",
+                  }}
+                />
+                {error && <div style={{ fontSize: 11, color: "#DC2626", marginTop: 6 }}>⚠️ {error}</div>}
+              </div>
+
+              {/* 동의 */}
+              <div style={{ marginBottom: 20, padding: 12, borderRadius: 8, background: "#FFF7ED", border: "1px solid #FB923C50" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer", fontSize: 11, color: "#1E293B", lineHeight: 1.6 }}>
+                  <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ marginTop: 2, accentColor: "#EA580C" }} />
+                  <span>본인은 개인정보 수집·이용에 동의하며, 개인정보보호법을 준수할 것을 서약합니다.</span>
+                </label>
+              </div>
+
+              <button
+                onClick={handleLogin}
+                style={{
+                  width: "100%",
+                  padding: 13,
+                  borderRadius: 10,
+                  border: "none",
+                  background: agreed ? "linear-gradient(135deg, #7C2D12, #EA580C)" : "#E2E8F0",
+                  color: agreed ? "#fff" : "#64748B",
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: agreed ? "pointer" : "not-allowed",
+                  transition: "all 0.2s",
+                }}
+              >
+                로그인
+              </button>
+
+              <div style={{ marginTop: 12, fontSize: 10, color: "#64748B", textAlign: "center" }}>
+                초기 비밀번호: <code style={{ background: "#F1F5F9", padding: "2px 6px", borderRadius: 4 }}>gjf2026</code>
+              </div>
+            </Card>
+
+            <div style={{ textAlign: "center", marginTop: 16, fontSize: 10, color: "rgba(255,255,255,.4)" }}>
+              © 2026 경기도일자리재단
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    /* ═══════════════════════════════════════════════════════════
+       📚 COURSES PAGE
+    ═══════════════════════════════════════════════════════════ */
+    const CoursesPage = ({ courses, setCourses }) => {
+      const [filter, setFilter] = useState("전체");
+      const cats = ["전체", ...new Set(courses.map(c => c.cat))];
+      const list = filter === "전체" ? courses : courses.filter(c => c.cat === filter);
+
+      return (
+        <div className="page">
+          <div className="section-head">
+            <div>
+              <div className="section-title">📚 과정관리</div>
+              <div className="section-sub">총 {courses.length}개 과정</div>
+            </div>
+            <Btn variant="primary">+ 과정 추가</Btn>
+          </div>
+
+          {/* 필터 */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+            {cats.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setFilter(cat)}
+                style={{
+                  padding: "6px 16px",
+                  borderRadius: 20,
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  background: filter === cat ? "#EA580C" : "#F1F5F9",
+                  color: filter === cat ? "#fff" : "#64748B",
+                }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* 과정 카드 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+            {list.map(course => (
+              <Card key={course.id} style={{ padding: 20, borderLeft: `4px solid ${course.cc}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <div>
+                    <Chip label={course.cat} type="info" />
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#1E293B", marginTop: 8, lineHeight: 1.4 }}>{course.name}</div>
+                  </div>
+                  <button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18 }}>⋯</button>
+                </div>
+                <div style={{ fontSize: 12, color: "#64748B", marginBottom: 12 }}>
+                  {course.code} · {course.period || "미정"} · {course.hours || 0}시간
+                  {course.schedDays && <div>📅 {course.schedDays}</div>}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  {[{ l: "교육목표", v: course.tgt }, { l: "수료목표", v: course.cGoal }, { l: "취업목표", v: course.eGoal }].map(x => (
+                    <div key={x.l} style={{ textAlign: "center", padding: 8, background: "#F1F5F9", borderRadius: 8 }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: "#1E293B" }}>{x.v}</div>
+                      <div style={{ fontSize: 10, color: "#64748B" }}>{x.l}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    /* ═══════════════════════════════════════════════════════════
+       👥 STUDENTS PAGE
+    ═══════════════════════════════════════════════════════════ */
+    const StudentsPage = ({ students, setStudents, courses }) => {
+      const [search, setSearch] = useState("");
+      const [filter, setFilter] = useState(0);
+      const [riskOnly, setRiskOnly] = useState(false);
+
+      const filtered = students.filter(s => {
+        if (filter && s.cid !== filter) return false;
+        if (riskOnly && s.rate >= 80) return false;
+        if (search && !s.name.includes(search)) return false;
+        return true;
+      });
+
+      return (
+        <div className="page">
+          <div className="section-head">
+            <div>
+              <div className="section-title">👥 훈련생관리</div>
+              <div className="section-sub">총 {students.length}명</div>
+            </div>
+            <Btn variant="primary">+ 신규 등록</Btn>
+          </div>
+
+          {/* 필터 */}
+          <Card style={{ padding: 14, marginBottom: 20, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              type="text"
+              placeholder="이름 검색..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ flex: 1, minWidth: 180, padding: 8 }}
+            />
+            <select value={filter} onChange={e => setFilter(Number(e.target.value))} style={{ padding: 8, borderRadius: 8 }}>
               <option value={0}>전체 과정</option>
               {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <Btn><Icon n="plus" s={16} /> 신규 등록</Btn>
-          </div>
+            <button
+              onClick={() => setRiskOnly(!riskOnly)}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: `1px solid ${riskOnly ? "#DC2626" : "#E2E8F0"}`,
+                background: riskOnly ? "#FEF2F2" : "transparent",
+                color: riskOnly ? "#DC2626" : "#64748B",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              {riskOnly ? "⚠️ 위험군만" : "모든 훈련생"}
+            </button>
+          </Card>
 
-          <Card style={{ overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          {/* 테이블 */}
+          <Card style={{ overflow: "auto" }}>
+            <table>
               <thead>
-                <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
-                  {["이름", "성별", "생년월일", "연락처", "과정", "출석률", ""].map(h => (
-                    <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: T.muted }}>{h}</th>
-                  ))}
+                <tr>
+                  <th>이름</th>
+                  <th>과정</th>
+                  <th>연락처</th>
+                  <th>나이</th>
+                  <th>출석률</th>
+                  <th>상태</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(s => {
-                  const course = courses.find(c => c.id === s.cid);
-                  const rate_color = s.rate >= 80 ? T.ok : s.rate >= 60 ? T.warn : T.danger;
+                  const c = courses.find(x => x.id === s.cid);
+                  const age = new Date().getFullYear() - new Date(s.birth).getFullYear();
                   return (
-                    <tr key={s.id} style={{ borderBottom: `1px solid ${T.border_light}`, transition: "background 0.1s" }} onMouseEnter={e => e.currentTarget.style.background = T.bg} onMouseLeave={e => e.currentTarget.style.background = T.white}>
-                      <td style={{ padding: "12px 14px", fontSize: 13, fontWeight: 700, color: T.text }}>{s.name}</td>
-                      <td style={{ padding: "12px 14px", fontSize: 13, color: T.text_sub }}>{s.gender}</td>
-                      <td style={{ padding: "12px 14px", fontSize: 12, color: T.muted }}>{s.birth}</td>
-                      <td style={{ padding: "12px 14px", fontSize: 12, color: T.muted }}>{s.phone}</td>
-                      <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: T.text }}>{course?.name.substring(0, 20)}</td>
-                      <td style={{ padding: "12px 14px" }}>
+                    <tr key={s.id} className="row-hover">
+                      <td style={{ fontWeight: 700 }}>{s.name}</td>
+                      <td>{c?.name}</td>
+                      <td>{s.phone}</td>
+                      <td>{age}세</td>
+                      <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ height: 6, width: 50, background: T.border, borderRadius: 3, overflow: "hidden" }}>
-                            <div style={{ width: `${s.rate}%`, height: "100%", background: rate_color, borderRadius: 3 }} />
-                          </div>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: rate_color }}>{s.rate}%</span>
+                          <RBar rate={s.rate} height={4} />
+                          <span style={{ fontWeight: 700, minWidth: 40 }}>{s.rate}%</span>
                         </div>
                       </td>
-                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
-                        <Btn variant="ghost" style={{ padding: "4px 8px", fontSize: 11 }}>수정</Btn>
+                      <td>
+                        <Chip label={s.rate >= 80 ? "정상" : s.rate >= 70 ? "주의" : "위험"} type={s.rate >= 80 ? "success" : s.rate >= 70 ? "warn" : "danger"} />
                       </td>
                     </tr>
                   );
@@ -250,243 +1118,9 @@
     };
 
     /* ═══════════════════════════════════════════════════════════
-       📱 출결 관리 (간편 버전)
+       🎬 RENDER ROOT
     ═══════════════════════════════════════════════════════════ */
-    const AttendanceMgmt = ({ students, courses }) => {
-      const [course, setCourse] = useState(courses[0]);
-      const course_students = students.filter(s => s.cid === course?.id);
-
-      return (
-        <div style={{ animation: "fadeUp 0.4s ease" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 950, color: T.text, marginBottom: 20 }}>출결 관리</h1>
-          
-          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
-            {courses.map(c => (
-              <Btn key={c.id} onClick={() => setCourse(c)} variant={course?.id === c.id ? "primary" : "ghost"} style={{ padding: "6px 12px", fontSize: 11 }}>
-                {c.code}
-              </Btn>
-            ))}
-          </div>
-
-          <Card style={{ padding: 20 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
-                  {["이름", "현재상태", "입실", "퇴실"].map(h => (
-                    <th key={h} style={{ padding: "12px", textAlign: "center", fontSize: 12, fontWeight: 700, color: T.muted }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {course_students.map(s => (
-                  <tr key={s.id} style={{ borderBottom: `1px solid ${T.border_light}` }}>
-                    <td style={{ padding: "12px", textAlign: "center", fontSize: 13, fontWeight: 700 }}>{s.name}</td>
-                    <td style={{ padding: "12px", textAlign: "center" }}>
-                      <Chip label={s.rate >= 80 ? "정상" : "주의"} bg={s.rate >= 80 ? `${T.ok}20` : `${T.warn}20`} color={s.rate >= 80 ? T.ok : T.warn} />
-                    </td>
-                    <td style={{ padding: "12px", textAlign: "center", fontSize: 12, color: T.muted }}>09:02</td>
-                    <td style={{ padding: "12px", textAlign: "center", fontSize: 12, color: T.muted }}>13:05</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        </div>
-      );
-    };
-
-    /* ═══════════════════════════════════════════════════════════
-       🎓 수료 관리
-    ═══════════════════════════════════════════════════════════ */
-    const CompletionMgmt = ({ students, courses }) => {
-      const [course, setCourse] = useState(courses[0]);
-      const course_students = students.filter(s => s.cid === course?.id);
-      const completed = course_students.filter(s => s.rate >= 80).length;
-      const completion_rate = course_students.length ? Math.round(completed / course_students.length * 100) : 0;
-
-      return (
-        <div style={{ animation: "fadeUp 0.4s ease" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 950, color: T.text, marginBottom: 20 }}>수료 관리</h1>
-
-          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
-            {courses.map(c => (
-              <Btn key={c.id} onClick={() => setCourse(c)} variant={course?.id === c.id ? "primary" : "ghost"} style={{ padding: "6px 12px", fontSize: 11 }}>
-                {c.code}
-              </Btn>
-            ))}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 20 }}>
-            {[
-              { label: "총 인원", val: course_students.length },
-              { label: "수료 예정", val: completed, color: T.ok },
-              { label: "수료율", val: `${completion_rate}%`, color: completion_rate >= 90 ? T.ok : T.warn },
-            ].map((k, i) => (
-              <Card key={i} style={{ padding: 18, textAlign: "center", background: T.bg }}>
-                <div style={{ fontSize: 24, fontWeight: 900, color: k.color || T.p }}>{k.val}</div>
-                <div style={{ fontSize: 12, color: T.muted, marginTop: 6 }}>{k.label}</div>
-              </Card>
-            ))}
-          </div>
-
-          <Card style={{ padding: 20 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
-                  {["이름", "출석률", "수료 판정"].map(h => (
-                    <th key={h} style={{ padding: "12px", textAlign: "center", fontSize: 12, fontWeight: 700, color: T.muted }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {course_students.map(s => (
-                  <tr key={s.id} style={{ borderBottom: `1px solid ${T.border_light}` }}>
-                    <td style={{ padding: "12px", textAlign: "center", fontWeight: 700 }}>{s.name}</td>
-                    <td style={{ padding: "12px", textAlign: "center", fontSize: 13, fontWeight: 800, color: s.rate >= 80 ? T.ok : T.warn }}>{s.rate}%</td>
-                    <td style={{ padding: "12px", textAlign: "center" }}>
-                      <Chip label={s.rate >= 80 ? "✓ 수료" : "✗ 미수료"} bg={s.rate >= 80 ? `${T.ok}20` : `${T.danger}20`} color={s.rate >= 80 ? T.ok : T.danger} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        </div>
-      );
-    };
-
-    /* ═══════════════════════════════════════════════════════════
-       🔐 로그인 화면
-    ═══════════════════════════════════════════════════════════ */
-    const LoginScreen = ({ accounts, onLogin }) => {
-      const [sel_id, setSelId] = useState(accounts[0]?.id);
-      const [pw, setPw] = useState("");
-      const [error, setError] = useState("");
-
-      const handle_login = () => {
-        const acc = accounts.find(a => a.id === sel_id);
-        if (!acc || acc.pw !== pw) {
-          setError("❌ 비밀번호가 올바르지 않습니다");
-          return;
-        }
-        onLogin(acc);
-      };
-
-      return (
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${T.sb} 0%, ${T.p} 50%, ${T.p_light} 100%)`, padding: 20 }}>
-          <div style={{ width: "100%", maxWidth: 400, background: T.white, borderRadius: 20, padding: 40, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-            <div style={{ textAlign: "center", marginBottom: 30 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🎓</div>
-              <h1 style={{ fontSize: 20, fontWeight: 950, color: T.text }}>경기북부 학사관리</h1>
-              <p style={{ fontSize: 12, color: T.muted, marginTop: 6 }}>v2026 직업교육 시스템</p>
-            </div>
-
-            <div style={{ marginBottom: 18 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: T.muted, display: "block", marginBottom: 8 }}>담당자 선택</label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {accounts.map(a => (
-                  <Btn key={a.id} onClick={() => setSelId(a.id)} variant={sel_id === a.id ? "primary" : "ghost"} style={{ flex: 1, padding: "8px 12px", fontSize: 12 }}>
-                    {a.name}
-                  </Btn>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 18 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: T.muted, display: "block", marginBottom: 8 }}>비밀번호</label>
-              <input type="password" value={pw} onChange={e => { setPw(e.target.value); setError(""); }} onKeyDown={e => e.key === "Enter" && handle_login()} placeholder="비밀번호 입력" style={{ width: "100%", padding: "11px 14px", border: `1px solid ${T.border}`, borderRadius: 10, fontSize: 13, outline: "none", background: T.white, color: T.text }} />
-            </div>
-
-            {error && <div style={{ fontSize: 12, color: T.danger, marginBottom: 16, padding: "8px 12px", background: "#FEF2F2", borderRadius: 8 }}>{error}</div>}
-
-            <Btn onClick={handle_login} style={{ width: "100%", justifyContent: "center", padding: "12px" }}>로그인</Btn>
-
-            <div style={{ fontSize: 11, color: T.muted, textAlign: "center", marginTop: 14 }}>
-              초기 비밀번호: <span style={{ fontFamily: "monospace", background: T.bg, padding: "2px 6px", borderRadius: 4 }}>gjf2026</span>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    /* ═══════════════════════════════════════════════════════════
-       🎪 메인 APP
-    ═══════════════════════════════════════════════════════════ */
-    function App() {
-      const [current_user, setCurrentUser] = useState(() => {
-        const u = sessionStorage.getItem("gjf_user");
-        return u ? JSON.parse(u) : null;
-      });
-      
-      const [page, setPage] = useState("dash");
-      const [courses, setCourses] = useState(SEED_COURSES);
-      const [students, setStudents] = useState(SEED_STUDENTS);
-
-      if (!current_user) {
-        return <LoginScreen accounts={INIT_ACCOUNTS} onLogin={user => { sessionStorage.setItem("gjf_user", JSON.stringify(user)); setCurrentUser(user); }} />;
-      }
-
-      const NAV_ITEMS = [
-        { id: "dash", label: "대시보드", icon: "dash" },
-        { id: "students", label: "훈련생 관리", icon: "user" },
-        { id: "attendance", label: "출결 관리", icon: "check" },
-        { id: "completion", label: "수료 관리", icon: "check" },
-      ];
-
-      const renderPage = () => {
-        switch (page) {
-          case "dash": return <Dashboard courses={courses} students={students} />;
-          case "students": return <StudentMgmt students={students} courses={courses} />;
-          case "attendance": return <AttendanceMgmt students={students} courses={courses} />;
-          case "completion": return <CompletionMgmt students={students} courses={courses} />;
-          default: return <Dashboard courses={courses} students={students} />;
-        }
-      };
-
-      return (
-        <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-          {/* SIDEBAR */}
-          <aside style={{ width: 240, background: `linear-gradient(180deg, ${T.sb} 0%, ${T.p} 100%)`, color: "white", display: "flex", flexDirection: "column", boxShadow: "4px 0 12px rgba(0,0,0,0.15)" }}>
-            <div style={{ padding: "24px 18px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-              <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: "-0.5px" }}>경기북부 직업교육</div>
-              <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>v2026 시스템</div>
-            </div>
-            <nav style={{ flex: 1, padding: "16px 8px", overflowY: "auto" }}>
-              {NAV_ITEMS.map(item => (
-                <button key={item.id} onClick={() => setPage(item.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, border: "none", cursor: "pointer", background: page === item.id ? "rgba(255,255,255,0.15)" : "transparent", color: page === item.id ? "white" : "rgba(255,255,255,0.65)", fontWeight: page === item.id ? 700 : 500, fontSize: 13, transition: "0.2s", marginBottom: 4 }}>
-                  <Icon n={item.icon} s={18} c="currentColor" /> {item.label}
-                </button>
-              ))}
-            </nav>
-            <div style={{ padding: "16px 14px", borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Icon n="user" s={18} c="white" />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{current_user.name}</div>
-                <div style={{ fontSize: 10, opacity: 0.6 }}>{current_user.role === "admin" ? "관리자" : "담당자"}</div>
-              </div>
-              <button onClick={() => { sessionStorage.removeItem("gjf_user"); setCurrentUser(null); }} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "rgba(255,255,255,0.15)", color: "white", cursor: "pointer", fontSize: 14 }}>🚪</button>
-            </div>
-          </aside>
-
-          {/* MAIN CONTENT */}
-          <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: T.bg }}>
-            <header style={{ height: 60, background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 28px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.muted }}>경기도일자리재단 북부사업본부</div>
-              <div style={{ fontSize: 11, fontWeight: 700, background: T.p_bg, color: T.p, padding: "5px 12px", borderRadius: 20 }}>🟢 운영중</div>
-            </header>
-            <div style={{ flex: 1, overflowY: "auto", padding: "28px" }}>
-              {renderPage()}
-            </div>
-          </main>
-        </div>
-      );
-    }
-
-    // ✨ 마운트
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 </body>
 </html>

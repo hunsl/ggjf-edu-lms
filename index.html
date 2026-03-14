@@ -94,47 +94,6 @@ const sbDelete = async (table, filter) => {
   return { error: null };
 };
 
-/* ── DB 컬럼(snake_case) ↔ 앱(camelCase) 변환 ── */
-const toStudent = r => r ? ({
-  id: r.id, cid: r.cid, name: r.name, gender: r.gender||"",
-  birth: r.birth||"", idBack: r.id_back||"", phone: r.phone||"",
-  addrCity: r.addr_city||"", itvDate: r.itv_date||"",
-  itvScore: r.itv_score||"", itvGrade: r.itv_grade||"",
-  itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
-}) : null;
-
-const fromStudent = s => ({
-  cid: s.cid, name: s.name, gender: s.gender||"",
-  birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
-  addr_city: s.addrCity||"", itv_date: s.itvDate||null,
-  itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
-  itv_pass: s.itvPass||false, memo: s.memo||"", rate: s.rate||0,
-});
-
-const toCourse = r => r ? ({
-  id: r.id, cat: r.cat, cc: r.cc, name: r.name, code: r.code,
-  dateFrom: r.date_from||"", dateTo: r.date_to||"", period: r.period||"",
-  method: r.method||"대면", hours: r.hours||0,
-  tgt: r.tgt||20, cGoal: r.c_goal||18, eGoal: r.e_goal||12,
-  schedDays: r.sched_days||"",
-  schedTimeFrom: r.sched_time_from||"09:00",
-  schedTimeTo: r.sched_time_to||"13:00",
-  notes: r.notes||"", pdfName: r.pdf_name||"", pdfData: r.pdf_data||"",
-  links: r.links||[],
-}) : null;
-
-const fromCourse = c => ({
-  cat: c.cat, cc: c.cc, name: c.name, code: c.code,
-  date_from: c.dateFrom||null, date_to: c.dateTo||null, period: c.period||"",
-  method: c.method, hours: c.hours||0,
-  tgt: c.tgt||20, c_goal: c.cGoal||18, e_goal: c.eGoal||12,
-  sched_days: c.schedDays||"",
-  sched_time_from: c.schedTimeFrom||null,
-  sched_time_to: c.schedTimeTo||null,
-  notes: c.notes||"", pdf_name: c.pdfName||"", pdf_data: c.pdfData||"",
-  links: c.links||[],
-});
-
 // 📌 기존 코드의 Supabase REST API 섹션 이후에 추가
 
 /* ═══════════════════════════════════════════════════════════

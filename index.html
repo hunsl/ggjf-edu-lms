@@ -135,6 +135,459 @@ const fromCourse = c => ({
   links: c.links||[],
 });
 
+// 📌 기존 코드의 Supabase REST API 섹션 이후에 추가
+
+/* ═══════════════════════════════════════════════════════════
+   🔄 실시간 동기화 통합 시스템
+═══════════════════════════════════════════════════════════ */
+
+// 1️⃣ 데이터 변환 함수들 (DB snake_case ↔ App camelCase)
+const toStudent = r => r ? {
+  id: r.id, courseId: r.course_id, name: r.name, gender: r.gender||"",
+  birth: r.birth||"", idBack: r.id_back||"", phone: r.phone||"",
+  addrCity: r.addr_city||"", itvDate: r.itv_date||"",
+  itvScore: r.itv_score||null, itvGrade: r.itv_grade||"",
+  itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
+} : null;
+
+const fromStudent = s => ({
+  course_id: s.courseId, name: s.name, gender: s.gender||"",
+  birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
+  addr_city: s.addrCity||"", itv_date: s.itvDate||null,
+  itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
+  itv_pass: s.itvPass||false, memo: s.memo||"", rate: s.rate||0,
+});
+
+const toCourse = r => r ? {
+  id: r.id, cat: r.category||"", code: r.code||"", name: r.name||"",
+  dateFrom: r.date_from||"", dateTo: r.date_to||"", period: r.period||"",
+  method: r.method||"대면", hours: r.hours||0,
+  tgt: r.target||20, cGoal: r.completion_goal||18, eGoal: r.employment_goal||12,
+  schedDays: r.sched_days||"", schedTimeFrom: r.sched_time_from||"09:00",
+  schedTimeTo: r.sched_time_to||"13:00", notes: r.notes||"",
+} : null;
+
+const fromCourse = c => ({
+  category: c.cat, code: c.code, name: c.name,
+  date_from: c.dateFrom||null, date_to: c.dateTo||null, period: c.period||"",
+  method: c.method||"", hours: c.hours||0,
+  target: c.tgt||20, completion_goal: c.cGoal||18, employment_goal: c.eGoal||12,
+  sched_days: c.schedDays||"", sched_time_from: c.schedTimeFrom||"09:00",
+  sched_time_to: c.schedTimeTo||"13:00", notes: c.notes||"",
+});
+
+const toAttendance = r => r ? {
+  id: r.id, studentId: r.student_id, courseId: r.course_id,
+  attendDate: r.attend_date, inTime: r.in_time, outTime: r.out_time,
+  status: r.status, viaQr: r.via_qr,
+} : null;
+
+const fromAttendance = a => ({
+  student_id: a.studentId, course_id: a.courseId,
+  attend_date: a.attendDate, in_time: a.inTime, out_time: a.outTime,
+  status: a.status, via_qr: a.viaQr,
+});
+
+// 2️⃣ 안정적 CRUD (모든 데이터)
+const dbAPI = {
+  // 훈련생
+  getStudents: async (courseId = null) => {
+    let query = 'select=*&order=id';
+    if (courseId) query += `&course_id=eq.${courseId}`;
+    const { data, error } = await sbGet('students', query);
+    return { data: data?.map(toStudent) || [], error };
+  },
+
+  addStudent: async (student) => {
+    const { data, error } = await sbInsert('students', [fromStudent(student)]);
+    return { data: data ? toStudent(data[0]) : null, error };
+  },
+
+  updateStudent: async (id, student) => {
+    const { data, error } = await sbUpdate('students', `id=eq.${id}`, fromStudent(student));
+    return { data: data ? toStudent(data[0]) : null, error };
+  },
+
+  deleteStudent: async (id) => {
+    return await sbDelete('students', `id=eq.${id}`);
+  },
+
+  // 과정
+  getCourses: async () => {
+    const { data, error } = await sbGet('courses', 'select=*&order=id');
+    return { data: data?.map(toCourse) || [], error };
+  },
+
+  addCourse: async (course) => {
+    const { data, error } = await sbInsert('courses', [fromCourse(course)]);
+    return { data: data ? toCourse(data[0]) : null, error };
+  },
+
+  updateCourse: async (id, course) => {
+    const { data, error } = await sbUpdate('courses', `id=eq.${id}`, fromCourse(course));
+    return { data: data ? toCourse(data[0]) : null, error };
+  },
+
+  deleteCourse: async (id) => {
+    return await sbDelete('courses', `id=eq.${id}`);
+  },
+
+  // 출결 ⭐ 가장 중요!
+  getAttendance: async (studentId = null, courseId = null, attendDate = null) => {
+    let query = 'select=*&order=id';
+    if (studentId) query = `student_id=eq.${studentId}&${query}`;
+    if (courseId) query = `course_id=eq.${courseId}&${query}`;
+    if (attendDate) query = `attend_date=eq.${attendDate}&${query}`;
+    const { data, error } = await sbGet('attendance', query);
+    return { data: data?.map(toAttendance) || [], error };
+  },
+
+  recordAttendance: async (attendance) => {
+    // 기존 기록 확인 (같은 학생, 같은 날)
+    const { data: existing } = await sbGet(
+      'attendance',
+      `student_id=eq.${attendance.studentId}&attend_date=eq.${attendance.attendDate}`
+    );
+
+    if (existing && existing.length > 0) {
+      // 업데이트
+      const { data, error } = await sbUpdate(
+        'attendance',
+        `id=eq.${existing[0].id}`,
+        fromAttendance(attendance)
+      );
+      return { data: data ? toAttendance(data[0]) : null, error };
+    } else {
+      // 신규 생성
+      const { data, error } = await sbInsert('attendance', [fromAttendance(attendance)]);
+      return { data: data ? toAttendance(data[0]) : null, error };
+    }
+  },
+
+  // 강사
+  getInstructors: async () => {
+    const { data, error } = await sbGet('instructors', 'select=*&order=id');
+    return { data: data || [], error };
+  },
+
+  // 강의실
+  getRooms: async () => {
+    const { data, error } = await sbGet('rooms', 'select=*&order=id');
+    return { data: data || [], error };
+  },
+
+  // 일정
+  getBookings: async () => {
+    const { data, error } = await sbGet('bookings', 'select=*&order=id');
+    return { data: data || [], error };
+  },
+};
+
+// 3️⃣ 실시간 구독 Hook
+const useRealtimeSync = (table, onDataChange) => {
+  useEffect(() => {
+    if (!table) return;
+
+    console.log(`📡 Subscribe to ${table}`);
+
+    const channel = supabase
+      .channel(`public:${table}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        payload => {
+          console.log(`✅ ${table} 변경 감지:`, payload.eventType);
+          onDataChange(payload);
+        }
+      )
+      .subscribe((status) => {
+        console.log(`Channel ${table} status:`, status);
+      });
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [table, onDataChange]);
+};
+
+// 4️⃣ 통합 App 수정 (기존 App 함수를 이렇게 변경)
+function AppV2() {
+  // 🔐 인증
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const u = sessionStorage.getItem("gjf_user");
+      return u ? JSON.parse(u) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // 📊 메인 데이터 (모두 DB 기반)
+  const [students, setStudents] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [instructors, setInstructors] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [bookings, setBookings] = useState([]);
+
+  // 🔄 동기화 상태
+  const [syncState, setSyncState] = useState({
+    students: 'idle',
+    courses: 'idle',
+    attendance: 'idle',
+    isOnline: true,
+  });
+
+  const [page, setPage] = useState("dash");
+  const [collapsed, setCollapsed] = useState(false);
+  const [showAccMgr, setShowAccMgr] = useState(false);
+  const [showDataMgr, setShowDataMgr] = useState(false);
+  const [piDismissed, setPiDismissed] = useState(false);
+
+  // 🌐 로그인 여부 확인
+  if (!currentUser) {
+    return (
+      <>
+        <GStyle />
+        <LoginScreenDB
+          onLogin={(user) => {
+            sessionStorage.setItem("gjf_user", JSON.stringify(user));
+            setCurrentUser(user);
+            setPiDismissed(false);
+          }}
+        />
+      </>
+    );
+  }
+
+  // 📥 초기 데이터 로드 (앱 시작 시 한 번)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadAllData = async () => {
+      try {
+        const [studentsRes, coursesRes, attendanceRes, instructorsRes, roomsRes, bookingsRes] = await Promise.all([
+          dbAPI.getStudents(),
+          dbAPI.getCourses(),
+          dbAPI.getAttendance(),
+          dbAPI.getInstructors(),
+          dbAPI.getRooms(),
+          dbAPI.getBookings(),
+        ]);
+
+        if (!studentsRes.error) setStudents(studentsRes.data);
+        if (!coursesRes.error) setCourses(coursesRes.data);
+        if (!attendanceRes.error) setAttendance(attendanceRes.data);
+        if (!instructorsRes.error) setInstructors(instructorsRes.data);
+        if (!roomsRes.error) setRooms(roomsRes.data);
+        if (!bookingsRes.error) setBookings(bookingsRes.data);
+
+        console.log('✅ 모든 데이터 로드 완료');
+      } catch (e) {
+        console.error('❌ 데이터 로드 실패:', e);
+      }
+    };
+
+    loadAllData();
+  }, [currentUser]);
+
+  // 🔄 실시간 구독 (students)
+  useRealtimeSync('students', (payload) => {
+    if (payload.eventType === 'INSERT') {
+      const newStudent = toStudent(payload.new);
+      setStudents(prev => [...prev, newStudent]);
+    } else if (payload.eventType === 'UPDATE') {
+      setStudents(prev => prev.map(s => s.id === payload.new.id ? toStudent(payload.new) : s));
+    } else if (payload.eventType === 'DELETE') {
+      setStudents(prev => prev.filter(s => s.id !== payload.old.id));
+    }
+  });
+
+  // 🔄 실시간 구독 (attendance) ⭐
+  useRealtimeSync('attendance', (payload) => {
+    if (payload.eventType === 'INSERT') {
+      const newAtt = toAttendance(payload.new);
+      setAttendance(prev => [...prev, newAtt]);
+      // 학생의 rate 업데이트 (자동 계산)
+      updateStudentRate(newAtt.studentId, newAtt.courseId);
+    } else if (payload.eventType === 'UPDATE') {
+      setAttendance(prev => prev.map(a => a.id === payload.new.id ? toAttendance(payload.new) : a));
+      updateStudentRate(payload.new.student_id, payload.new.course_id);
+    }
+  });
+
+  // 출석률 자동 계산
+  const updateStudentRate = async (studentId, courseId) => {
+    const attRecords = attendance.filter(a => a.studentId === studentId && a.courseId === courseId);
+    const presentCnt = attRecords.filter(a => a.status === 'O' || a.status === 'L').length;
+    const rate = attRecords.length ? Math.round((presentCnt / attRecords.length) * 100) : 0;
+
+    const student = students.find(s => s.id === studentId);
+    if (student) {
+      const updated = { ...student, rate };
+      await dbAPI.updateStudent(studentId, updated);
+      setStudents(prev => prev.map(s => s.id === studentId ? updated : s));
+    }
+  };
+
+  // 🚀 CRUD 함수들 (DB 기반)
+  const addStudent = async (student) => {
+    setSyncState(p => ({ ...p, students: 'loading' }));
+    const { data, error } = await dbAPI.addStudent(student);
+    if (error) {
+      alert('❌ 훈련생 추가 실패: ' + error.message);
+      setSyncState(p => ({ ...p, students: 'error' }));
+    } else {
+      setStudents(prev => [...prev, data]);
+      setSyncState(p => ({ ...p, students: 'synced' }));
+    }
+  };
+
+  const updateStudent = async (student) => {
+    setSyncState(p => ({ ...p, students: 'loading' }));
+    const { data, error } = await dbAPI.updateStudent(student.id, student);
+    if (error) {
+      alert('❌ 훈련생 수정 실패: ' + error.message);
+      setSyncState(p => ({ ...p, students: 'error' }));
+    } else {
+      setStudents(prev => prev.map(s => s.id === student.id ? data : s));
+      setSyncState(p => ({ ...p, students: 'synced' }));
+    }
+  };
+
+  const deleteStudent = async (id) => {
+    if (!window.confirm('이 훈련생을 삭제하시겠습니까?')) return;
+    setSyncState(p => ({ ...p, students: 'loading' }));
+    const { error } = await dbAPI.deleteStudent(id);
+    if (error) {
+      alert('❌ 훈련생 삭제 실패: ' + error.message);
+      setSyncState(p => ({ ...p, students: 'error' }));
+    } else {
+      setStudents(prev => prev.filter(s => s.id !== id));
+      setSyncState(p => ({ ...p, students: 'synced' }));
+    }
+  };
+
+  // 과정
+  const addCourse = async (course) => {
+    const { data, error } = await dbAPI.addCourse(course);
+    if (error) {
+      alert('❌ 과정 추가 실패: ' + error.message);
+    } else {
+      setCourses(prev => [...prev, data]);
+    }
+  };
+
+  const updateCourse = async (course) => {
+    const { data, error } = await dbAPI.updateCourse(course.id, course);
+    if (error) {
+      alert('❌ 과정 수정 실패: ' + error.message);
+    } else {
+      setCourses(prev => prev.map(c => c.id === course.id ? data : c));
+    }
+  };
+
+  const deleteCourse = async (id) => {
+    if (!window.confirm('이 과정을 삭제하시겠습니까?')) return;
+    const { error } = await dbAPI.deleteCourse(id);
+    if (error) {
+      alert('❌ 과정 삭제 실패: ' + error.message);
+    } else {
+      setCourses(prev => prev.filter(c => c.id !== id));
+    }
+  };
+
+  // 출석 기록 (QR 코드 스캔 시 호출) ⭐
+  const recordQRAttendance = async ({ studentId, courseId, type }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date().toTimeString().slice(0, 8);
+
+    const attendance_data = {
+      studentId,
+      courseId,
+      attendDate: today,
+      inTime: type === 'in' ? now : null,
+      outTime: type === 'out' ? now : null,
+      status: type === 'in' ? 'O' : 'O',
+      viaQr: true,
+    };
+
+    setSyncState(p => ({ ...p, attendance: 'loading' }));
+    const { data, error } = await dbAPI.recordAttendance(attendance_data);
+
+    if (error) {
+      console.error('❌ 출석 기록 실패:', error);
+      setSyncState(p => ({ ...p, attendance: 'error' }));
+      return false;
+    }
+
+    console.log('✅ 출석 기록됨 (DB):', data);
+    setSyncState(p => ({ ...p, attendance: 'synced' }));
+    return true;
+  };
+
+  // 네트워크 감시
+  useEffect(() => {
+    const handleOnline = () => setSyncState(p => ({ ...p, isOnline: true }));
+    const handleOffline = () => setSyncState(p => ({ ...p, isOnline: false }));
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // UI 렌더링
+  const renderPage = () => {
+    switch (page) {
+      case "dash":
+        return <Dashboard students={students} courses={courses} />;
+      case "courses":
+        return <CourseList courses={courses} onAdd={addCourse} onUpdate={updateCourse} onDelete={deleteCourse} />;
+      case "students":
+        return <StudentMgmt
+          students={students}
+          courses={courses}
+          onAdd={(s) => s.forEach(addStudent)}
+          onEdit={updateStudent}
+          onDelete={deleteStudent}
+          onNew={() => { /* 모달 열기 */ }}
+        />;
+      case "attendance":
+        return <AttendanceMgmtV2
+          students={students}
+          courses={courses}
+          attendance={attendance}
+          onRecordQR={recordQRAttendance}
+        />;
+      default:
+        return null;
+    }
+  };
+
+  // 나머지 기존 UI 코드...
+  return (
+    <>
+      <GStyle />
+      {/* 기존 레이아웃 코드 동일... */}
+      {!syncState.isOnline && (
+        <div style={{
+          position: 'fixed', top: 60, left: 0, right: 0,
+          background: '#FEF2F2', padding: '8px 16px', zIndex: 100,
+          display: 'flex', alignItems: 'center', gap: 10,
+          color: T.danger, fontSize: 12, fontWeight: 700,
+        }}>
+          📡 오프라인 상태입니다. 데이터가 최신이 아닐 수 있습니다.
+        </div>
+      )}
+      {renderPage()}
+    </>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════
    GLOBAL STYLES
 ═══════════════════════════════════════════════════════════ */
@@ -1319,459 +1772,173 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
 /* ═══════════════════════════════════════════════════════════
    QR ATTENDANCE  ★ QR 출석 체크
 ═══════════════════════════════════════════════════════════ */
-const AttendanceMgmt = ({ students, courses }) => {
-  const [course, setCourse]   = useState(courses[3] || courses[0]);
-  const [date, setDate]       = useState(DATES[DATES.length-1]);
-  const [mode, setMode]       = useState("qr");
-  const [qrType, setQrType]   = useState("in");
-  const [simRunning, setSimRunning] = useState(false);
-  const [manualAtt, setManualAtt]   = useState({});
-  const simRef = useRef(null);
+/* 기존 AttendanceMgmt를 이렇게 교체 */
+const AttendanceMgmtV2 = ({ students, courses, attendance, onRecordQR }) => {
+  const [course, setCourse] = useState(courses[0]);
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [qrType, setQrType] = useState("in");
+  const [records, setRecords] = useState({});
+  const [loading, setLoading] = useState(false);
 
-  // ── 시간 설정 — 과정별 schedTimeFrom/To에서 자동 로드, 수동 수정 가능 ──
-  const parseHM = (str, defH, defM) => {
-    if(!str) return [defH, defM];
-    const [h, m] = str.split(":").map(Number);
-    return [isNaN(h)?defH:h, isNaN(m)?defM:m];
-  };
-  const initTimes = (c) => {
-    const [sh, sm] = parseHM(c?.schedTimeFrom, 9,  0);
-    const [eh, em] = parseHM(c?.schedTimeTo,   13, 0);
-    // 지각기준: 수업시작 + 30분 기본
-    const lateMins = sh*60+sm+30;
-    return { sh, sm, lh:Math.floor(lateMins/60), lm:lateMins%60, eh, em };
-  };
-  const initC = courses[3] || courses[0];
-  const init0 = initTimes(initC);
+  const courseStudents = students.filter(s => s.courseId === course?.id);
+  const todayAttendance = attendance.filter(a => 
+    a.courseId === course?.id && a.attendDate === date
+  );
 
-  const [startH, setStartH] = useState(init0.sh);
-  const [startM, setStartM] = useState(init0.sm);
-  const [lateH,  setLateH]  = useState(init0.lh);
-  const [lateM,  setLateM]  = useState(init0.lm);
-  const [endH,   setEndH]   = useState(init0.eh);
-  const [endM,   setEndM]   = useState(init0.em);
-  const [showTimeSetting, setShowTimeSetting] = useState(false);
-  const [timeCustomized,  setTimeCustomized]  = useState(false); // 수동 수정 여부
+  // 훈련생이 QR을 스캔했을 때
+  const handleQRScan = async (studentId) => {
+    setLoading(true);
+    const success = await onRecordQR({
+      studentId,
+      courseId: course.id,
+      type: qrType,
+    });
 
-  // 과정 변경 시 시간 자동 갱신 (수동 수정 중이면 유지)
-  const handleCourseChange = (c) => {
-    setCourse(c);
-    setRecords({});
-    if(!timeCustomized) {
-      const t = initTimes(c);
-      setStartH(t.sh); setStartM(t.sm);
-      setLateH(t.lh);  setLateM(t.lm);
-      setEndH(t.eh);   setEndM(t.em);
+    if (success) {
+      // UI 즉시 반영 (실제 DB는 구독으로 반영됨)
+      setRecords(prev => ({
+        ...prev,
+        [studentId]: {
+          ...(prev[studentId] || {}),
+          [qrType]: new Date().toTimeString().slice(0, 8),
+        },
+      }));
     }
-  };
-
-  const startTotal = startH * 60 + startM;  // 총 분
-  const lateTotal  = lateH  * 60 + lateM;
-  const endTotal   = endH   * 60 + endM;
-
-  const fmtTime = (h, m) => `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
-
-  // ── QR 데이터 ──
-  const qrToken   = `${course.code}-${date}-${qrType.toUpperCase()}-2026GJF`;
-  const qrData    = `https://check.gjf.or.kr/attend?c=${course.code}&d=${date}&type=${qrType}&t=${qrToken}`;
-  const qrColor   = qrType === "in" ? "2563EB" : "9A3412";
-  // quickchart.io: CORS 없이 QR 이미지 생성
-  const qrUrl     = `https://quickchart.io/qr?text=${encodeURIComponent(qrData)}&size=200&margin=2&dark=${qrColor}`;
-
-  // ── 출결 기록 (입실/퇴실 분리) ──
-  const [records, setRecords] = useState({}); // { studentId: { in:{time,status}, out:{time} } }
-
-  // 상태 계산 (입실 시각 → 출석/지각/결석)
-  const calcStatus = (inMins) => {
-    if (inMins === null) return "A";
-    if (inMins <= lateTotal) return "O";
-    return "L";
-  };
-
-  const checkedInCnt  = Object.values(records).filter(r=>r.in).length;
-  const checkedOutCnt = Object.values(records).filter(r=>r.out).length;
-  const presentCnt    = Object.values(records).filter(r=>r.in && calcStatus(r.in.mins)==="O").length;
-  const lateCnt       = Object.values(records).filter(r=>r.in && calcStatus(r.in.mins)==="L").length;
-  const courseStudents = students.filter(s=>s.cid===course.id);
-  const absentCnt = courseStudents.length - checkedInCnt;
-
-  // ── 시뮬레이션 ──
-  const startSim = () => {
-    if(simRunning) return;
-    setSimRunning(true);
-    if(qrType==="in") setRecords({});
-    const students2 = [...courseStudents];
-    let i = 0;
-    simRef.current = setInterval(() => {
-      if(i >= students2.length) { clearInterval(simRef.current); setSimRunning(false); return; }
-      const s = students2[i];
-      const offsetMins = Math.floor(Math.random() * 80) - 10; // -10 ~ +70분
-      const mins = startTotal + offsetMins;
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      const time = fmtTime(Math.max(0,h), Math.max(0,m));
-      if(qrType === "in") {
-        setRecords(prev => ({...prev, [s.id]: { in: { time, mins } }}));
-      } else {
-        const outOffset = endTotal + Math.floor(Math.random()*20) - 5;
-        const oh = Math.floor(outOffset/60), om = outOffset%60;
-        setRecords(prev => ({...prev, [s.id]: { ...(prev[s.id]||{}), out: { time: fmtTime(oh,om) } }}));
-      }
-      i++;
-    }, 500);
-  };
-
-  useEffect(() => () => clearInterval(simRef.current), []);
-
-  const ATT_MAP = {
-    O: { label:"출석", bg:"#ECFDF5", color:T.ok    },
-    L: { label:"지각", bg:"#FFFBEB", color:T.warn   },
-    A: { label:"결석", bg:"#FEF2F2", color:T.danger },
-    E: { label:"외출", bg:"#F5F3FF", color:"#7C3AED" },
-  };
-
-  const inpSel = {
-    padding:"5px 8px", border:`1px solid ${T.bd}`, borderRadius:7,
-    fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer",
-    width:64,
+    setLoading(false);
   };
 
   return (
     <div className="page">
       <SectionHead
-        title="출결 관리"
-        sub="QR 코드 출석 또는 수동 입력으로 출결을 관리합니다"
-        right={
-          <div style={{ display:"flex", gap:6 }}>
-            <button onClick={()=>setMode("qr")} style={{
-              padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer",
-              fontSize:11, fontWeight:600,
-              background:mode==="qr"?T.p:T.s3, color:mode==="qr"?"#fff":T.mu }}>
-              📱 QR 출석
-            </button>
-            <button onClick={()=>setMode("manual")} style={{
-              padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer",
-              fontSize:11, fontWeight:600,
-              background:mode==="manual"?T.p:T.s3, color:mode==="manual"?"#fff":T.mu }}>
-              ✏️ 수동 입력
-            </button>
-          </div>
-        }
+        title="📱 QR 출석 관리 (실시간 DB 연동)"
+        sub={`${course?.name} · ${date}`}
       />
 
-      {/* 2026 기준 안내 */}
-      <div style={{ background:"#FFFBEB", border:`1px solid #FDE68A`, borderRadius:8,
-        padding:"10px 14px", marginBottom:14, display:"flex", gap:10, fontSize:12, color:"#92400E" }}>
-        <Icon n="info" s={14}/>
-        <span><b>2026 개정 출결 기준:</b> 하루 수업시간 50% 미만 수강 시 결석 처리 · 총 교육시간 <b>80% 이상</b> 출석 시 수료</span>
+      {/* 과정 선택 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {courses.map(c => (
+          <button
+            key={c.id}
+            onClick={() => setCourse(c)}
+            style={{
+              padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+              fontSize: 11, fontWeight: 600,
+              background: course?.id === c.id ? T.p : T.s3,
+              color: course?.id === c.id ? '#fff' : T.mu,
+            }}
+          >
+            {c.code}
+          </button>
+        ))}
       </div>
 
-      {/* ── 시간 설정 카드 ── */}
-      <Card style={{ marginBottom:14, padding:0, overflow:"hidden" }}>
-        <button onClick={()=>setShowTimeSetting(v=>!v)}
-          style={{ width:"100%", padding:"11px 18px", border:"none", background:"transparent",
-            cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
-          <Icon n="cal" s={14}/>
-          <div style={{ fontSize:12, fontWeight:700, color:T.tx }}>⏰ 수업 시간 설정</div>
-          {timeCustomized && (
-            <span style={{ fontSize:10, fontWeight:700, color:T.warn,
-              background:"#FFFBEB", padding:"1px 7px", borderRadius:4, border:`1px solid ${T.warn}40` }}>
-              수동 수정됨
-            </span>
-          )}
-          <div style={{ marginLeft:"auto", display:"flex", gap:12, alignItems:"center", fontSize:12 }}>
-            <span style={{ color:T.ok }}>수업 {fmtTime(startH,startM)} ~ {fmtTime(endH,endM)}</span>
-            <span style={{ color:T.warn }}>지각기준 {fmtTime(lateH,lateM)} 이후</span>
-            <span style={{ fontSize:10, color:T.mu }}>{showTimeSetting?"▲":"▼"}</span>
-          </div>
-        </button>
-        {showTimeSetting && (
-          <div style={{ padding:"14px 18px", borderTop:`1px solid ${T.bd}`,
-            display:"flex", gap:20, flexWrap:"wrap", alignItems:"flex-end" }}>
-            {[
-              { label:"수업 시작", h:startH, m:startM, setH:(v)=>{setStartH(v);setTimeCustomized(true);}, setM:(v)=>{setStartM(v);setTimeCustomized(true);}, color:T.ok },
-              { label:"지각 기준 (이후)", h:lateH,  m:lateM,  setH:(v)=>{setLateH(v);setTimeCustomized(true);},  setM:(v)=>{setLateM(v);setTimeCustomized(true);},  color:T.warn },
-              { label:"수업 종료", h:endH,   m:endM,   setH:(v)=>{setEndH(v);setTimeCustomized(true);},   setM:(v)=>{setEndM(v);setTimeCustomized(true);},   color:T.p },
-            ].map(({label,h,m,setH,setM,color})=>(
-              <div key={label}>
-                <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
-                  {label}
-                </label>
-                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                  <select value={h} onChange={e=>setH(+e.target.value)} style={{...inpSel,borderColor:color}}>
-                    {Array.from({length:24},(_,i)=>i).map(v=>(
-                      <option key={v} value={v}>{String(v).padStart(2,"0")}시</option>
-                    ))}
-                  </select>
-                  <span style={{ fontSize:14, fontWeight:700, color:T.mu }}>:</span>
-                  <select value={m} onChange={e=>setM(+e.target.value)} style={{...inpSel,borderColor:color}}>
-                    {[0,10,20,30,40,50].map(v=>(
-                      <option key={v} value={v}>{String(v).padStart(2,"0")}분</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ))}
-            <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
-              <div style={{ padding:"8px 12px", borderRadius:8, background:T.s2,
-                border:`1px solid ${T.bd}`, fontSize:11, color:T.mu, lineHeight:1.7 }}>
-                📋 <b style={{color:T.tx}}>현재 기준</b><br/>
-                출석: {fmtTime(startH,startM)} ~ {fmtTime(lateH,lateM)}<br/>
-                지각: {fmtTime(lateH,lateM)} 이후 입실<br/>
-                수업: ~ {fmtTime(endH,endM)} 종료
-              </div>
-              {timeCustomized && (
-                <button onClick={()=>{
-                  const t = initTimes(course);
-                  setStartH(t.sh); setStartM(t.sm);
-                  setLateH(t.lh);  setLateM(t.lm);
-                  setEndH(t.eh);   setEndM(t.em);
-                  setTimeCustomized(false);
-                }} style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${T.bd}`,
-                  background:"transparent", cursor:"pointer", fontSize:11, fontWeight:600,
-                  color:T.mu, textAlign:"center" }}>
-                  🔄 과정 시간으로 초기화
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+      {/* 날짜 선택 */}
+      <Card style={{ padding: '14px 18px', marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          style={{
+            padding: '7px 10px', border: `1px solid ${T.bd}`, borderRadius: 8,
+            fontSize: 12, outline: 'none', background: T.s2,
+          }}
+        />
+        <span style={{ fontSize: 12, color: T.mu }}>
+          {courseStudents.length}명 · 현재 출석 {todayAttendance.length}명
+        </span>
       </Card>
 
-      {/* 과정·날짜 선택 + 요약 */}
-      <Card style={{ padding:"14px 18px", marginBottom:16, display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
-        <div>
-          <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>과정 선택</div>
-          <select value={course.id} onChange={e=>handleCourseChange(courses.find(c=>c.id===+e.target.value)||courses[0])}
-            style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
-              fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>수업일</div>
-          <select value={date} onChange={e=>setDate(e.target.value)}
-            style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
-              fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {DATES.map(d=><option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
-          {[
-            {v:presentCnt,   l:"출석",   c:T.ok      },
-            {v:lateCnt,      l:"지각",   c:T.warn     },
-            {v:absentCnt,    l:"미확인", c:T.danger   },
-            {v:checkedOutCnt,l:"퇴실",   c:T.info     },
-          ].map(({v,l,c})=>(
-            <div key={l} style={{ textAlign:"center" }}>
-              <div style={{ fontSize:18, fontWeight:800, color:c }}>{v}</div>
-              <div style={{ fontSize:9, color:T.mu }}>{l}</div>
-            </div>
-          ))}
-          <div style={{ fontSize:13, color:T.mu }}>/ {courseStudents.length}명</div>
-        </div>
-      </Card>
+      {/* 입실 / 퇴실 */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {[
+          { id: 'in', label: '📥 입실', sub: '출석 기록' },
+          { id: 'out', label: '📤 퇴실', sub: '퇴실 기록' },
+        ].map(({ id, label, sub }) => (
+          <button
+            key={id}
+            onClick={() => setQrType(id)}
+            style={{
+              flex: 1, padding: '10px', borderRadius: 10, border: 'none',
+              background: qrType === id ? (id === 'in' ? '#2563EB' : T.p) : T.s3,
+              color: qrType === id ? '#fff' : T.mu,
+              fontWeight: 700, fontSize: 13, cursor: 'pointer',
+            }}
+          >
+            {label}
+            <div style={{ fontSize: 10, marginTop: 2 }}>{sub}</div>
+          </button>
+        ))}
+      </div>
 
-      {mode === "qr" ? (
-        <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:16 }}>
-
-          {/* QR 코드 패널 */}
-          <Card style={{ padding:20, width:280, flexShrink:0 }}>
-
-            {/* 입실 / 퇴실 전환 */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:16 }}>
-              {[
-                { id:"in",  label:"📥 입실 QR", sub:`~${fmtTime(lateH,lateM)} 출석`, color:"#2563EB" },
-                { id:"out", label:"📤 퇴실 QR", sub:`${fmtTime(endH,endM)} 기준`, color:T.p },
-              ].map(({id,label,sub,color})=>(
-                <button key={id} onClick={()=>setQrType(id)} style={{
-                  padding:"10px 6px", borderRadius:9, border:"none", cursor:"pointer",
-                  background: qrType===id ? color : T.s3,
-                  color: qrType===id ? "#fff" : T.mu,
-                  fontWeight:700, fontSize:11, transition:"all .15s",
-                  outline: qrType===id ? `none` : `1px solid ${T.bd}` }}>
-                  {label}
-                  <div style={{ fontSize:9, marginTop:2,
-                    color: qrType===id ? "rgba(255,255,255,.7)" : T.mu }}>{sub}</div>
-                </button>
+      {/* 훈련생 목록 (QR 스캔 시뮬레이션) */}
+      <Card style={{ overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: T.s2 }}>
+              {['이름', '상태', '입실', '퇴실', 'QR 스캔'].map(h => (
+                <th
+                  key={h}
+                  style={{
+                    padding: '10px 12px', textAlign: h === '이름' ? 'left' : 'center',
+                    fontSize: 11, fontWeight: 700, color: T.mu,
+                    borderBottom: `1px solid ${T.bd}`,
+                  }}
+                >
+                  {h}
+                </th>
               ))}
-            </div>
+            </tr>
+          </thead>
+          <tbody>
+            {courseStudents.map((s) => {
+              const todayRec = todayAttendance.find(a => a.studentId === s.id);
+              return (
+                <tr key={s.id} style={{ borderBottom: `1px solid ${T.bd}` }}>
+                  <td style={{ padding: '11px 12px', fontSize: 12, fontWeight: 700 }}>
+                    {s.name}
+                  </td>
+                  <td style={{ padding: '11px 12px', textAlign: 'center' }}>
+                    {todayRec ? (
+                      <Chip
+                        label={todayRec.status === 'O' ? '출석' : '지각'}
+                        bg={todayRec.status === 'O' ? '#ECFDF5' : '#FFFBEB'}
+                        color={todayRec.status === 'O' ? T.ok : T.warn}
+                      />
+                    ) : (
+                      <span style={{ fontSize: 11, color: T.mu }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '11px 12px', textAlign: 'center', fontSize: 11, color: T.mu }}>
+                    {todayRec?.inTime || '—'}
+                  </td>
+                  <td style={{ padding: '11px 12px', textAlign: 'center', fontSize: 11, color: T.mu }}>
+                    {todayRec?.outTime || '—'}
+                  </td>
+                  <td style={{ padding: '11px 12px', textAlign: 'center' }}>
+                    <Btn
+                      size="sm"
+                      onClick={() => handleQRScan(s.id)}
+                      variant={loading ? 'ghost' : 'primary'}
+                    >
+                      {qrType === 'in' ? '📥' : '📤'}
+                    </Btn>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
 
-            {/* QR 이미지 */}
-            <div style={{ position:"relative", display:"inline-block", marginBottom:12 }}>
-              <img src={qrUrl} alt="QR" style={{ width:200, height:200, display:"block",
-                border:`2px solid ${qrType==="in"?"#2563EB":T.pl}`, borderRadius:10 }}
-                onError={e=>{ e.target.style.display="none"; }}/>
-              <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, pointerEvents:"none",
-                overflow:"hidden", borderRadius:10 }}>
-                <div style={{ position:"absolute", left:0, right:0, height:2,
-                  background:`linear-gradient(90deg,transparent,${qrType==="in"?"#2563EB":T.pl},transparent)`,
-                  animation:"scanLine 2s linear infinite", opacity:.7 }}/>
-              </div>
-            </div>
-
-            {/* 시간 정보 */}
-            <div style={{ fontSize:10, color:T.mu, lineHeight:1.8, marginBottom:10,
-              padding:"8px 10px", background:T.s2, borderRadius:7, border:`1px solid ${T.bd}` }}>
-              <b style={{color:T.tx}}>과정:</b> {course.name}<br/>
-              <b style={{color:T.tx}}>날짜:</b> {date}<br/>
-              <b style={{color:T.ok}}>수업시작:</b> {fmtTime(startH,startM)}<br/>
-              <b style={{color:T.warn}}>지각기준:</b> {fmtTime(lateH,lateM)} 이후<br/>
-              <b style={{color:T.p}}>수업종료:</b> {fmtTime(endH,endM)}<br/>
-              <b style={{color:"#2563EB"}}>현재 QR:</b> {qrType==="in"?"입실":"퇴실"}
-            </div>
-
-            <div style={{ padding:"8px 10px", background:T.pbg, borderRadius:6,
-              fontSize:10, color:T.mu, wordBreak:"break-all", marginBottom:10 }}>
-              {qrData.slice(0,55)}…
-            </div>
-
-            <div style={{ background:T.s2, borderRadius:8, padding:"9px 11px",
-              border:`1px solid ${T.bd}`, fontSize:11, color:T.mu, lineHeight:1.8 }}>
-              <b style={{color:T.tx, display:"block", marginBottom:3}}>📱 스캔 절차</b>
-              1. 학생이 폰으로 QR 스캔<br/>
-              2. 입실/퇴실 체크인 페이지<br/>
-              3. 이름 확인 후 등록<br/>
-              4. 담당자 화면 실시간 반영
-            </div>
-            <div style={{ marginTop:8, padding:"7px 10px", borderRadius:8,
-              background:"#FFFBEB", border:"1px solid #FDE68A", fontSize:10, color:"#92400E" }}>
-              ⚡ <b>시뮬레이션 모드</b> — 백엔드 연동 후 실제 작동
-            </div>
-          </Card>
-
-          {/* 실시간 출석 현황 */}
-          <Card style={{ overflow:"hidden", display:"flex", flexDirection:"column" }}>
-            <div style={{ padding:"12px 18px", borderBottom:`1px solid ${T.bd}`,
-              display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontSize:13, fontWeight:700, color:T.tx, display:"flex", alignItems:"center", gap:8 }}>
-                📡 실시간 출석 현황
-                {simRunning && (
-                  <span style={{ fontSize:10, color:T.ok, display:"inline-flex", alignItems:"center", gap:4 }}>
-                    <span style={{ width:6,height:6,background:T.ok,borderRadius:"50%",
-                      display:"inline-block",animation:"ping 1.2s ease infinite"}}/>
-                    LIVE
-                  </span>
-                )}
-              </div>
-              <div style={{ display:"flex", gap:8 }}>
-                <Btn size="sm" variant="ghost" onClick={()=>{ setRecords({}); setSimRunning(false); clearInterval(simRef.current); }}>
-                  초기화
-                </Btn>
-                <Btn size="sm" onClick={startSim} variant={simRunning?"ghost":"primary"}>
-                  <Icon n={simRunning?"refresh":"phone"} s={13}/>
-                  {simRunning ? "스캔 중…" : `${qrType==="in"?"입실":"퇴실"} 시뮬레이션`}
-                </Btn>
-              </div>
-            </div>
-
-            <div style={{ flex:1, padding:14, overflowY:"auto", maxHeight:400 }}>
-              {courseStudents.length === 0 && (
-                <div style={{ textAlign:"center", color:T.mu, padding:"40px 0", fontSize:13 }}>
-                  이 과정에 등록된 훈련생이 없습니다
-                </div>
-              )}
-              {courseStudents.map(s => {
-                const rec    = records[s.id] || {};
-                const inRec  = rec.in;
-                const outRec = rec.out;
-                const status = inRec ? calcStatus(inRec.mins) : "A";
-                const att    = ATT_MAP[inRec ? status : "A"];
-                return (
-                  <div key={s.id} className={inRec?"checkin-row":""} style={{
-                    display:"flex", alignItems:"center", gap:12,
-                    padding:"10px 12px", borderRadius:8, marginBottom:6,
-                    background: inRec ? att.bg : T.s2,
-                    border:`1px solid ${inRec ? att.color+"30" : T.bd}`,
-                    transition:"all .3s"
-                  }}>
-                    <div style={{ width:34, height:34, borderRadius:9, flexShrink:0,
-                      background: inRec ? `${att.color}20` : T.bd,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:11, fontWeight:800, color: inRec ? att.color : T.mu }}>
-                      {inRec ? att.label[0] : "?"}
-                    </div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</div>
-                      <div style={{ fontSize:10, color:T.mu, marginTop:1, display:"flex", gap:8 }}>
-                        {inRec  && <span style={{color:"#2563EB"}}>📥 입실 {inRec.time}</span>}
-                        {outRec && <span style={{color:T.p}}>📤 퇴실 {outRec.time}</span>}
-                        {!inRec && "대기 중"}
-                      </div>
-                    </div>
-                    <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-                      {inRec && <Chip label={att.label} bg={att.bg} color={att.color}/>}
-                      {outRec && <Chip label="퇴실완료" bg="#EFF6FF" color="#2563EB"/>}
-                      {!inRec && <Chip label="미확인" bg={T.s3} color={T.mu}/>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 진행 바 */}
-            <div style={{ padding:"11px 18px", borderTop:`1px solid ${T.bd}`, background:T.s2 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
-                <span style={{ fontSize:11, color:T.mu }}>입실 진행률</span>
-                <span style={{ fontSize:11, fontWeight:700, color:T.p }}>
-                  {courseStudents.length ? Math.round(checkedInCnt/courseStudents.length*100) : 0}%
-                  <span style={{ fontSize:10, color:T.mu, fontWeight:400, marginLeft:4 }}>
-                    ({checkedInCnt}/{courseStudents.length})
-                  </span>
-                </span>
-              </div>
-              <RBar r={courseStudents.length ? checkedInCnt/courseStudents.length*100 : 0} h={8}/>
-            </div>
-          </Card>
-        </div>
-      ) : (
-        /* ── 수동 입력 모드 ── */
-        <Card style={{ overflow:"hidden" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
-            <thead>
-              <tr style={{ background:T.s2 }}>
-                {["이름","누적 출석률","당일 출결 입력"].map(h=>(
-                  <th key={h} style={{ padding:"10px 16px",
-                    textAlign:h==="이름"?"left":"center",
-                    fontSize:11, color:T.mu, fontWeight:700,
-                    borderBottom:`1px solid ${T.bd}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {courseStudents.map(s=>{
-                const cur = manualAtt[s.id] || "O";
-                return (
-                  <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
-                    <td style={{ padding:"12px 16px", fontSize:13, fontWeight:700, color:T.tx }}>
-                      {s.name}
-                      {s.rate<80 && <span style={{ marginLeft:6, fontSize:10, color:T.danger }}>⚠</span>}
-                    </td>
-                    <td style={{ padding:"12px 16px", textAlign:"center" }}>
-                      <div style={{ fontSize:14, fontWeight:800, color:rateColor(s.rate) }}>{s.rate}%</div>
-                      <RBar r={s.rate} h={4}/>
-                    </td>
-                    <td style={{ padding:"12px 16px" }}>
-                      <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
-                        {Object.entries(ATT_MAP).map(([k,v])=>(
-                          <button key={k}
-                            onClick={()=>setManualAtt(p=>({...p,[s.id]:k}))}
-                            style={{ width:46, height:30, border:"none", borderRadius:6,
-                              cursor:"pointer", fontSize:11, fontWeight:700, transition:"all .15s",
-                              background: cur===k ? v.color : T.s2,
-                              color: cur===k ? "#fff" : T.mu }}>
-                            {v.label}
-                          </button>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </Card>
-      )}
+      {/* DB ���영 상태 안내 */}
+      <div style={{
+        marginTop: 16, padding: '10px 14px', borderRadius: 8,
+        background: '#FFFBEB', border: '1px solid #FDE68A',
+        fontSize: 11, color: '#92400E',
+      }}>
+        ✅ QR 출석이 <b>Supabase에 실시간 저장</b>됩니다.
+        모든 담당자 화면에서 즉시 반영됩니다.
+      </div>
     </div>
   );
 };

@@ -13,7 +13,10 @@ CREATE TABLE IF NOT EXISTS accounts (
   pw    TEXT NOT NULL
 );
 
--- 기본 계정 (운영 전 반드시 비밀번호 변경 필요)
+-- 기본 계정 — 반드시 배포 전에 비밀번호를 변경하고 해시 처리 권장
+-- ⚠️  현재는 데모용 평문 저장 방식입니다.
+--    운영 환경에서는 pgcrypto 등을 사용한 해시 저장을 권장합니다.
+--    예: crypt('gjf2026', gen_salt('bf'))
 INSERT INTO accounts (name, role, pw) VALUES
   ('관리자', 'admin', 'gjf2026'),
   ('담당자', 'staff',  'gjf1234')
@@ -145,7 +148,17 @@ CREATE INDEX IF NOT EXISTS idx_bookings_dates ON bookings(start, "end");
 
 -- ──────────────────────────────────────────────────
 -- 8. RLS (Row Level Security) 정책
---    anon key 로 모든 CRUD 허용 (운영 시 역할별 정책 추가 권장)
+--    ⚠️ 아래 정책은 개발/데모용입니다.
+--    운영 배포 전에 아래 지침에 따라 정책을 강화하세요:
+--
+--    [accounts] anon 사용자가 비밀번호를 읽지 못하도록:
+--      - SELECT 는 service_role 만 허용
+--      - 또는 Supabase Auth 로 마이그레이션 권장
+--
+--    [students/attendance] 로그인한 담당자만 쓰기 허용:
+--      - USING (auth.role() = 'authenticated')
+--
+--    [bookings/rooms/instructors] 읽기는 공개, 쓰기는 인증 필요
 -- ──────────────────────────────────────────────────
 ALTER TABLE accounts   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE courses    ENABLE ROW LEVEL SECURITY;
@@ -155,7 +168,7 @@ ALTER TABLE instructors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rooms      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookings   ENABLE ROW LEVEL SECURITY;
 
--- anon 역할에 전체 접근 허용 (배포 전 반드시 검토 필요)
+-- 개발용: anon 역할에 전체 접근 허용 (운영 전 반드시 아래 정책 교체 필요)
 CREATE POLICY "anon_all_accounts"   ON accounts   FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "anon_all_courses"    ON courses    FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "anon_all_students"   ON students   FOR ALL USING (true) WITH CHECK (true);
@@ -192,7 +205,7 @@ BEGIN
   WHERE cid = v_cid AND type = 'in';
 
   IF v_total = 0 THEN
-    v_new_rate := 0;
+    v_new_rate := 0;  -- 수업일이 없으면 출석률 0%
   ELSE
     SELECT COUNT(*) INTO v_present
     FROM attendance

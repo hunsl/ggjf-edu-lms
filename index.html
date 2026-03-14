@@ -100,23 +100,40 @@ const sbDelete = async (table, filter) => {
 /* ═══════════════════════════════════════════════════════════
    🔄 실시간 동기화 통합 시스템
 ═══════════════════════════════════════════════════════════ */
-
-// 1️⃣ 데이터 변환 함수들 (DB snake_case ↔ App camelCase)
 const toStudent = r => r ? {
-  id: r.id, courseId: r.course_id, name: r.name, gender: r.gender||"",
-  birth: r.birth||"", idBack: r.id_back||"", phone: r.phone||"",
-  addrCity: r.addr_city||"", itvDate: r.itv_date||"",
-  itvScore: r.itv_score||null, itvGrade: r.itv_grade||"",
-  itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
+  id: r.id, 
+  cid: r.course_id, // ⭐ 중요: courseId 대신 cid로 매핑
+  name: r.name, 
+  gender: r.gender||"",
+  birth: r.birth||"", 
+  idBack: r.id_back||"", 
+  phone: r.phone||"",
+  addrCity: r.addr_city||"", 
+  itvDate: r.itv_date||"",
+  itvScore: r.itv_score||null, 
+  itvGrade: r.itv_grade||"",
+  itvPass: r.itv_pass||false, 
+  memo: r.memo||"", 
+  rate: r.rate||0,
 } : null;
 
 const fromStudent = s => ({
-  course_id: s.courseId, name: s.name, gender: s.gender||"",
-  birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
-  addr_city: s.addrCity||"", itv_date: s.itvDate||null,
-  itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
-  itv_pass: s.itvPass||false, memo: s.memo||"", rate: s.rate||0,
+  course_id: s.cid, // ⭐ 중요: cid를 DB의 course_id로 매핑
+  name: s.name, 
+  gender: s.gender||"",
+  birth: s.birth||null, 
+  id_back: s.idBack||"", 
+  phone: s.phone||"",
+  addr_city: s.addrCity||"", 
+  itv_date: s.itvDate||null,
+  itv_score: s.itvScore||null, 
+  itv_grade: s.itvGrade||"",
+  itv_pass: s.itvPass||false, 
+  memo: s.memo||"", 
+  rate: s.rate||0,
 });
+    
+// 1️⃣ 데이터 변환 함수들 (DB snake_case ↔ App camelCase)
 
 const toCourse = r => r ? {
   id: r.id, cat: r.category||"", code: r.code||"", name: r.name||"",
@@ -270,284 +287,7 @@ const useRealtimeSync = (table, onDataChange) => {
   }, [table, onDataChange]);
 };
 
-// 4️⃣ 통합 App 수정 (기존 App 함수를 이렇게 변경)
-function AppV2() {
-  // 🔐 인증
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const u = sessionStorage.getItem("gjf_user");
-      return u ? JSON.parse(u) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  // 📊 메인 데이터 (모두 DB 기반)
-  const [students, setStudents] = useState([]);
-  const [courses, setCourses] = useState([]);
-  const [attendance, setAttendance] = useState([]);
-  const [instructors, setInstructors] = useState([]);
-  const [rooms, setRooms] = useState([]);
-  const [bookings, setBookings] = useState([]);
-
-  // 🔄 동기화 상태
-  const [syncState, setSyncState] = useState({
-    students: 'idle',
-    courses: 'idle',
-    attendance: 'idle',
-    isOnline: true,
-  });
-
-  const [page, setPage] = useState("dash");
-  const [collapsed, setCollapsed] = useState(false);
-  const [showAccMgr, setShowAccMgr] = useState(false);
-  const [showDataMgr, setShowDataMgr] = useState(false);
-  const [piDismissed, setPiDismissed] = useState(false);
-
-  // 🌐 로그인 여부 확인
-  if (!currentUser) {
-    return (
-      <>
-        <GStyle />
-        <LoginScreenDB
-          onLogin={(user) => {
-            sessionStorage.setItem("gjf_user", JSON.stringify(user));
-            setCurrentUser(user);
-            setPiDismissed(false);
-          }}
-        />
-      </>
-    );
-  }
-
-  // 📥 초기 데이터 로드 (앱 시작 시 한 번)
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const loadAllData = async () => {
-      try {
-        const [studentsRes, coursesRes, attendanceRes, instructorsRes, roomsRes, bookingsRes] = await Promise.all([
-          dbAPI.getStudents(),
-          dbAPI.getCourses(),
-          dbAPI.getAttendance(),
-          dbAPI.getInstructors(),
-          dbAPI.getRooms(),
-          dbAPI.getBookings(),
-        ]);
-
-        if (!studentsRes.error) setStudents(studentsRes.data);
-        if (!coursesRes.error) setCourses(coursesRes.data);
-        if (!attendanceRes.error) setAttendance(attendanceRes.data);
-        if (!instructorsRes.error) setInstructors(instructorsRes.data);
-        if (!roomsRes.error) setRooms(roomsRes.data);
-        if (!bookingsRes.error) setBookings(bookingsRes.data);
-
-        console.log('✅ 모든 데이터 로드 완료');
-      } catch (e) {
-        console.error('❌ 데이터 로드 실패:', e);
-      }
-    };
-
-    loadAllData();
-  }, [currentUser]);
-
-  // 🔄 실시간 구독 (students)
-  useRealtimeSync('students', (payload) => {
-    if (payload.eventType === 'INSERT') {
-      const newStudent = toStudent(payload.new);
-      setStudents(prev => [...prev, newStudent]);
-    } else if (payload.eventType === 'UPDATE') {
-      setStudents(prev => prev.map(s => s.id === payload.new.id ? toStudent(payload.new) : s));
-    } else if (payload.eventType === 'DELETE') {
-      setStudents(prev => prev.filter(s => s.id !== payload.old.id));
-    }
-  });
-
-  // 🔄 실시간 구독 (attendance) ⭐
-  useRealtimeSync('attendance', (payload) => {
-    if (payload.eventType === 'INSERT') {
-      const newAtt = toAttendance(payload.new);
-      setAttendance(prev => [...prev, newAtt]);
-      // 학생의 rate 업데이트 (자동 계산)
-      updateStudentRate(newAtt.studentId, newAtt.courseId);
-    } else if (payload.eventType === 'UPDATE') {
-      setAttendance(prev => prev.map(a => a.id === payload.new.id ? toAttendance(payload.new) : a));
-      updateStudentRate(payload.new.student_id, payload.new.course_id);
-    }
-  });
-
-  // 출석률 자동 계산
-  const updateStudentRate = async (studentId, courseId) => {
-    const attRecords = attendance.filter(a => a.studentId === studentId && a.courseId === courseId);
-    const presentCnt = attRecords.filter(a => a.status === 'O' || a.status === 'L').length;
-    const rate = attRecords.length ? Math.round((presentCnt / attRecords.length) * 100) : 0;
-
-    const student = students.find(s => s.id === studentId);
-    if (student) {
-      const updated = { ...student, rate };
-      await dbAPI.updateStudent(studentId, updated);
-      setStudents(prev => prev.map(s => s.id === studentId ? updated : s));
-    }
-  };
-
-  // 🚀 CRUD 함수들 (DB 기반)
-  const addStudent = async (student) => {
-    setSyncState(p => ({ ...p, students: 'loading' }));
-    const { data, error } = await dbAPI.addStudent(student);
-    if (error) {
-      alert('❌ 훈련생 추가 실패: ' + error.message);
-      setSyncState(p => ({ ...p, students: 'error' }));
-    } else {
-      setStudents(prev => [...prev, data]);
-      setSyncState(p => ({ ...p, students: 'synced' }));
-    }
-  };
-
-  const updateStudent = async (student) => {
-    setSyncState(p => ({ ...p, students: 'loading' }));
-    const { data, error } = await dbAPI.updateStudent(student.id, student);
-    if (error) {
-      alert('❌ 훈련생 수정 실패: ' + error.message);
-      setSyncState(p => ({ ...p, students: 'error' }));
-    } else {
-      setStudents(prev => prev.map(s => s.id === student.id ? data : s));
-      setSyncState(p => ({ ...p, students: 'synced' }));
-    }
-  };
-
-  const deleteStudent = async (id) => {
-    if (!window.confirm('이 훈련생을 삭제하시겠습니까?')) return;
-    setSyncState(p => ({ ...p, students: 'loading' }));
-    const { error } = await dbAPI.deleteStudent(id);
-    if (error) {
-      alert('❌ 훈련생 삭제 실패: ' + error.message);
-      setSyncState(p => ({ ...p, students: 'error' }));
-    } else {
-      setStudents(prev => prev.filter(s => s.id !== id));
-      setSyncState(p => ({ ...p, students: 'synced' }));
-    }
-  };
-
-  // 과정
-  const addCourse = async (course) => {
-    const { data, error } = await dbAPI.addCourse(course);
-    if (error) {
-      alert('❌ 과정 추가 실패: ' + error.message);
-    } else {
-      setCourses(prev => [...prev, data]);
-    }
-  };
-
-  const updateCourse = async (course) => {
-    const { data, error } = await dbAPI.updateCourse(course.id, course);
-    if (error) {
-      alert('❌ 과정 수정 실패: ' + error.message);
-    } else {
-      setCourses(prev => prev.map(c => c.id === course.id ? data : c));
-    }
-  };
-
-  const deleteCourse = async (id) => {
-    if (!window.confirm('이 과정을 삭제하시겠습니까?')) return;
-    const { error } = await dbAPI.deleteCourse(id);
-    if (error) {
-      alert('❌ 과정 삭제 실패: ' + error.message);
-    } else {
-      setCourses(prev => prev.filter(c => c.id !== id));
-    }
-  };
-
-  // 출석 기록 (QR 코드 스캔 시 호출) ⭐
-  const recordQRAttendance = async ({ studentId, courseId, type }) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const now = new Date().toTimeString().slice(0, 8);
-
-    const attendance_data = {
-      studentId,
-      courseId,
-      attendDate: today,
-      inTime: type === 'in' ? now : null,
-      outTime: type === 'out' ? now : null,
-      status: type === 'in' ? 'O' : 'O',
-      viaQr: true,
-    };
-
-    setSyncState(p => ({ ...p, attendance: 'loading' }));
-    const { data, error } = await dbAPI.recordAttendance(attendance_data);
-
-    if (error) {
-      console.error('❌ 출석 기록 실패:', error);
-      setSyncState(p => ({ ...p, attendance: 'error' }));
-      return false;
-    }
-
-    console.log('✅ 출석 기록됨 (DB):', data);
-    setSyncState(p => ({ ...p, attendance: 'synced' }));
-    return true;
-  };
-
-  // 네트워크 감시
-  useEffect(() => {
-    const handleOnline = () => setSyncState(p => ({ ...p, isOnline: true }));
-    const handleOffline = () => setSyncState(p => ({ ...p, isOnline: false }));
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  // UI 렌더링
-  const renderPage = () => {
-    switch (page) {
-      case "dash":
-        return <Dashboard students={students} courses={courses} />;
-      case "courses":
-        return <CourseList courses={courses} onAdd={addCourse} onUpdate={updateCourse} onDelete={deleteCourse} />;
-      case "students":
-        return <StudentMgmt
-          students={students}
-          courses={courses}
-          onAdd={(s) => s.forEach(addStudent)}
-          onEdit={updateStudent}
-          onDelete={deleteStudent}
-          onNew={() => { /* 모달 열기 */ }}
-        />;
-      case "attendance":
-        return <AttendanceMgmtV2
-          students={students}
-          courses={courses}
-          attendance={attendance}
-          onRecordQR={recordQRAttendance}
-        />;
-      default:
-        return null;
-    }
-  };
-
-  // 나머지 기존 UI 코드...
-  return (
-    <>
-      <GStyle />
-      {/* 기존 레이아웃 코드 동일... */}
-      {!syncState.isOnline && (
-        <div style={{
-          position: 'fixed', top: 60, left: 0, right: 0,
-          background: '#FEF2F2', padding: '8px 16px', zIndex: 100,
-          display: 'flex', alignItems: 'center', gap: 10,
-          color: T.danger, fontSize: 12, fontWeight: 700,
-        }}>
-          📡 오프라인 상태입니다. 데이터가 최신이 아닐 수 있습니다.
-        </div>
-      )}
-      {renderPage()}
-    </>
-  );
-}
-
+    
 /* ═══════════════════════════════════════════════════════════
    GLOBAL STYLES
 ═══════════════════════════════════════════════════════════ */
@@ -4154,407 +3894,168 @@ const NAV_ITEMS = [
    APP ROOT
 ═══════════════════════════════════════════════════════════ */
 function App() {
-  // ══ 모든 훅은 조건문 전에 선언 (Rules of Hooks) ══
-  const [accounts,    setAccounts]   = useState(INIT_ACCOUNTS);
-  // ── 로그인 유지: 새로고침해도 세션 유지 ──
   const [currentUser, setCurrentUser] = useState(() => {
     try { const u = sessionStorage.getItem("gjf_user"); return u ? JSON.parse(u) : null; }
     catch { return null; }
   });
-  const [showAccMgr,  setShowAccMgr] = useState(false);
+
+  const [students, setStudents] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [instructors, setInstructors] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  
+  const [page, setPage] = useState("dash");
+  const [collapsed, setCollapsed] = useState(false);
+  const [dbReady, setDbReady] = useState(false);
   const [piDismissed, setPiDismissed] = useState(false);
-
-  const [page,       setPage]       = useState("dash");
-  const [collapsed,  setCollapsed]  = useState(false);
-  const [students,   setStudents]   = useState(() => {
-    try { const v = sessionStorage.getItem("gjf_students"); return v ? JSON.parse(v) : SEED_STUDENTS; }
-    catch { return SEED_STUDENTS; }
-  });
-  const [courses,    setCourses]    = useState(() => {
-    try { const v = sessionStorage.getItem("gjf_courses"); return v ? JSON.parse(v) : COURSES; }
-    catch { return COURSES; }
-  });
-  // ── 강사·강의실·예약: sessionStorage로 탭 이동/새로고침 유지 ──
-  const [instructors, setInstructors] = useState(() => {
-    try { const v = sessionStorage.getItem("gjf_instructors"); return v ? JSON.parse(v) : SEED_INSTRUCTORS; }
-    catch { return SEED_INSTRUCTORS; }
-  });
-  const [rooms, setRooms] = useState(() => {
-    try { const v = sessionStorage.getItem("gjf_rooms"); return v ? JSON.parse(v) : SEED_ROOMS; }
-    catch { return SEED_ROOMS; }
-  });
-  const [bookings, setBookings] = useState(() => {
-    try { const v = sessionStorage.getItem("gjf_bookings"); return v ? JSON.parse(v) : SEED_BOOKINGS; }
-    catch { return SEED_BOOKINGS; }
-  });
+  const [showAccMgr, setShowAccMgr] = useState(false);
+  const [showDataMgr, setShowDataMgr] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [showNew,    setShowNew]    = useState(false);
-  const [showDataMgr,setShowDataMgr]= useState(false);
-  const [loading,    setLoading]    = useState(false);
-  const [dbError,    setDbError]    = useState("");
-  const [dbReady,    setDbReady]    = useState(false); // DB 연결 성공 여부
+  const [showNew, setShowNew] = useState(false);
 
-  // ── 변경 시 sessionStorage 자동 저장 ──
-  useEffect(() => { try { sessionStorage.setItem("gjf_instructors", JSON.stringify(instructors)); } catch{} }, [instructors]);
-  useEffect(() => { try { sessionStorage.setItem("gjf_rooms",       JSON.stringify(rooms));       } catch{} }, [rooms]);
-  useEffect(() => { try { sessionStorage.setItem("gjf_bookings",    JSON.stringify(bookings));    } catch{} }, [bookings]);
-  useEffect(() => { try { sessionStorage.setItem("gjf_students",    JSON.stringify(students));    } catch{} }, [students]);
-  useEffect(() => { try { sessionStorage.setItem("gjf_courses",     JSON.stringify(courses));     } catch{} }, [courses]);
-
-  // ── Supabase 백그라운드 데이터 로드 (UI를 막지 않음) ──
+  // 초기 데이터 로드
   useEffect(() => {
     if (!currentUser) return;
-    setDbError("");
-    const load = async () => {
-      try {
-        const [cRes, sRes] = await Promise.all([
-          sbGet("courses", "select=*&order=id"),
-          sbGet("students", "select=*&order=id"),
-        ]);
-        // 과정: DB에 데이터가 있을 때만 교체
-        if (!cRes.error && cRes.data && cRes.data.length > 0) {
-          setCourses(cRes.data.map(toCourse));
-          console.log("✅ 과정 DB 로드:", cRes.data.length, "개");
-        } else {
-          console.log("과정 DB 없음/오류 → 로컬 시드 유지");
-        }
-        // 훈련생: DB에 데이터가 있을 때만 교체 (빈배열이면 시드 유지!)
-        if (!sRes.error && sRes.data && sRes.data.length > 0) {
-          setStudents(sRes.data.map(toStudent));
-          console.log("✅ 훈련생 DB 로드:", sRes.data.length, "명");
-        } else {
-          console.log("훈련생 DB 없음/오류 → 로컬 시드 유지");
-        }
-        setDbReady(true);
-      } catch (e) {
-        console.warn("DB 로드 실패 — 로컬 시드로 동작:", e.message);
-        setDbError("로컬 모드");
-        setDbReady(false);
-      }
+    const initLoad = async () => {
+      const [cRes, sRes, iRes, rRes, bRes] = await Promise.all([
+        sbGet("courses", "select=*&order=id"),
+        sbGet("students", "select=*&order=id"),
+        dbAPI.getInstructors(),
+        dbAPI.getRooms(),
+        dbAPI.getBookings()
+      ]);
+      if (!cRes.error) setCourses(cRes.data.map(toCourse));
+      if (!sRes.error) setStudents(sRes.data.map(toStudent));
+      if (!iRes.error) setInstructors(iRes.data);
+      if (!rRes.error) setRooms(rRes.data);
+      if (!bRes.error) setBookings(bRes.data);
+      setDbReady(true);
     };
-    load();
+    initLoad();
   }, [currentUser]);
 
-  // ── 폴링: 30초마다 훈련생 변경 감지 (DB 연결된 경우만) ──
+  // 실시간 동기화 (10초마다 확인)
   useEffect(() => {
     if (!currentUser || !dbReady) return;
     const poll = setInterval(async () => {
       const { data, error } = await sbGet("students", "select=*&order=id");
-      if (!error && data) setStudents(data.map(toStudent));
-    }, 30000);
+      if (!error && data) {
+        const fresh = data.map(toStudent);
+        setStudents(prev => {
+          const temps = prev.filter(s => s.id < 0); // 아직 저장중인 임시데이터 유지
+          const dbOnes = fresh.filter(f => !temps.find(t => t.name === f.name));
+          return [...temps, ...dbOnes];
+        });
+      }
+    }, 10000);
     return () => clearInterval(poll);
   }, [currentUser, dbReady]);
 
- // ── 훈련생 CRUD ──
-  const addStudents = useCallback(async (newOnes) => {
-    // ① 로컬 즉시 반영 (임시 음수 ID로 충돌 방지)
-    const withTempId = newOnes.map((s, i) => ({ ...s, id: -(Date.now() + i) }));
-    setStudents(prev => [...prev, ...withTempId]);
+  // 훈련생 추가 (안정적인 버전)
+  const addStudents = async (newOnes) => {
+    const temps = newOnes.map((s, i) => ({ ...s, id: -(Date.now() + i) }));
+    setStudents(prev => [...prev, ...temps]); // 로컬에 즉시 표시
     
-    // ② DB 저장 시도
     try {
       const { data, error } = await sbInsert("students", newOnes.map(fromStudent));
-      
-      // 🚨 여기가 핵심! DB에서 에러가 나면 팝업창을 띄우고 가짜 데이터를 지웁니다.
       if (error) {
-        alert("❌ DB 저장 실패!\n원인: " + JSON.stringify(error));
-        setStudents(prev => prev.filter(s => !withTempId.find(t => t.id === s.id)));
-        return;
-      }
-
-      // DB에서 받은 실제 ID로 임시 ID 교체
-      if (data) {
-        const dbRows = (Array.isArray(data) ? data : [data]).map(toStudent);
+        alert("저장 실패: " + error.message);
+        setStudents(prev => prev.filter(s => !temps.find(t => t.id === s.id)));
+      } else {
+        const realData = (Array.isArray(data) ? data : [data]).map(toStudent);
         setStudents(prev => {
-          const tempIds = new Set(withTempId.map(s => s.id));
-          return [...prev.filter(s => !tempIds.has(s.id)), ...dbRows];
+          const filtered = prev.filter(s => !temps.find(t => t.id === s.id));
+          return [...filtered, ...realData];
         });
-        console.log("✅ 훈련생 DB 저장 완료:", dbRows.length, "명");
       }
-    } catch(e) {
-      // 네트워크 에러 시 팝업
-      alert("❌ 네트워크 또는 DB 오류: " + e.message);
-      setStudents(prev => prev.filter(s => !withTempId.find(t => t.id === s.id)));
+    } catch (e) {
+      setStudents(prev => prev.filter(s => !temps.find(t => t.id === s.id)));
     }
-  }, []);
-    const updateStudent = useCallback(async (updated) => {
-    setStudents(prev => prev.map(s => s.id===updated.id ? updated : s)); // 즉시 반영
-    try {
-      const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
-      if (error) console.warn("DB 수정 실패 (로컬 유지):", error.message);
-    } catch(e) { console.warn("DB 수정 오류:", e.message); }
-  }, []);
-  const deleteStudent = useCallback(async (id) => {
-    if (!window.confirm("이 훈련생을 삭제하시겠습니까?")) return;
-    setStudents(prev => prev.filter(s => s.id!==id)); // 즉시 반영
-    if (dbReady) {
-      const { error } = await sbDelete("students", `id=eq.${id}`);
-      if (error) console.warn("DB 삭제 실패:", error);
-    }
-  }, [dbReady]);
-  
-  // ── 과정 CRUD ──
-  const addCourse = useCallback(async (c) => {
-    const tempId = -(Date.now());
-    setCourses(prev => [...prev, { ...c, id: tempId }]);  // 로컬 즉시 반영
-    try {
-      const { data, error } = await sbInsert("courses", fromCourse(c));
-      if (error) { console.warn("과정 DB 저장 실패 (로컬 유지):", error.message); return; }
-      if (data) {
-        const dbC = toCourse(Array.isArray(data) ? data[0] : data);
-        setCourses(prev => prev.map(x => x.id === tempId ? dbC : x));
-        console.log("✅ 과정 DB 저장:", c.name);
-      }
-    } catch(e) { console.warn("과정 DB 저장 오류:", e.message); }
-  }, []);
+  };
 
-  const updateCourse = useCallback(async (c) => {
-    setCourses(prev => prev.map(x => x.id===c.id ? c : x));
-    if (dbReady) {
-      const { error } = await sbUpdate("courses", `id=eq.${c.id}`, fromCourse(c));
-      if (error) console.warn("과정 DB 수정 실패:", error);
-    }
-  }, []);
+  const updateStudent = async (updated) => {
+    setStudents(prev => prev.map(s => s.id === updated.id ? updated : s));
+    await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
+  };
 
-  const deleteCourse = useCallback(async (id) => {
-    setCourses(prev => prev.filter(c => c.id!==id));
-    if (dbReady) {
-      const { error } = await sbDelete("courses", `id=eq.${id}`);
-      if (error) console.warn("과정 DB 삭제 실패:", error);
-    }
-  }, []);
+  const deleteStudent = async (id) => {
+    if (!window.confirm("정말 삭제하시겠습니까?")) return;
+    setStudents(prev => prev.filter(s => s.id !== id));
+    await sbDelete("students", `id=eq.${id}`);
+  };
 
-  // ── 로그인 전이면 LoginScreen 표시 ──
-if (!currentUser) {
-  return (
-    <>
-      <GStyle/>
-      <LoginScreenDB onLogin={user => {
-        setCurrentUser(user);
-        setPiDismissed(false);
-      }}/>
-    </>
-  );
-}
+  const addCourse = async (c) => {
+    const { data } = await sbInsert("courses", fromCourse(c));
+    if (data) setCourses(prev => [...prev, toCourse(Array.isArray(data)?data[0]:data)]);
+  };
 
-  // ── DB 로딩 중에도 UI 표시 (백그라운드 로드) ──
+  if (!currentUser) return <LoginScreenDB onLogin={u => { sessionStorage.setItem("gjf_user", JSON.stringify(u)); setCurrentUser(u); }} />;
 
   const renderPage = () => {
     switch(page) {
-      case "dash":        return <Dashboard students={students} courses={courses}/>;
-      case "courses":     return <CourseList courses={courses} onAdd={addCourse} onUpdate={updateCourse} onDelete={deleteCourse}/>;
-      case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
+      case "dash": return <Dashboard students={students} courses={courses}/>;
+      case "courses": return <CourseList courses={courses} onAdd={addCourse} onUpdate={(c)=>sbUpdate("courses", `id=eq.${c.id}`, fromCourse(c))} onDelete={(id)=>sbDelete("courses", `id=eq.${id}`)}/>;
+      case "students": return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
       case "instructors": return <InstructorMgmt courses={courses} instructors={instructors} setInstructors={setInstructors}/>;
-      case "rooms":       return <RoomMgmt courses={courses} rooms={rooms} setRooms={setRooms} bookings={bookings} setBookings={setBookings}/>;
-      case "attendance":  return <AttendanceMgmtV2 students={students} courses={courses} attendance={[]} onRecordQR={async () => { 
-      alert("현재 로컬 모드입니다. DB가 연결되어야 출석이 기록됩니다."); 
-      return false; 
-    }} 
-  />;
-      case "completion":  return <CompletionMgmt students={students} courses={courses}/>;
-      case "cert":        return <CertMgmt students={students} courses={courses}/>;
-      default:            return null;
+      case "rooms": return <RoomMgmt courses={courses} rooms={rooms} setRooms={setRooms} bookings={bookings} setBookings={setBookings}/>;
+      case "attendance": return <AttendanceMgmtV2 students={students} courses={courses} onRecordQR={async (req) => {
+        // 실제 출석 기록 로직
+        const today = new Date().toISOString().slice(0,10);
+        const { data } = await dbAPI.recordAttendance({...req, attendDate: today});
+        return !!data;
+      }}/>;
+      case "completion": return <CompletionMgmt students={students} courses={courses}/>;
+      case "cert": return <CertMgmt students={students} courses={courses}/>;
+      default: return null;
     }
   };
 
   return (
-    <>
-      <GStyle/>
-      {/* ── 모달들 ── */}
-      {showNew && (
-        <EditModal student={null} isNew={true} courses={courses}
-          onSave={s => setStudents(prev=>[...prev, s])} onClose={()=>setShowNew(false)}/>
+    <div style={{ display:"flex", height:"100vh", flexDirection:"column" }}>
+      {/* 1. 개인정보 배너 */}
+      {!piDismissed && (
+        <div style={{ background:"#7C2D12", padding:"7px 22px", color:"#fff", fontSize:"11px", display:"flex", justifyContent:"space-between" }}>
+          <span>🔒 개인정보 주의: 업무 목적 외 유출 엄금</span>
+          <button onClick={()=>setPiDismissed(true)} style={{ background:"none", border:"1px solid #fff", color:"#fff", cursor:"pointer" }}>확인</button>
+        </div>
       )}
-      {editTarget && (
-        <EditModal student={editTarget} courses={courses}
-          onSave={updateStudent} onClose={()=>setEditTarget(null)}/>
-      )}
-      {showDataMgr && (
-        <DataManager
-          students={students} courses={courses}
-          onResetAll={resetData}
-          onResetCourse={resetCoursStudents}
-          onClose={()=>setShowDataMgr(false)}
-        />
-      )}
-{/* ✅ 이렇게 변경 */}
-      {showAccMgr && currentUser.role==="admin" && (
-  <AccountMgmtDB
-    currentUser={currentUser}
-    onClose={()=>setShowAccMgr(false)}
-  />
-)}
 
-      <div style={{ display:"flex", height:"100vh",
-        background:"linear-gradient(160deg,#FED7AA 0%,#FDBA74 12%,#FFF7ED 45%,#F1F5F9 75%,#FFEDD5 100%)",
-        fontFamily:"'Pretendard',-apple-system,sans-serif", overflow:"hidden",
-        flexDirection:"column" }}>
-
-        {/* ── 개인정보 상단 배너 ── */}
-        {!piDismissed && (
-          <div style={{ background:"linear-gradient(90deg,#7C2D12,#B91C1C)",
-            padding:"7px 22px", display:"flex", alignItems:"center", gap:10,
-            fontSize:11, color:"#fff", flexShrink:0 }}>
-            <span style={{ fontSize:13 }}>🔒</span>
-            <span>
-              <b>개인정보 주의:</b> 이 시스템은 훈련생 개인정보를 포함합니다.
-              업무 목적 외 사용·유출·캡처를 엄금합니다. 위반 시 「개인정보보호법」에 따라 처벌받을 수 있습니다.
-            </span>
-            <button onClick={()=>setPiDismissed(true)}
-              style={{ marginLeft:"auto", background:"rgba(255,255,255,.15)", border:"none",
-                color:"#fff", borderRadius:5, padding:"2px 10px", cursor:"pointer", fontSize:11, flexShrink:0 }}>
-              확인
-            </button>
-          </div>
-        )}
-
-        <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-          {/* SIDEBAR */}
-          <div style={{ width:collapsed?64:240, flexShrink:0, transition:"width .25s ease",
-            background:`linear-gradient(180deg,${T.sb} 0%,${T.p} 55%,#F97316 100%)`,
-            display:"flex", flexDirection:"column", overflow:"hidden",
-            boxShadow:"4px 0 24px rgba(15,118,110,.25)" }}>
-
-            {/* Logo */}
-            <div style={{ padding:collapsed?"16px 0":"16px 18px",
-              borderBottom:"1px solid rgba(255,255,255,.1)",
-              display:"flex", alignItems:"center",
-              justifyContent:collapsed?"center":"space-between" }}>
-              {!collapsed && (
-                <div>
-                  <div style={{ fontSize:13, fontWeight:900, color:"#fff", letterSpacing:"-.3px" }}>경기북부 직업교육</div>
-                  <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:3 }}>
-                    <span style={{ background:"rgba(253,186,116,.3)", color:"#FED7AA",
-                      padding:"1px 6px", borderRadius:4, fontSize:9, fontWeight:700 }}>2026</span>
-                    <span style={{ fontSize:10, color:"rgba(255,255,255,.45)" }}>학사관리시스템</span>
-                  </div>
-                </div>
-              )}
-              <button onClick={()=>setCollapsed(!collapsed)} style={{ width:28, height:28, borderRadius:6,
-                background:"rgba(255,255,255,.1)", border:"none", color:"rgba(255,255,255,.6)",
-                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <Icon n="bars" s={14}/>
+      <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
+        {/* 2. 사이드바 */}
+        <div style={{ width: collapsed?64:240, background:T.sb, color:"#fff", transition:"0.2s" }}>
+          <div style={{ padding:20, fontWeight:900 }}>{collapsed?"🎓":"경기북부 학사관리"}</div>
+          <nav>
+            {NAV_ITEMS.map(item => (
+              <button key={item.id} onClick={()=>setPage(item.id)} style={{ width:"100%", padding:12, background:page===item.id?"rgba(255,255,255,0.1)":"none", border:"none", color:"#fff", textAlign:"left", cursor:"pointer" }}>
+                <Icon n={item.icon} s={16}/> {!collapsed && item.label}
               </button>
-            </div>
-
-            {/* Nav */}
-            <nav style={{ flex:1, padding:"10px 0", overflowY:"auto" }}>
-              {NAV_ITEMS.map(item => {
-                const active = page===item.id;
-                return (
-                  <button key={item.id} className="btn-nav" onClick={()=>setPage(item.id)} style={{
-                    width:"100%", display:"flex", alignItems:"center",
-                    gap:10, padding:collapsed?"13px 0":"11px 18px",
-                    justifyContent:collapsed?"center":"flex-start",
-                    background:active?"rgba(255,255,255,.13)":"transparent",
-                    border:"none", cursor:"pointer",
-                    borderLeft:active?"3px solid #FED7AA":"3px solid transparent",
-                    color:active?"#fff":"rgba(255,255,255,.45)",
-                    fontWeight:active?700:400, fontSize:13 }}>
-                    <Icon n={item.icon} s={16}/>
-                    {!collapsed && <span style={{ whiteSpace:"nowrap" }}>{item.label}</span>}
-                    {active && !collapsed && (
-                      <div style={{ marginLeft:"auto", width:5, height:5,
-                        borderRadius:"50%", background:"#FED7AA" }}/>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-
-            {/* 사용자 + 로그아웃 */}
-            {!collapsed && (
-              <div style={{ padding:"13px 18px", borderTop:"1px solid rgba(255,255,255,.1)" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                  <div style={{ width:32, height:32, borderRadius:10, flexShrink:0,
-                    background:"rgba(255,255,255,.15)",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    color:"rgba(255,255,255,.8)" }}><Icon n="user" s={15}/></div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:"#fff" }}>{currentUser.name}</div>
-                    <div style={{ fontSize:9, color:"rgba(255,255,255,.4)" }}>
-                      {currentUser.role==="admin" ? "관리자" : "담당자"} · 경기도일자리재단
-                    </div>
-                  </div>
-                </div>
-                {currentUser.role === "admin" && (
-                  <button onClick={()=>setShowAccMgr(true)}
-                    style={{ width:"100%", padding:"6px 0", borderRadius:7,
-                      border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)",
-                      color:"rgba(255,255,255,.7)", cursor:"pointer", fontSize:11, fontWeight:600,
-                      marginBottom:6 }}>
-                    👤 계정 관리
-                  </button>
-                )}
-                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) { sessionStorage.removeItem("gjf_user"); setCurrentUser(null); } }}
-                  style={{ width:"100%", padding:"6px 0", borderRadius:7,
-                    border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)",
-                    color:"rgba(255,255,255,.7)", cursor:"pointer", fontSize:11, fontWeight:600 }}>
-                  🚪 로그아웃
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* MAIN */}
-          <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-            {/* Header */}
-            <div style={{ height:52, background:"rgba(255,255,255,.9)", backdropFilter:"blur(12px)",
-              borderBottom:`1px solid ${T.bd}`,
-              display:"flex", alignItems:"center", justifyContent:"space-between",
-              padding:"0 22px", flexShrink:0 }}>
-              <div style={{ fontSize:12, color:T.mu }}>
-                <span style={{ color:T.p, fontWeight:700 }}>경기도일자리재단 북부사업본부</span>
-                <span style={{ margin:"0 6px", color:T.bd }}>·</span>
-                직업교육 학사관리시스템 v2026
-                <span style={{ marginLeft:8, fontSize:9, fontWeight:700, padding:"2px 7px",
-                  borderRadius:4, background: dbReady ? "#D1FAE5" : "#FEF3C7",
-                  color: dbReady ? "#065F46" : "#92400E" }}>
-                  {dbReady ? "🟢 DB연결" : "🟡 로컬모드"}
-                </span>
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                {/* 개인정보 상시 아이콘 */}
-                <div title="개인정보 포함 시스템 — 외부 유출 금지"
-                  style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 8px",
-                    borderRadius:6, background:"#FEF2F2", border:"1px solid #FECACA",
-                    fontSize:10, color:T.danger, fontWeight:700, cursor:"default" }}>
-                  🔒 개인정보 주의
-                </div>
-                <button onClick={()=>setShowDataMgr(true)} style={{
-                  display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-                  background:T.s3, border:`1px solid ${T.bd}`, borderRadius:8,
-                  cursor:"pointer", fontSize:11, fontWeight:700, color:T.mu,
-                  transition:"all .15s" }}>
-                  <Icon n="dl" s={13}/> 데이터 관리
-                </button>
-                <div style={{ display:"flex", alignItems:"center", gap:7, padding:"5px 10px",
-                  background:T.pbg, borderRadius:8 }}>
-                  <div style={{ width:24, height:24, borderRadius:6, background:T.p,
-                    display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <Icon n="user" s={12}/>
-                  </div>
-                  <span style={{ fontSize:11, fontWeight:700, color:T.p }}>{currentUser.name}</span>
-                  {currentUser.role==="admin" && (
-                    <span style={{ fontSize:9, background:T.p, color:"#fff",
-                      padding:"1px 5px", borderRadius:3 }}>관리자</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div style={{ flex:1, overflowY:"auto", padding:22 }}>
-              {renderPage()}
-            </div>
+            ))}
+          </nav>
+          <div style={{ marginTop:"auto", padding:20 }}>
+            <button onClick={()=>{sessionStorage.clear(); window.location.reload();}} style={{ color:"#fff", background:"none", border:"1px solid #fff", padding:"4px 8px", cursor:"pointer" }}>로그아웃</button>
           </div>
         </div>
+
+        {/* 3. 메인 콘텐츠 */}
+        <div style={{ flex:1, display:"flex", flexDirection:"column" }}>
+          <header style={{ height:50, borderBottom:"1px solid #ddd", display:"flex", alignItems:"center", padding:"0 20px", justifyContent:"space-between" }}>
+            <span style={{ fontSize:12 }}>{dbReady ? "🟢 DB 연결됨" : "🟡 연결 확인중..."}</span>
+            <span style={{ fontWeight:700 }}>{currentUser.name} 님 환영합니다</span>
+          </header>
+          <main style={{ flex:1, overflowY:"auto", padding:20 }}>
+            {renderPage()}
+          </main>
+        </div>
       </div>
-    </>
+
+      {/* 모달들 */}
+      {showNew && <EditModal student={null} isNew={true} courses={courses} onSave={(s)=>addStudents([s])} onClose={()=>setShowNew(false)}/>}
+      {editTarget && <EditModal student={editTarget} courses={courses} onSave={updateStudent} onClose={()=>setEditTarget(null)}/>}
+      {showAccMgr && <AccountMgmtDB currentUser={currentUser} onClose={()=>setShowAccMgr(false)} />}
+    </div>
   );
 }
-
-// 기존 코드의 Supabase API 섹션 다음에 추가
 
 /* ═══════════════════════════════════════════════════════════
    🔐 계정 관리 API (Supabase 연동)

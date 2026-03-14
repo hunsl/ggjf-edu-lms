@@ -185,6 +185,84 @@ const Icon = ({ n, s=16 }) => {
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>{d[n]}</svg>;
 };
 
+const EditModal = ({ student, courses, isNew, onSave, onClose }) => {
+  const empty = { cid:courses[0]?.id||"", name:"", gender:"남", birth:"", idBack:"", phone:"", addrCity:"", edu:"", major:"", career:"", certs:"", rate:100, itvScore:"", itvGrade:"", itvPass:true, memo:"" };
+  const [form, setForm] = useState(student || empty);
+  const set = (k,v) => setForm(p=>({...p, [k]:v}));
+  const inp = { width:"100%", padding:"10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:13, outline:"none", color:T.tx, background:T.s2 };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.6)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:T.s, borderRadius:16, width:500, maxWidth:"96vw", maxHeight:"90vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(0,0,0,.2)" }}>
+        <div style={{ padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${T.bd}` }}>
+          <div style={{ fontSize:16, fontWeight:800, color:T.tx }}>{isNew?"훈련생 등록":"훈련생 수정"}</div>
+          <button onClick={onClose} style={{ border:"none", background:"transparent", cursor:"pointer", color:T.mu }}><Icon n="x" s={16}/></button>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:"20px", display:"flex", flexDirection:"column", gap:14 }}>
+           <div>
+             <label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>지원 과정</label>
+             <select value={form.cid || ""} onChange={e=>set("cid",+e.target.value)} style={inp}>
+               {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+             </select>
+           </div>
+           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+             {[{k:"name", l:"이름"}, {k:"phone", l:"연락처"}, {k:"birth", l:"생년월일 (YYYY-MM-DD)"}, {k:"addrCity", l:"거주지 (시/군)"}].map(({k,l}) => (
+               <div key={k}>
+                 <label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>{l}</label>
+                 <input value={form[k] || ""} onChange={e=>set(k, e.target.value)} style={inp}/>
+               </div>
+             ))}
+           </div>
+           <div><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>메모</label><input value={form.memo || ""} onChange={e=>set("memo",e.target.value)} style={inp}/></div>
+        </div>
+        <div style={{ padding:"16px 20px", borderTop:`1px solid ${T.bd}`, display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <button onClick={onClose} style={{ padding:"10px 20px", borderRadius:10, border:`1px solid ${T.bd}`, background:T.s, color:T.mu, fontWeight:800, cursor:"pointer" }}>취소</button>
+          <button onClick={()=>{ onSave({...form, id:form.id||Date.now()}); onClose(); }} style={{ padding:"10px 20px", borderRadius:10, border:"none", background:`linear-gradient(135deg, ${T.p}, #C2410C)`, color:"#fff", fontWeight:800, cursor:"pointer" }}>저장</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CourseModal = ({ course, onSave, onClose }) => {
+  const empty = { cat:"늘봄강사양성", code:"", name:"", target:20, cGoal:18, eGoal:12, dateFrom:"", dateTo:"", period:"", method:"대면", hours:0, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00", notes:"" };
+  const [form, setForm] = useState(course || empty);
+  const set = (k,v) => setForm(p=>({...p, [k]:v}));
+  const inp = { width:"100%", padding:"10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:13, outline:"none", color:T.tx, background:T.s2 };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.6)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:T.s, borderRadius:16, width:600, maxWidth:"96vw", maxHeight:"90vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(0,0,0,.2)" }}>
+        <div style={{ padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${T.bd}` }}>
+          <div style={{ fontSize:16, fontWeight:800, color:T.tx }}>{course?"과정 수정":"새 과정 등록"}</div>
+          <button onClick={onClose} style={{ border:"none", background:"transparent", cursor:"pointer", color:T.mu }}><Icon n="x" s={16}/></button>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:"20px", display:"flex", flexDirection:"column", gap:14 }}>
+           <div style={{ display:"flex", gap:10 }}>
+             <div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>카테고리</label><select value={form.cat || ""} onChange={e=>set("cat",e.target.value)} style={inp}><option>늘봄강사양성</option><option>지역연계·기여</option><option>사무분야</option><option>식품분야</option><option>IT 신직무</option></select></div>
+             <div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>과정코드</label><input value={form.code || ""} onChange={e=>set("code",e.target.value)} style={inp}/></div>
+             <div style={{flex:2}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>과정명</label><input value={form.name || ""} onChange={e=>set("name",e.target.value)} style={inp}/></div>
+           </div>
+           <div style={{ display:"flex", gap:10 }}>
+             <div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>시작일</label><input type="date" value={form.dateFrom || ""} onChange={e=>set("dateFrom",e.target.value)} style={inp}/></div>
+             <div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>종료일</label><input type="date" value={form.dateTo || ""} onChange={e=>set("dateTo",e.target.value)} style={inp}/></div>
+             <div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>모집인원</label><input type="number" value={form.target || ""} onChange={e=>set("target",+e.target.value)} style={inp}/></div>
+           </div>
+           <div style={{ display:"flex", gap:10 }}>
+             <div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>시작시간</label><input type="time" value={form.schedTimeFrom || "09:00"} onChange={e=>set("schedTimeFrom",e.target.value)} style={inp}/></div>
+             <div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>종료시간</label><input type="time" value={form.schedTimeTo || "13:00"} onChange={e=>set("schedTimeTo",e.target.value)} style={inp}/></div>
+             <div style={{flex:1}}><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>총 시간</label><input type="number" value={form.hours || ""} onChange={e=>set("hours",+e.target.value)} style={inp}/></div>
+           </div>
+        </div>
+        <div style={{ padding:"16px 20px", borderTop:`1px solid ${T.bd}`, display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <button onClick={onClose} style={{ padding:"10px 20px", borderRadius:10, border:`1px solid ${T.bd}`, background:T.s, color:T.mu, fontWeight:800, cursor:"pointer" }}>취소</button>
+          <button onClick={()=>{ onSave({...form, id:form.id||Date.now()}); onClose(); }} style={{ padding:"10px 20px", borderRadius:10, border:"none", background:`linear-gradient(135deg, ${T.p}, #C2410C)`, color:"#fff", fontWeight:800, cursor:"pointer" }}>저장</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Chip = ({ label, bg, color, size=11, border="none" }) => (
   <span style={{ background:bg, color, border, fontSize:size, fontWeight:800, padding:"4px 10px", borderRadius:"20px", whiteSpace:"nowrap", letterSpacing:"0.2px", boxShadow:"0 1px 2px rgba(0,0,0,0.02)" }}>{label}</span>
 );

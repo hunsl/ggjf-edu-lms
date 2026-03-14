@@ -9,6 +9,7 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body, #root { height: 100%; }
@@ -84,6 +85,314 @@
       { id:2, name:"세미나실 A", addr:"의정부시 청사로 1", capacity:15, equip:"TV·노트북연결" },
       { id:3, name:"컴퓨터실", addr:"양주시 남면로 20", capacity:20, equip:"PC 20대·프린터" },
     ];
+
+    // SUPABASE CONFIGURATION
+    // ⚠️  IMPORTANT: Replace the placeholder values below with your actual Supabase
+    //    project credentials BEFORE deploying. Never commit real keys to version control.
+    //    Find these values in your Supabase dashboard → Project Settings → API.
+    const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // DATA TRANSFORMATION: DB (snake_case) → App (camelCase)
+    const toStudent = (r) => ({
+      id: r.id,
+      cid: r.course_id,
+      name: r.name,
+      gender: r.gender,
+      birth: r.birth_date,
+      phone: r.phone,
+      addrCity: r.addr_city,
+      itvScore: r.itv_score,
+      itvGrade: r.itv_grade,
+      rate: r.attendance_rate ?? 0,
+    });
+
+    const toCourse = (r) => ({
+      id: r.id,
+      cat: r.category,
+      cc: r.color_code || "#EA580C",
+      name: r.name,
+      code: r.code,
+      dateFrom: r.date_from || "",
+      dateTo: r.date_to || "",
+      period: r.period || "-",
+      method: r.method || "-",
+      hours: r.hours || 0,
+      tgt: r.target_count || 0,
+      cGoal: r.completion_goal || 0,
+      eGoal: r.employment_goal || 0,
+      schedDays: r.sched_days || "",
+      schedTimeFrom: r.sched_time_from || "09:00",
+      schedTimeTo: r.sched_time_to || "13:00",
+    });
+
+    const toAttendance = (r) => ({
+      id: r.id,
+      studentId: r.student_id,
+      courseId: r.course_id,
+      date: r.attend_date,
+      inTime: r.in_time,
+      outTime: r.out_time,
+      status: r.status,
+      viaQr: r.via_qr || false,
+    });
+
+    const toInstructor = (r) => ({
+      id: r.id,
+      name: r.name,
+      type: r.instructor_type,
+      subject: r.subject,
+      phone: r.phone,
+      email: r.email,
+      career: r.career,
+      cids: r.course_ids || [],
+    });
+
+    const toRoom = (r) => ({
+      id: r.id,
+      name: r.name,
+      addr: r.address,
+      capacity: r.capacity,
+      equip: r.equipment,
+    });
+
+    // DATA TRANSFORMATION: App (camelCase) → DB (snake_case)
+    const fromStudent = (s) => ({
+      course_id: s.cid,
+      name: s.name,
+      gender: s.gender,
+      birth_date: s.birth,
+      phone: s.phone,
+      addr_city: s.addrCity,
+      itv_score: s.itvScore,
+      itv_grade: s.itvGrade,
+      attendance_rate: s.rate,
+    });
+
+    const fromCourse = (c) => ({
+      category: c.cat,
+      color_code: c.cc,
+      name: c.name,
+      code: c.code,
+      date_from: c.dateFrom,
+      date_to: c.dateTo,
+      period: c.period,
+      method: c.method,
+      hours: c.hours,
+      target_count: c.tgt,
+      completion_goal: c.cGoal,
+      employment_goal: c.eGoal,
+      sched_days: c.schedDays,
+      sched_time_from: c.schedTimeFrom,
+      sched_time_to: c.schedTimeTo,
+    });
+
+    const fromAttendance = (a) => ({
+      student_id: a.studentId,
+      course_id: a.courseId,
+      attend_date: a.date,
+      in_time: a.inTime,
+      out_time: a.outTime,
+      status: a.status,
+      via_qr: a.viaQr || false,
+    });
+
+    const fromInstructor = (i) => ({
+      name: i.name,
+      instructor_type: i.type,
+      subject: i.subject,
+      phone: i.phone,
+      email: i.email,
+      career: i.career,
+      course_ids: i.cids || [],
+    });
+
+    const fromRoom = (r) => ({
+      name: r.name,
+      address: r.addr,
+      capacity: r.capacity,
+      equipment: r.equip,
+    });
+
+    // DB API
+    const dbAPI = {
+      // 학생 관리
+      students: {
+        getAll: async (courseId = null) => {
+          try {
+            let query = supabase.from("students").select("*").order("id");
+            if (courseId) query = query.eq("course_id", courseId);
+            const { data, error } = await query;
+            if (error) throw error;
+            return data.map(toStudent);
+          } catch (err) {
+            console.error("[dbAPI] students.getAll:", err.message);
+            throw err;
+          }
+        },
+        getById: async (id) => {
+          try {
+            const { data, error } = await supabase.from("students").select("*").eq("id", id).single();
+            if (error) throw error;
+            return toStudent(data);
+          } catch (err) {
+            console.error("[dbAPI] students.getById:", err.message);
+            throw err;
+          }
+        },
+        add: async (student) => {
+          try {
+            const { data, error } = await supabase.from("students").insert(fromStudent(student)).select().single();
+            if (error) throw error;
+            return toStudent(data);
+          } catch (err) {
+            console.error("[dbAPI] students.add:", err.message);
+            throw err;
+          }
+        },
+        update: async (id, student) => {
+          try {
+            const { data, error } = await supabase.from("students").update(fromStudent(student)).eq("id", id).select().single();
+            if (error) throw error;
+            return toStudent(data);
+          } catch (err) {
+            console.error("[dbAPI] students.update:", err.message);
+            throw err;
+          }
+        },
+        delete: async (id) => {
+          try {
+            const { error } = await supabase.from("students").delete().eq("id", id);
+            if (error) throw error;
+            return true;
+          } catch (err) {
+            console.error("[dbAPI] students.delete:", err.message);
+            throw err;
+          }
+        },
+      },
+
+      // 과정 관리
+      courses: {
+        getAll: async () => {
+          try {
+            const { data, error } = await supabase.from("courses").select("*").order("id");
+            if (error) throw error;
+            return data.map(toCourse);
+          } catch (err) {
+            console.error("[dbAPI] courses.getAll:", err.message);
+            throw err;
+          }
+        },
+        add: async (course) => {
+          try {
+            const { data, error } = await supabase.from("courses").insert(fromCourse(course)).select().single();
+            if (error) throw error;
+            return toCourse(data);
+          } catch (err) {
+            console.error("[dbAPI] courses.add:", err.message);
+            throw err;
+          }
+        },
+        update: async (id, course) => {
+          try {
+            const { data, error } = await supabase.from("courses").update(fromCourse(course)).eq("id", id).select().single();
+            if (error) throw error;
+            return toCourse(data);
+          } catch (err) {
+            console.error("[dbAPI] courses.update:", err.message);
+            throw err;
+          }
+        },
+        delete: async (id) => {
+          try {
+            const { error } = await supabase.from("courses").delete().eq("id", id);
+            if (error) throw error;
+            return true;
+          } catch (err) {
+            console.error("[dbAPI] courses.delete:", err.message);
+            throw err;
+          }
+        },
+      },
+
+      // 출석 관리
+      attendance: {
+        getByDate: async (courseId, date) => {
+          try {
+            const { data, error } = await supabase
+              .from("attendance")
+              .select("*")
+              .eq("course_id", courseId)
+              .eq("attend_date", date)
+              .order("student_id");
+            if (error) throw error;
+            return data.map(toAttendance);
+          } catch (err) {
+            console.error("[dbAPI] attendance.getByDate:", err.message);
+            throw err;
+          }
+        },
+        getByStudent: async (studentId) => {
+          try {
+            const { data, error } = await supabase
+              .from("attendance")
+              .select("*")
+              .eq("student_id", studentId)
+              .order("attend_date", { ascending: false });
+            if (error) throw error;
+            return data.map(toAttendance);
+          } catch (err) {
+            console.error("[dbAPI] attendance.getByStudent:", err.message);
+            throw err;
+          }
+        },
+        record: async (attendance) => {
+          try {
+            const payload = fromAttendance(attendance);
+            const { data, error } = await supabase
+              .from("attendance")
+              .upsert(payload, { onConflict: "student_id,attend_date" })
+              .select()
+              .single();
+            if (error) throw error;
+            return toAttendance(data);
+          } catch (err) {
+            console.error("[dbAPI] attendance.record:", err.message);
+            throw err;
+          }
+        },
+      },
+
+      // 강사 관리
+      instructors: {
+        getAll: async () => {
+          try {
+            const { data, error } = await supabase.from("instructors").select("*").order("id");
+            if (error) throw error;
+            return data.map(toInstructor);
+          } catch (err) {
+            console.error("[dbAPI] instructors.getAll:", err.message);
+            throw err;
+          }
+        },
+      },
+
+      // 강의실 관리
+      rooms: {
+        getAll: async () => {
+          try {
+            const { data, error } = await supabase.from("rooms").select("*").order("id");
+            if (error) throw error;
+            return data.map(toRoom);
+          } catch (err) {
+            console.error("[dbAPI] rooms.getAll:", err.message);
+            throw err;
+          }
+        },
+      },
+    };
 
     // COMPONENTS
     const Chip = (props) => {
@@ -373,18 +682,32 @@
     };
 
     // ROOMS
-    const RoomMgmt = () => {
+    const RoomMgmt = (props) => {
+      const rooms = props.rooms || [];
       return (
         <div className="page">
           <div style={{ marginBottom: 20 }}>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: T.tx }}>강의실 관리</h2>
-            <p style={{ fontSize: 12, color: T.mu, marginTop: 3 }}>월간 캘린더 · 강의실 예약</p>
+            <p style={{ fontSize: 12, color: T.mu, marginTop: 3 }}>월간 캘린더 · 강의실 예약 ({rooms.length}개 강의실)</p>
           </div>
-          <Card style={{ padding: 40, textAlign: "center", color: T.mu }}>
-            <Icon n="cal" s={32} style={{ opacity: 0.3, marginBottom: 10 }}/>
-            <p style={{ fontSize: 14, fontWeight: 700, color: T.tx, marginBottom: 5 }}>강의실 관리 모듈</p>
-            <p style={{ fontSize: 12, color: T.mu }}>월간 캘린더와 강의실 예약 기능이 포함됩니다.</p>
-          </Card>
+          {rooms.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 12, marginBottom: 16 }}>
+              {rooms.map(r => (
+                <Card key={r.id} style={{ padding: 18 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.tx, marginBottom: 6 }}>{r.name}</div>
+                  <div style={{ fontSize: 11, color: T.mu, marginBottom: 4 }}>📍 {r.addr}</div>
+                  <div style={{ fontSize: 11, color: T.mu, marginBottom: 4 }}>👥 수용 인원: {r.capacity}명</div>
+                  <div style={{ fontSize: 11, color: T.mu }}>🖥 {r.equip}</div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card style={{ padding: 40, textAlign: "center", color: T.mu }}>
+              <Icon n="cal" s={32} style={{ opacity: 0.3, marginBottom: 10 }}/>
+              <p style={{ fontSize: 14, fontWeight: 700, color: T.tx, marginBottom: 5 }}>강의실 관리 모듈</p>
+              <p style={{ fontSize: 12, color: T.mu }}>월간 캘린더와 강의실 예약 기능이 포함됩니다.</p>
+            </Card>
+          )}
         </div>
       );
     };
@@ -707,12 +1030,50 @@
       });
       const [page, setPage] = useState("dash");
       const [collapsed, setCollapsed] = useState(false);
-      const [students] = useState(SEED_STUDENTS);
-      const [courses] = useState(COURSES);
-      const [instructors] = useState(SEED_INSTRUCTORS);
+      const [students, setStudents] = useState(SEED_STUDENTS);
+      const [courses, setCourses] = useState(COURSES);
+      const [instructors, setInstructors] = useState(SEED_INSTRUCTORS);
+      const [rooms, setRooms] = useState(SEED_ROOMS);
+      const [isLoading, setIsLoading] = useState(true);
+
+      useEffect(() => {
+        const loadData = async () => {
+          try {
+            setIsLoading(true);
+            const [dbCourses, dbStudents, dbInstructors, dbRooms] = await Promise.all([
+              dbAPI.courses.getAll(),
+              dbAPI.students.getAll(),
+              dbAPI.instructors.getAll(),
+              dbAPI.rooms.getAll(),
+            ]);
+            if (dbCourses.length) setCourses(dbCourses);
+            if (dbStudents.length) setStudents(dbStudents);
+            if (dbInstructors.length) setInstructors(dbInstructors);
+            if (dbRooms.length) setRooms(dbRooms);
+          } catch (err) {
+            console.warn("[App] DB load failed, using seed data:", err.message);
+          } finally {
+            setIsLoading(false);
+          }
+        };
+        loadData();
+      }, []);
 
       if (!currentUser) {
         return <LoginScreen onLogin={user => { sessionStorage.setItem("gjf_user", JSON.stringify(user)); setCurrentUser(user); }}/>;
+      }
+
+      if (isLoading) {
+        return (
+          <>
+            <GStyle/>
+            <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#7C2D12,#EA580C,#FFF7ED)" }}>
+              <div style={{ fontSize: 40, marginBottom: 16, animation: "pulse 1.5s ease infinite" }}>🎓</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 6 }}>데이터를 불러오는 중...</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)" }}>Supabase 연결 중</div>
+            </div>
+          </>
+        );
       }
 
       const renderPage = () => {
@@ -721,7 +1082,7 @@
           case "courses": return <CourseList courses={courses}/>;
           case "students": return <StudentMgmt students={students} courses={courses}/>;
           case "instructors": return <InstructorMgmt instructors={instructors} courses={courses}/>;
-          case "rooms": return <RoomMgmt/>;
+          case "rooms": return <RoomMgmt rooms={rooms}/>;
           case "attendance": return <AttendanceMgmt students={students} courses={courses}/>;
           case "completion": return <CompletionMgmt students={students} courses={courses}/>;
           case "cert": return <CertMgmt students={students} courses={courses}/>;

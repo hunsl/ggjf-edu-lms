@@ -85,6 +85,163 @@
       { id:3, name:"컴퓨터실", addr:"양주시 남면로 20", capacity:20, equip:"PC 20대·프린터" },
     ];
 
+    // ─── SUPABASE REST API ────────────────────────────────────────────────────
+    // ⚠️  Replace SB_URL and SB_KEY with your actual Supabase project values
+    //     before deploying. Never commit real credentials to source control.
+    const SB_URL = "https://your-project.supabase.co";
+    const SB_KEY = "your-anon-key";
+
+    const sbHeaders = () => ({
+      "Content-Type": "application/json",
+      "apikey": SB_KEY,
+      "Authorization": "Bearer " + SB_KEY,
+      "Prefer": "return=representation",
+    });
+
+    const sbGet = async (table, filters = {}) => {
+      let url = SB_URL + "/rest/v1/" + table + "?select=*";
+      Object.entries(filters).forEach(([k, v]) => {
+        url += "&" + encodeURIComponent(k) + "=eq." + encodeURIComponent(v);
+      });
+      const r = await fetch(url, { headers: sbHeaders() });
+      if (!r.ok) throw new Error("[sbGet:" + table + "] " + await r.text());
+      return r.json();
+    };
+
+    const sbInsert = async (table, data) => {
+      const r = await fetch(SB_URL + "/rest/v1/" + table, {
+        method: "POST",
+        headers: sbHeaders(),
+        body: JSON.stringify(data),
+      });
+      if (!r.ok) throw new Error("[sbInsert:" + table + "] " + await r.text());
+      return r.json();
+    };
+
+    const sbUpdate = async (table, id, data) => {
+      const r = await fetch(SB_URL + "/rest/v1/" + table + "?id=eq." + id, {
+        method: "PATCH",
+        headers: sbHeaders(),
+        body: JSON.stringify(data),
+      });
+      if (!r.ok) throw new Error("[sbUpdate:" + table + ":" + id + "] " + await r.text());
+      return r.json();
+    };
+
+    const sbDelete = async (table, id) => {
+      const r = await fetch(SB_URL + "/rest/v1/" + table + "?id=eq." + id, {
+        method: "DELETE",
+        headers: { ...sbHeaders(), Prefer: "return=minimal" },
+      });
+      if (!r.ok) throw new Error("[sbDelete:" + table + ":" + id + "] " + await r.text());
+      return true;
+    };
+
+    // ─── DATA TRANSFORMS (snake_case ↔ camelCase) ────────────────────────────
+    const toStudent = (row) => ({
+      id:        row.id,
+      cid:       row.course_id,
+      name:      row.name,
+      gender:    row.gender,
+      birth:     row.birth,
+      phone:     row.phone,
+      addrCity:  row.addr_city,
+      itvScore:  row.itv_score,
+      itvGrade:  row.itv_grade,
+      rate:      row.rate ?? 0,
+    });
+
+    const fromStudent = (s) => ({
+      course_id:  s.cid,
+      name:       s.name,
+      gender:     s.gender,
+      birth:      s.birth,
+      phone:      s.phone,
+      addr_city:  s.addrCity,
+      itv_score:  s.itvScore,
+      itv_grade:  s.itvGrade,
+      rate:       s.rate,
+    });
+
+    const toCourse = (row) => ({
+      id:            row.id,
+      cat:           row.cat,
+      cc:            row.cc,
+      name:          row.name,
+      code:          row.code,
+      dateFrom:      row.date_from,
+      dateTo:        row.date_to,
+      period:        row.period,
+      method:        row.method,
+      hours:         row.hours,
+      tgt:           row.tgt,
+      cGoal:         row.c_goal,
+      eGoal:         row.e_goal,
+      schedDays:     row.sched_days,
+      schedTimeFrom: row.sched_time_from,
+      schedTimeTo:   row.sched_time_to,
+    });
+
+    const fromCourse = (c) => ({
+      cat:            c.cat,
+      cc:             c.cc,
+      name:           c.name,
+      code:           c.code,
+      date_from:      c.dateFrom,
+      date_to:        c.dateTo,
+      period:         c.period,
+      method:         c.method,
+      hours:          c.hours,
+      tgt:            c.tgt,
+      c_goal:         c.cGoal,
+      e_goal:         c.eGoal,
+      sched_days:     c.schedDays,
+      sched_time_from: c.schedTimeFrom,
+      sched_time_to:  c.schedTimeTo,
+    });
+
+    const toAttendance = (row) => ({
+      id:           row.id,
+      courseId:     row.course_id,
+      studentId:    row.student_id,
+      checkInTime:  row.check_in_time,
+      checkOutTime: row.check_out_time,
+      status:       row.status,
+      method:       row.method,
+      date:         row.date,
+    });
+
+    const fromAttendance = (a) => ({
+      course_id:      a.courseId,
+      student_id:     a.studentId,
+      check_in_time:  a.checkInTime,
+      check_out_time: a.checkOutTime,
+      status:         a.status,
+      method:         a.method,
+      date:           a.date,
+    });
+
+    // ─── UNIFIED API OBJECT ───────────────────────────────────────────────────
+    const dbAPI = {
+      students: {
+        getAll:  ()            => sbGet("students").then(rows => rows.map(toStudent)),
+        add:     (student)     => sbInsert("students", fromStudent(student)).then(rows => toStudent(rows[0])),
+        update:  (id, student) => sbUpdate("students", id, fromStudent(student)).then(rows => toStudent(rows[0])),
+        delete:  (id)          => sbDelete("students", id),
+      },
+      courses: {
+        getAll:  ()            => sbGet("courses").then(rows => rows.map(toCourse)),
+        add:     (course)      => sbInsert("courses", fromCourse(course)).then(rows => toCourse(rows[0])),
+        update:  (id, course)  => sbUpdate("courses", id, fromCourse(course)).then(rows => toCourse(rows[0])),
+        delete:  (id)          => sbDelete("courses", id),
+      },
+      attendance: {
+        getAll:    ()                => sbGet("attendance").then(rows => rows.map(toAttendance)),
+        getByDate: (courseId, date)  => sbGet("attendance", { course_id: courseId, date }).then(rows => rows.map(toAttendance)),
+        record:    (attendance)      => sbInsert("attendance", fromAttendance(attendance)).then(rows => toAttendance(rows[0])),
+      },
+    };
+
     // COMPONENTS
     const Chip = (props) => {
       const bgColor = props.bg || "#f1f5f9";

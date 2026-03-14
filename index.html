@@ -719,7 +719,7 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
 };
 
 /* ═══════════════════════════════════════════════════════════
-   STUDENT MANAGEMENT  ★ 엑셀 업로드 지원
+   STUDENT MANAGEMENT  ★ 엑셀 업로드 지원 ★ 엑셀 업로드 & 학번(2026-) 표시 지원
 ═══════════════════════════════════════════════════════════ */
 const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
   const [search, setSearch] = useState("");
@@ -854,7 +854,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
             <table style={{ width:"100%", borderCollapse:"collapse", minWidth:860 }}>
               <thead>
                 <tr style={{ background:T.s2, borderBottom:`1px solid ${T.bd}` }}>
-                  {[{h:"이름·성별·나이", align:"left"},{h:"과정", align:"left"},{h:"거주지", align:"center"},{h:"연락처", align:"center"},{h:"학력·경력", align:"left"},{h:"취약계층", align:"center"},{h:"면접", align:"center"},{h:"출석률", align:"center"},{h:"", align:"center"}].map(({h,align})=>(
+                  {[{h:"학번·이름·나이", align:"left"},{h:"과정", align:"left"},{h:"거주지", align:"center"},{h:"연락처", align:"center"},{h:"학력·경력", align:"left"},{h:"취약계층", align:"center"},{h:"면접", align:"center"},{h:"출석률", align:"center"},{h:"", align:"center"}].map(({h,align})=>(
                     <th key={h} style={{ padding:"10px 12px", textAlign:align, fontSize:11, color:T.mu, fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -882,8 +882,10 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
                         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                           <div style={{ width:32, height:32, borderRadius:9, flexShrink:0, background: s.gender==="여" ? "#FDF2F8" : "#EFF6FF", color: s.gender==="여" ? "#BE185D" : "#1D4ED8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900 }}>{s.name?.[0]}</div>
                           <div>
+                            {/* ★ 요기에 학번 표시 (2026-학생DB아이디) ★ */}
+                            <div style={{ fontSize:10, color:T.p, fontWeight:800, marginBottom:1 }}>2026-{s.id}</div>
                             <div style={{ fontSize:13, fontWeight:700, color:T.tx, whiteSpace:"nowrap" }}>{s.name}<span style={{ marginLeft:5, fontSize:10, fontWeight:600, color: s.gender==="여"?"#BE185D":"#1D4ED8" }}>{s.gender||""}</span></div>
-                            <div style={{ fontSize:10, color:T.mu }}>{age} · {s.birth||"-"}</div>
+                            <div style={{ fontSize:10, color:T.mu, marginTop:1 }}>{age} · {s.birth||"-"}</div>
                           </div>
                         </div>
                       </td>
@@ -932,6 +934,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
     </div>
   );
 };
+    
 /* ═══════════════════════════════════════════════════════════
    EDIT MODAL  ★ 훈련생 면접 및 정보 수정 모달
 ═══════════════════════════════════════════════════════════ */

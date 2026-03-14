@@ -1734,7 +1734,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
    QR ATTENDANCE  ★ QR 출석 체크
 ═══════════════════════════════════════════════════════════ */
 /* 기존 AttendanceMgmt를 이렇게 교체 */
-const AttendanceMgmtV2 = ({ students, courses, attendance, onRecordQR }) => {
+const AttendanceMgmtV2 = ({ students, courses, attendance = [], onRecordQR = async () => true }) => {
   const [course, setCourse] = useState(courses[0]);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [qrType, setQrType] = useState("in");

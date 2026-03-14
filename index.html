@@ -2,247 +2,407 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>경기북부 통합 학사관리 시스템 v2026</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>경기북부 직업교육 학사관리시스템 v2026</title>
+  <meta name="description" content="경기도일자리재단 북부사업본부 직업교육 학사관리"/>
   
+  <!-- 폰트 -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"/>
+  
+  <!-- React -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- 유틸리티 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode/minified/html5-qrcode.min.js"></script>
+  
+  <!-- Supabase REST API (라이브러리 없이 fetch 사용) -->
+  <script>
+    // Supabase 설정 (애노드 레벨에서 미리 정의)
+    window.SUPABASE_CONFIG = {
+      url: "https://vqkjakgbrsnsererwmma.supabase.co",
+      key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM"
+    };
+  </script>
 
   <style>
-    /* 🎨 SANG HUN MASTER ERP DESIGN SYSTEM */
-    :root {
-      /* Brand Colors (Northern Gyeonggi Identity) */
-      --p: #EA580C; --p-dark: #C2410C; --p-light: #FB923C; --p-soft: #FFF7ED;
-      --sb: #7C2D12; --sb-dark: #451A03;
-      
-      /* Neutral Palette */
-      --tx: #0F172A; --tx-sub: #334155; --mu: #64748B; --mu-light: #94A3B8;
-      --bd: #E2E8F0; --bd-light: #F1F5F9;
-      --s1: #FFFFFF; --s2: #F8FAFC; --s3: #F1F5F9;
-      
-      /* Semantic Colors */
-      --ok: #10B981; --warn: #F59E0B; --danger: #EF4444; --info: #3B82F6; --purple: #8B5CF6;
-      
-      /* Geometry */
-      --radius-sm: 8px; --radius-md: 16px; --radius-lg: 28px;
-      --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
-      --ease: cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body, #root { height: 100%; overflow: hidden; font-family: 'Pretendard', sans-serif; background: var(--s2); color: var(--tx); }
-
-    /* 🌊 Animations */
-    @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-    .animate-fade-up { animation: fadeUp 0.6s var(--ease) both; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; font-family: 'Pretendard', -apple-system, sans-serif; }
+    body { background: #F8F9FA; -webkit-font-smoothing: antialiased; overflow: hidden; }
     
-    /* 🧭 Professional Sidebar */
-    .nav-link {
-      display: flex; align-items: center; gap: 16px; padding: 18px 24px; border-radius: 20px; 
-      cursor: pointer; color: rgba(255,255,255,0.55); transition: all 0.3s ease; border: none; 
-      background: transparent; width: 100%; text-align: left; font-size: 15.5px; font-weight: 600;
-      margin-bottom: 6px; position: relative;
+    #loading {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #7C2D12 0%, #EA580C 50%, #FED7AA 100%);
+      color: white; z-index: 9999;
+      animation: fadeOut 0.6s ease-in-out 2s forwards;
     }
-    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); transform: translateX(5px); }
-    .nav-link.active { color: #fff; background: linear-gradient(135deg, var(--p) 0%, var(--p-dark) 100%); font-weight: 800; box-shadow: 0 10px 25px rgba(124,45,18,0.35); }
-    .nav-link.active::after { content: ''; position: absolute; left: 0; width: 5px; height: 24px; background: #fff; border-radius: 0 4px 4px 0; }
-
-    /* 📊 Master Table Grid */
-    .master-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-    .master-table th { background: var(--s3); padding: 22px 18px; font-size: 13px; font-weight: 800; color: var(--mu); text-transform: uppercase; border-bottom: 2px solid var(--bd); letter-spacing: 0.5px; }
-    .master-table td { padding: 20px 18px; border-bottom: 1px solid var(--bd-light); font-size: 14.5px; transition: background 0.2s; }
-    .master-table tr:hover td { background: var(--p-soft); }
-
-    /* 폼 컨트롤 고도화 */
-    input, select, textarea { width: 100%; padding: 15px 18px; border-radius: 14px; border: 2px solid var(--bd-light); background: #fff; font-size: 15px; outline: none; transition: var(--ease); }
-    input:focus { border-color: var(--p); box-shadow: 0 0 0 4px var(--p-soft); }
-
-    /* 시스템 로딩 */
-    #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at center, var(--sb), var(--sb-dark)); z-index: 9999; transition: opacity 0.8s; color: #fff; }
-    .loader-circle { width: 100px; height: 100px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes fadeOut { to { opacity: 0; pointer-events: none; } }
+    #loading .spinner { width: 60px; height: 60px; border: 4px solid rgba(255,255,255,0.3);
+      border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    @media print { .no-print { display: none !important; } body { background: #fff; overflow: visible; } }
+    #loading .text { margin-top: 20px; font-size: 16px; font-weight: 700; letter-spacing: 1px; }
   </style>
 </head>
 <body>
   <div id="loading">
-    <div class="loader-circle"></div>
-    <div style="margin-top: 40px; font-size: 30px; font-weight: 950; letter-spacing: -1.5px;">NORTHERN EDU CLOUD ERP</div>
-    <div style="font-size: 14px; opacity: 0.7; margin-top: 15px; font-weight: 500; letter-spacing: 2px;">INITIALIZING SECURE SYSTEMS...</div>
+    <div class="spinner"></div>
+    <div class="text">경기북부 학사관리시스템 v2026</div>
+    <div style="margin-top: 8px; font-size: 12px; opacity: 0.7;">System Initializing...</div>
   </div>
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useMemo, useEffect, useRef, useCallback } = React;
 
-    /* ══════════════════════════════════════════════════════════
-       1. CORE SYSTEM ARCHITECTURE (전역 설정 및 데이터 매퍼)
-    ══════════════════════════════════════════════════════════ */
-    const SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";
-    const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";
-    const supabase = window.supabase.createClient(SB_URL, SB_KEY);
-
-    const NAV_ITEMS = [
-      { id: "dash", label: "대시보드", icon: "dash" },
-      { id: "courses", label: "과정관리", icon: "course" },
-      { id: "students", label: "훈련생관리", icon: "students" },
-      { id: "instr", label: "강사관리", icon: "instr" },
-      { id: "room", label: "강의실관리", icon: "room" },
-      { id: "attendance", label: "출결관리", icon: "attend" },
-      { id: "completion", label: "수료관리", icon: "completion" },
-      { id: "cert", label: "증명서발급", icon: "cert" },
-      { id: "account", label: "계정관리", icon: "people" }
-    ];
-
-    /* ── 13개 과정 테스트 시드 데이터 (한글 중심) ── */
-    const SEED_COURSES = [
-      { id: 1, name: "AI 생성형 도구 실무 (1기)", cat: "IT/신직무", target: 25, current: 24, from: "2026-03-02", to: "2026-06-25", rate: 98 },
-      { id: 2, name: "늘봄 교실 강사 양성 (3기)", cat: "늘봄교실", target: 30, current: 30, from: "2026-03-10", to: "2026-05-20", rate: 100 },
-      { id: 3, name: "전산세무회계 실무 (2기)", cat: "사무/회계", target: 20, current: 18, from: "2026-03-15", to: "2026-07-10", rate: 90 },
-      { id: 4, name: "파이썬 데이터 분석 (1기)", cat: "IT/신직무", target: 20, current: 20, from: "2026-03-01", to: "2026-06-15", rate: 100 },
-      { id: 5, name: "요양보호사 자격 취득 (5기)", cat: "사회복지", target: 35, current: 32, from: "2026-03-20", to: "2026-05-30", rate: 91 },
-      { id: 6, name: "디지털 마케팅 전문가 (1기)", cat: "IT/신직무", target: 25, current: 25, from: "2026-04-01", to: "2026-07-30", rate: 100 },
-      { id: 7, name: "한식 조리 기능사 (2기)", cat: "식품조리", target: 20, current: 19, from: "2026-03-05", to: "2026-05-15", rate: 95 },
-      { id: 8, name: "쇼핑몰 창업 실무 (3기)", cat: "창업", target: 15, current: 15, from: "2026-03-12", to: "2026-06-01", rate: 100 },
-      { id: 9, name: "GTX 연계 물류 관리 (1기)", cat: "물류/유통", target: 25, current: 23, from: "2026-04-10", to: "2026-08-20", rate: 92 },
-      { id: 10, name: "반도체 공정 기초 (1기)", cat: "제조/기술", target: 20, current: 20, from: "2026-03-25", to: "2026-07-15", rate: 100 },
-      { id: 11, name: "드론 정비 및 조종 (2기)", cat: "IT/신직무", target: 15, current: 14, from: "2026-03-01", to: "2026-05-10", rate: 93 },
-      { id: 12, name: "커피 바리스타 마스터 (4기)", cat: "서비스", target: 15, current: 15, from: "2026-03-18", to: "2026-05-10", rate: 100 },
-      { id: 13, name: "웹 디자인 기능사 (1기)", cat: "IT/신직무", target: 25, current: 25, from: "2026-04-15", to: "2026-08-30", rate: 100 }
-    ];
-
     /* ═══════════════════════════════════════════════════════════
-       2. REUSABLE ATOMS (고성능 벡터 아이콘 및 UI 부품)
+       🎨 테마 및 전역 설정
     ═══════════════════════════════════════════════════════════ */
-    const Icon = ({ n, s=20, c="currentColor", style={} }) => {
+    const T = {
+      p: "#EA580C", p_dark: "#C2410C", p_light: "#FB923C", p_bg: "#FFF7ED",
+      sb: "#7C2D12",
+      ok: "#10B981", warn: "#F59E0B", danger: "#EF4444", info: "#3B82F6",
+      text: "#1E293B", text_sub: "#334155", muted: "#64748B", muted_light: "#94A3B8",
+      border: "#E2E8F0", border_light: "#F1F5F9",
+      white: "#FFFFFF", bg: "#F8FAFC", bg_light: "#F1F5F9",
+    };
+
+    const INIT_ACCOUNTS = [
+      { id: 1, name: "이상훈", role: "admin", pw: "admin1234" },
+      { id: 2, name: "김담당", role: "staff", pw: "gjf2026" },
+      { id: 3, name: "박담당", role: "staff", pw: "gjf2026" },
+    ];
+
+    const SEED_COURSES = [
+      { id: 1, name: "AI 생성형 도구 실무 (1기)", cat: "IT/신직무", code: "IT-01", tgt: 25, current: 24, from: "2026-03-02", to: "2026-06-25", period: "3~6월", method: "블렌디드", hours: 92, cGoal: 23, eGoal: 15 },
+      { id: 2, name: "늘봄 교실 강사 양성 (3기)", cat: "늘봄교실", code: "NB-03", tgt: 30, current: 30, from: "2026-03-10", to: "2026-05-20", period: "3~5월", method: "대면", hours: 140, cGoal: 27, eGoal: 18 },
+      { id: 3, name: "전산세무회계 실무 (2기)", cat: "사무/회계", code: "SM-02", tgt: 20, current: 18, from: "2026-03-15", to: "2026-07-10", period: "3~7월", method: "대면", hours: 200, cGoal: 16, eGoal: 10 },
+      { id: 4, name: "파이썬 데이터 분석 (1기)", cat: "IT/신직무", code: "IT-02", tgt: 20, current: 20, from: "2026-03-01", to: "2026-06-15", period: "3~6월", method: "블렌디드", hours: 108, cGoal: 18, eGoal: 12 },
+      { id: 5, name: "요양보호사 자격 취득 (5기)", cat: "사회복지", code: "SW-05", tgt: 35, current: 32, from: "2026-03-20", to: "2026-05-30", period: "3~5월", method: "대면", hours: 240, cGoal: 29, eGoal: 19 },
+      { id: 6, name: "디지털 마케팅 전문가 (1기)", cat: "IT/신직무", code: "IT-03", tgt: 25, current: 25, from: "2026-04-01", to: "2026-07-30", period: "4~7월", method: "비대면", hours: 120, cGoal: 23, eGoal: 15 },
+      { id: 7, name: "한식 조리 기능사 (2기)", cat: "식품조리", code: "FD-02", tgt: 20, current: 19, from: "2026-03-05", to: "2026-05-15", period: "3~5월", method: "대면", hours: 180, cGoal: 18, eGoal: 12 },
+      { id: 8, name: "쇼핑몰 창업 실무 (3기)", cat: "창업", code: "BZ-03", tgt: 15, current: 15, from: "2026-03-12", to: "2026-06-01", period: "3~6월", method: "블렌디드", hours: 80, cGoal: 14, eGoal: 9 },
+      { id: 9, name: "GTX 연계 물류 관리 (1기)", cat: "물류/유통", code: "LG-01", tgt: 25, current: 23, from: "2026-04-10", to: "2026-08-20", period: "4~8월", method: "대면", hours: 160, cGoal: 21, eGoal: 14 },
+      { id: 10, name: "반도체 공정 기초 (1기)", cat: "제조/기술", code: "MFG-01", tgt: 20, current: 20, from: "2026-03-25", to: "2026-07-15", period: "3~7월", method: "대면", hours: 180, cGoal: 18, eGoal: 12 },
+      { id: 11, name: "드론 정비 및 조종 (2기)", cat: "IT/신직무", code: "IT-04", tgt: 15, current: 14, from: "2026-03-01", to: "2026-05-10", period: "3~5월", method: "대면", hours: 100, cGoal: 14, eGoal: 9 },
+      { id: 12, name: "커피 바리스타 마스터 (4기)", cat: "서비스", code: "SVC-04", tgt: 15, current: 15, from: "2026-03-18", to: "2026-05-10", period: "3~5월", method: "대면", hours: 90, cGoal: 14, eGoal: 9 },
+      { id: 13, name: "웹 디자인 기능사 (1기)", cat: "IT/신직무", code: "IT-05", tgt: 25, current: 25, from: "2026-04-15", to: "2026-08-30", period: "4~8월", method: "비대면", hours: 150, cGoal: 23, eGoal: 15 },
+    ];
+
+    const SEED_STUDENTS = [
+      { id: 101, cid: 4, name: "김민준", gender: "남", birth: "1992-04-15", phone: "010-1111-2222", city: "의정부", itvScore: 88, itvGrade: "A", itvPass: true, memo: "우수", rate: 94 },
+      { id: 102, cid: 4, name: "이서연", gender: "여", birth: "1997-07-22", phone: "010-2222-3333", city: "양주", itvScore: 72, itvGrade: "B", itvPass: true, memo: "선발", rate: 75 },
+      { id: 103, cid: 4, name: "박지훈", gender: "남", birth: "1990-01-30", phone: "010-3333-4444", city: "포천", itvScore: 65, itvGrade: "C", itvPass: true, memo: "기타", rate: 62 },
+      { id: 104, cid: 8, name: "최수아", gender: "여", birth: "1999-11-05", phone: "010-4444-5555", city: "의정부", itvScore: 95, itvGrade: "A+", itvPass: true, memo: "우수", rate: 97 },
+      { id: 105, cid: 8, name: "정우진", gender: "남", birth: "1995-08-14", phone: "010-5555-6666", city: "남양주", itvScore: 83, itvGrade: "B+", itvPass: true, memo: "선발", rate: 88 },
+    ];
+
+    /* ══════════════════════════════════════════���════════════════
+       🔧 미니 컴포넌트 라이브러리
+    ═══════════════════════════════════════════════════════════ */
+    const Icon = ({ n, s = 20, c = "currentColor" }) => {
       const paths = {
         dash: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
-        course: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
-        students: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></>,
-        instr: <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>,
-        room: <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>,
-        attend: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
-        completion: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
-        cert: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></>,
-        people: <><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/></>,
-        award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>
+        book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
+        user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+        check: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+        plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+        x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
       };
-      return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0, ...style}}>{paths[n]}</svg>;
+      return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>{paths[n]}</svg>;
     };
 
-    const Btn = ({ children, onClick, variant="primary", icon }) => {
+    const Btn = ({ children, onClick, variant = "primary", style = {} }) => {
+      const base = { border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, padding: "10px 18px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, transition: "0.2s" };
       const vars = {
-        primary: { background: "var(--p)", color: "#fff", boxShadow: "0 8px 15px rgba(234, 88, 12, 0.25)" },
-        white: { background: "#fff", color: "var(--tx)", border: "2.5px solid var(--bd-light)" }
+        primary: { background: T.p, color: "#fff" },
+        ghost: { background: T.bg, color: T.muted },
+        danger: { background: "#FEF2F2", color: T.danger },
       };
-      return (
-        <button onClick={onClick} style={{ padding: "14px 30px", borderRadius: "16px", border: "none", cursor: "pointer", fontWeight: 800, fontSize: "15px", display: "inline-flex", alignItems: "center", gap: 10, transition: "0.2s", ...vars[variant] }}>
-          {icon && <Icon n={icon} s={18} />} {children}
-        </button>
-      );
+      return <button onClick={onClick} style={{ ...base, ...vars[variant], ...style }}>{children}</button>;
     };
 
-    const Chip = ({ label, type="info" }) => {
-      const colors = {
-        info: { bg: "var(--info-soft)", tx: "var(--info)" },
-        success: { bg: "var(--ok-soft)", tx: "var(--ok)" },
-        warn: { bg: "var(--warn-soft)", tx: "var(--warn)" },
-        danger: { bg: "var(--danger-soft)", tx: "var(--danger)" }
-      };
-      const c = colors[type] || colors.info;
-      return <span style={{ background: c.bg, color: c.tx, padding: "7px 16px", borderRadius: "24px", fontSize: "12.5px", fontWeight: 900 }}>{label}</span>;
-    };
+    const Card = ({ children, style = {} }) => (
+      <div style={{ background: T.white, borderRadius: 12, border: `1px solid ${T.border}`, boxShadow: "0 1px 4px rgba(0,0,0,0.05)", ...style }}>{children}</div>
+    );
 
-    const SectionHead = ({ title, sub, right }) => (
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:45, paddingBottom:25, borderBottom: "4px solid var(--bd-light)" }}>
-        <div className="animate-fade-up">
-          <h2 style={{ fontSize:34, fontWeight:950, color:"var(--tx)", letterSpacing:"-1.5px" }}>{title}</h2>
-          {sub && <p style={{ color:"var(--mu)", marginTop:8, fontSize:17, fontWeight:500 }}>{sub}</p>}
-        </div>
-        <div className="no-print">{right}</div>
-      </div>
+    const Chip = ({ label, bg, color }) => (
+      <span style={{ background: bg, color, fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20 }}>{label}</span>
     );
 
     /* ═══════════════════════════════════════════════════════════
-       3. DASHBOARD (학사 중심 실시간 관제 센터)
+       📊 대시보드
     ═══════════════════════════════════════════════════════════ */
-    const Dashboard = ({ courses }) => {
-      const stats = useMemo(() => {
-        const totalCur = courses.reduce((a, b) => a + b.current, 0);
-        const totalTgt = courses.reduce((a, b) => a + b.target, 0);
-        const avgAttendance = 94.2; // 실시간 연동 예정 데이터
-        const riskStudents = 8;     // 출석률 80% 미만 위험군
-        return { totalCur, totalTgt, avgAttendance, riskStudents };
-      }, [courses]);
+    const Dashboard = ({ courses, students }) => {
+      const total_tgt = courses.reduce((a, c) => a + c.tgt, 0);
+      const total_current = courses.reduce((a, c) => a + c.current, 0);
+      const avg_rate = students.length ? Math.round(students.reduce((a, s) => a + s.rate, 0) / students.length) : 0;
+      const at_risk = students.filter(s => s.rate < 80).length;
 
       return (
-        <div className="animate-fade-up">
-          <SectionHead title="사업 통합 관제 대시보드" sub="2026년 경기북부 13개 과정 학사 운영 실시간 현황" />
-          
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24, marginBottom: 40 }}>
+        <div style={{ animation: "fadeUp 0.4s ease" }}>
+          <div style={{ marginBottom: 30 }}>
+            <h1 style={{ fontSize: 28, fontWeight: 950, color: T.text, letterSpacing: "-1px" }}>사업 통합 관제 대시보드</h1>
+            <p style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>2026년 경기북부 13개 과정 학사 운영 실시간 현황</p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 24 }}>
             {[
-              { label: "현재 총 훈련생", val: `${stats.totalCur}명`, sub: `정원 ${stats.totalTgt}명 대비 입강률 96.5%`, icon: "students", color: "var(--p)" },
-              { label: "실시간 출석률", val: `${stats.avgAttendance}%`, sub: "당일 13개 과정 전수 조사", icon: "attend", color: "var(--info)" },
-              { label: "누적 취업 성공", val: "42명", sub: "과정유관 취업 38명 (90.4%)", icon: "award", color: "var(--ok)" },
-              { label: "집중 상담 대상", val: `${stats.riskStudents}명`, sub: "출석률 80% 미만 위험군", icon: "cert", color: "var(--danger)" }
+              { label: "현재 총 훈련생", val: `${total_current}명`, sub: `정원 ${total_tgt}명 대비 ${Math.round(total_current / total_tgt * 100)}%` },
+              { label: "평균 출석률", val: `${avg_rate}%`, sub: "전체 훈련생" },
+              { label: "수료 예정", val: `${students.filter(s => s.rate >= 80).length}명`, sub: "출석률 80% 이상" },
+              { label: "위험군", val: `${at_risk}명`, sub: "출석률 80% 미만" },
             ].map((k, i) => (
-              <div key={i} className="premium-card" style={{ background: "#fff", borderRadius: "var(--radius-lg)", padding: 32, borderLeft: `8px solid ${k.color}`, boxShadow: "var(--shadow)" }}>
-                <div style={{ color: "var(--mu)", fontSize: 14, fontWeight: 700, marginBottom: 12 }}>{k.label}</div>
-                <div style={{ fontSize: 34, fontWeight: 950, marginBottom: 8, letterSpacing: "-1px" }}>{k.val}</div>
-                <div style={{ fontSize: 12.5, color: k.color, fontWeight: 800 }}>{k.sub}</div>
-              </div>
+              <Card key={i} style={{ padding: 20, display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: `${T.p}15`, display: "flex", alignItems: "center", justifyContent: "center", color: T.p, fontSize: 24, flexShrink: 0 }}>📊</div>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: T.text }}>{k.val}</div>
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{k.label}</div>
+                  <div style={{ fontSize: 11, color: T.p, marginTop: 2 }}>{k.sub}</div>
+                </div>
+              </Card>
             ))}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 30 }}>
-            <div style={{ background: "#fff", borderRadius: "var(--radius-lg)", padding: 35, boxShadow: "var(--shadow)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 30 }}>
-                <h3 style={{ fontSize: 20, fontWeight: 900 }}>분야별 학사 운영 달성도 (13개 과정)</h3>
-                <Btn variant="white" size="sm">상세 보고서</Btn>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                {courses.slice(0, 6).map(c => (
-                  <div key={c.id}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 800 }}>{c.name}</span>
-                      <span style={{ fontSize: 13, fontWeight: 900, color: "var(--p)" }}>{c.current}/{c.target}명 ({Math.round(c.current/c.target*100)}%)</span>
-                    </div>
-                    <div style={{ height: 10, background: "var(--s3)", borderRadius: 5, overflow: "hidden" }}>
-                      <div style={{ width: `${(c.current/c.target)*100}%`, height: "100%", background: `linear-gradient(90deg, var(--p), var(--p-light))`, borderRadius: 5, transition: "1s var(--ease)" }} />
-                    </div>
+          <Card style={{ padding: 24 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: T.text, marginBottom: 16 }}>과정별 현황</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+              {courses.slice(0, 6).map(c => (
+                <div key={c.id} style={{ padding: 14, background: T.bg, borderRadius: 10, border: `1px solid ${T.border_light}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{c.name.substring(0, 20)}...</span>
+                    <Chip label={`${c.current}/${c.tgt}`} bg={T.p_bg} color={T.p} />
                   </div>
+                  <div style={{ height: 6, background: T.border, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ width: `${Math.min(c.current / c.tgt * 100, 100)}%`, height: "100%", background: T.p, borderRadius: 3 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      );
+    };
+
+    /* ═══════════════════════════════════════════════════════════
+       👥 훈련생 관리
+    ═══════════════════════════════════════════════════════════ */
+    const StudentMgmt = ({ students, courses, onAdd }) => {
+      const [filter_course, setFilterCourse] = useState(0);
+      const filtered = filter_course ? students.filter(s => s.cid === filter_course) : students;
+
+      return (
+        <div style={{ animation: "fadeUp 0.4s ease" }}>
+          <h1 style={{ fontSize: 28, fontWeight: 950, color: T.text, marginBottom: 20, letterSpacing: "-1px" }}>훈련생 관리</h1>
+          
+          <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+            <select value={filter_course} onChange={e => setFilterCourse(+e.target.value)} style={{ padding: "8px 12px", border: `1px solid ${T.border}`, borderRadius: 8, fontSize: 13, outline: "none", background: T.white, color: T.text, cursor: "pointer" }}>
+              <option value={0}>전체 과정</option>
+              {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <Btn><Icon n="plus" s={16} /> 신규 등록</Btn>
+          </div>
+
+          <Card style={{ overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+                  {["이름", "성별", "생년월일", "연락처", "과정", "출석률", ""].map(h => (
+                    <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: T.muted }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(s => {
+                  const course = courses.find(c => c.id === s.cid);
+                  const rate_color = s.rate >= 80 ? T.ok : s.rate >= 60 ? T.warn : T.danger;
+                  return (
+                    <tr key={s.id} style={{ borderBottom: `1px solid ${T.border_light}`, transition: "background 0.1s" }} onMouseEnter={e => e.currentTarget.style.background = T.bg} onMouseLeave={e => e.currentTarget.style.background = T.white}>
+                      <td style={{ padding: "12px 14px", fontSize: 13, fontWeight: 700, color: T.text }}>{s.name}</td>
+                      <td style={{ padding: "12px 14px", fontSize: 13, color: T.text_sub }}>{s.gender}</td>
+                      <td style={{ padding: "12px 14px", fontSize: 12, color: T.muted }}>{s.birth}</td>
+                      <td style={{ padding: "12px 14px", fontSize: 12, color: T.muted }}>{s.phone}</td>
+                      <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: T.text }}>{course?.name.substring(0, 20)}</td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ height: 6, width: 50, background: T.border, borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{ width: `${s.rate}%`, height: "100%", background: rate_color, borderRadius: 3 }} />
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: rate_color }}>{s.rate}%</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                        <Btn variant="ghost" style={{ padding: "4px 8px", fontSize: 11 }}>수정</Btn>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      );
+    };
+
+    /* ═══════════════════════════════════════════════════════════
+       📱 출결 관리 (간편 버전)
+    ═══════════════════════════════════════════════════════════ */
+    const AttendanceMgmt = ({ students, courses }) => {
+      const [course, setCourse] = useState(courses[0]);
+      const course_students = students.filter(s => s.cid === course?.id);
+
+      return (
+        <div style={{ animation: "fadeUp 0.4s ease" }}>
+          <h1 style={{ fontSize: 28, fontWeight: 950, color: T.text, marginBottom: 20 }}>출결 관리</h1>
+          
+          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+            {courses.map(c => (
+              <Btn key={c.id} onClick={() => setCourse(c)} variant={course?.id === c.id ? "primary" : "ghost"} style={{ padding: "6px 12px", fontSize: 11 }}>
+                {c.code}
+              </Btn>
+            ))}
+          </div>
+
+          <Card style={{ padding: 20 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+                  {["이름", "현재상태", "입실", "퇴실"].map(h => (
+                    <th key={h} style={{ padding: "12px", textAlign: "center", fontSize: 12, fontWeight: 700, color: T.muted }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {course_students.map(s => (
+                  <tr key={s.id} style={{ borderBottom: `1px solid ${T.border_light}` }}>
+                    <td style={{ padding: "12px", textAlign: "center", fontSize: 13, fontWeight: 700 }}>{s.name}</td>
+                    <td style={{ padding: "12px", textAlign: "center" }}>
+                      <Chip label={s.rate >= 80 ? "정상" : "주의"} bg={s.rate >= 80 ? `${T.ok}20` : `${T.warn}20`} color={s.rate >= 80 ? T.ok : T.warn} />
+                    </td>
+                    <td style={{ padding: "12px", textAlign: "center", fontSize: 12, color: T.muted }}>09:02</td>
+                    <td style={{ padding: "12px", textAlign: "center", fontSize: 12, color: T.muted }}>13:05</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      );
+    };
+
+    /* ═══════════════════════════════════════════════════════════
+       🎓 수료 관리
+    ═══════════════════════════════════════════════════════════ */
+    const CompletionMgmt = ({ students, courses }) => {
+      const [course, setCourse] = useState(courses[0]);
+      const course_students = students.filter(s => s.cid === course?.id);
+      const completed = course_students.filter(s => s.rate >= 80).length;
+      const completion_rate = course_students.length ? Math.round(completed / course_students.length * 100) : 0;
+
+      return (
+        <div style={{ animation: "fadeUp 0.4s ease" }}>
+          <h1 style={{ fontSize: 28, fontWeight: 950, color: T.text, marginBottom: 20 }}>수료 관리</h1>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+            {courses.map(c => (
+              <Btn key={c.id} onClick={() => setCourse(c)} variant={course?.id === c.id ? "primary" : "ghost"} style={{ padding: "6px 12px", fontSize: 11 }}>
+                {c.code}
+              </Btn>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 20 }}>
+            {[
+              { label: "총 인원", val: course_students.length },
+              { label: "수료 예정", val: completed, color: T.ok },
+              { label: "수료율", val: `${completion_rate}%`, color: completion_rate >= 90 ? T.ok : T.warn },
+            ].map((k, i) => (
+              <Card key={i} style={{ padding: 18, textAlign: "center", background: T.bg }}>
+                <div style={{ fontSize: 24, fontWeight: 900, color: k.color || T.p }}>{k.val}</div>
+                <div style={{ fontSize: 12, color: T.muted, marginTop: 6 }}>{k.label}</div>
+              </Card>
+            ))}
+          </div>
+
+          <Card style={{ padding: 20 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+                  {["이름", "출석률", "수료 판정"].map(h => (
+                    <th key={h} style={{ padding: "12px", textAlign: "center", fontSize: 12, fontWeight: 700, color: T.muted }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {course_students.map(s => (
+                  <tr key={s.id} style={{ borderBottom: `1px solid ${T.border_light}` }}>
+                    <td style={{ padding: "12px", textAlign: "center", fontWeight: 700 }}>{s.name}</td>
+                    <td style={{ padding: "12px", textAlign: "center", fontSize: 13, fontWeight: 800, color: s.rate >= 80 ? T.ok : T.warn }}>{s.rate}%</td>
+                    <td style={{ padding: "12px", textAlign: "center" }}>
+                      <Chip label={s.rate >= 80 ? "✓ 수료" : "✗ 미수료"} bg={s.rate >= 80 ? `${T.ok}20` : `${T.danger}20`} color={s.rate >= 80 ? T.ok : T.danger} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      );
+    };
+
+    /* ═══════════════════════════════════════════════════════════
+       🔐 로그인 화면
+    ═══════════════════════════════════════════════════════════ */
+    const LoginScreen = ({ accounts, onLogin }) => {
+      const [sel_id, setSelId] = useState(accounts[0]?.id);
+      const [pw, setPw] = useState("");
+      const [error, setError] = useState("");
+
+      const handle_login = () => {
+        const acc = accounts.find(a => a.id === sel_id);
+        if (!acc || acc.pw !== pw) {
+          setError("❌ 비밀번호가 올바르지 않습니다");
+          return;
+        }
+        onLogin(acc);
+      };
+
+      return (
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${T.sb} 0%, ${T.p} 50%, ${T.p_light} 100%)`, padding: 20 }}>
+          <div style={{ width: "100%", maxWidth: 400, background: T.white, borderRadius: 20, padding: 40, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ textAlign: "center", marginBottom: 30 }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>🎓</div>
+              <h1 style={{ fontSize: 20, fontWeight: 950, color: T.text }}>경기북부 학사관리</h1>
+              <p style={{ fontSize: 12, color: T.muted, marginTop: 6 }}>v2026 직업교육 시스템</p>
+            </div>
+
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: T.muted, display: "block", marginBottom: 8 }}>담당자 선택</label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {accounts.map(a => (
+                  <Btn key={a.id} onClick={() => setSelId(a.id)} variant={sel_id === a.id ? "primary" : "ghost"} style={{ flex: 1, padding: "8px 12px", fontSize: 12 }}>
+                    {a.name}
+                  </Btn>
                 ))}
               </div>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
-              <div style={{ background: "linear-gradient(135deg, var(--sb), var(--sb-dark))", borderRadius: "var(--radius-lg)", padding: 35, color: "#fff" }}>
-                <h3 style={{ fontSize: 20, fontWeight: 900, marginBottom: 20 }}>📢 행정 긴급 알림</h3>
-                <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-                  <div style={{ padding: 18, background: "rgba(255,255,255,0.1)", borderRadius: 16, fontSize: 14.5, lineHeight: 1.6 }}>
-                    <b>IT 신직무 입학식:</b> 잠시 후 10시, 제1강의실에서 시작됩니다.
-                  </div>
-                  <div style={{ padding: 18, background: "rgba(255,255,255,0.1)", borderRadius: 16, fontSize: 14.5, lineHeight: 1.6 }}>
-                    <b>출결 수정 필요:</b> 어제 '늘봄교실' 과정의 입실 오류 건(3건)을 확인하세요.
-                  </div>
-                </div>
-              </div>
-              <div style={{ background: "#fff", borderRadius: "var(--radius-lg)", padding: 35, boxShadow: "var(--shadow)", flex: 1 }}>
-                <h3 style={{ fontSize: 20, fontWeight: 900, marginBottom: 20 }}>🏢 강의실 가동 현황</h3>
-                {[1, 2, 3, 4, 5].map(n => (
-                  <div key={n} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--bd-light)" }}>
-                    <span style={{ fontSize: 14.5, fontWeight: 700 }}>북부 제{n}강의실</span>
-                    <Chip label={n === 4 ? "사용 가능" : "수업 중"} type={n === 4 ? "success" : "warn"} />
-                  </div>
-                ))}
-              </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: T.muted, display: "block", marginBottom: 8 }}>비밀번호</label>
+              <input type="password" value={pw} onChange={e => { setPw(e.target.value); setError(""); }} onKeyDown={e => e.key === "Enter" && handle_login()} placeholder="비밀번호 입력" style={{ width: "100%", padding: "11px 14px", border: `1px solid ${T.border}`, borderRadius: 10, fontSize: 13, outline: "none", background: T.white, color: T.text }} />
+            </div>
+
+            {error && <div style={{ fontSize: 12, color: T.danger, marginBottom: 16, padding: "8px 12px", background: "#FEF2F2", borderRadius: 8 }}>{error}</div>}
+
+            <Btn onClick={handle_login} style={{ width: "100%", justifyContent: "center", padding: "12px" }}>로그인</Btn>
+
+            <div style={{ fontSize: 11, color: T.muted, textAlign: "center", marginTop: 14 }}>
+              초기 비밀번호: <span style={{ fontFamily: "monospace", background: T.bg, padding: "2px 6px", borderRadius: 4 }}>gjf2026</span>
             </div>
           </div>
         </div>
@@ -250,544 +410,83 @@
     };
 
     /* ═══════════════════════════════════════════════════════════
-       4. MAIN APP ROOT (라우팅 및 통합 제어 엔진)
+       🎪 메인 APP
     ═══════════════════════════════════════════════════════════ */
     function App() {
+      const [current_user, setCurrentUser] = useState(() => {
+        const u = sessionStorage.getItem("gjf_user");
+        return u ? JSON.parse(u) : null;
+      });
+      
       const [page, setPage] = useState("dash");
-      const [courses] = useState(SEED_COURSES);
-      const [currentUser] = useState({ name: "이상훈", rank: "과장", dept: "북부교육팀" });
+      const [courses, setCourses] = useState(SEED_COURSES);
+      const [students, setStudents] = useState(SEED_STUDENTS);
 
-      useEffect(() => {
-        // 부팅 시뮬레이션
-        const loader = document.getElementById('loading');
-        if (loader) {
-          setTimeout(() => {
-            loader.style.opacity = '0';
-            setTimeout(() => loader.remove(), 800);
-          }, 1500);
-        }
-      }, []);
+      if (!current_user) {
+        return <LoginScreen accounts={INIT_ACCOUNTS} onLogin={user => { sessionStorage.setItem("gjf_user", JSON.stringify(user)); setCurrentUser(user); }} />;
+      }
+
+      const NAV_ITEMS = [
+        { id: "dash", label: "대시보드", icon: "dash" },
+        { id: "students", label: "훈련생 관리", icon: "user" },
+        { id: "attendance", label: "출결 관리", icon: "check" },
+        { id: "completion", label: "수료 관리", icon: "check" },
+      ];
 
       const renderPage = () => {
-        switch(page) {
-          case "dash": return <Dashboard courses={courses} />;
-          default: return <div className="animate-fade-up"><SectionHead title={NAV_ITEMS.find(n => n.id === page)?.label} sub="현재 파트에서 개발 중인 모듈입니다." /></div>;
+        switch (page) {
+          case "dash": return <Dashboard courses={courses} students={students} />;
+          case "students": return <StudentMgmt students={students} courses={courses} />;
+          case "attendance": return <AttendanceMgmt students={students} courses={courses} />;
+          case "completion": return <CompletionMgmt students={students} courses={courses} />;
+          default: return <Dashboard courses={courses} students={students} />;
         }
       };
 
       return (
         <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-          {/* 🧭 프리미엄 사이드바 */}
-          <aside style={{ width: 340, background: "var(--sb)", color: "#fff", display: "flex", flexDirection: "column", boxShadow: "10px 0 40px rgba(0,0,0,0.3)", zIndex: 100 }}>
-            <div style={{ padding: "60px 45px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-              <div style={{ fontSize: 30, fontWeight: 950, letterSpacing: "-1.5px" }}>NORTHERN ERP</div>
-              <div style={{ fontSize: 13, color: "var(--p-light)", fontWeight: 800, marginTop: 10, letterSpacing: "1px" }}>Gyeonggi Job Foundation</div>
+          {/* SIDEBAR */}
+          <aside style={{ width: 240, background: `linear-gradient(180deg, ${T.sb} 0%, ${T.p} 100%)`, color: "white", display: "flex", flexDirection: "column", boxShadow: "4px 0 12px rgba(0,0,0,0.15)" }}>
+            <div style={{ padding: "24px 18px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: "-0.5px" }}>경기북부 직업교육</div>
+              <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>v2026 시스템</div>
             </div>
-            
-            <nav style={{ flex: 1, padding: "40px 20px", overflowY: "auto" }}>
-              {NAV_ITEMS.map(it => (
-                <button key={it.id} onClick={() => setPage(it.id)} className={`nav-link ${page === it.id ? 'active' : ''}`}>
-                  <Icon n={it.icon} s={22} /> {it.label}
+            <nav style={{ flex: 1, padding: "16px 8px", overflowY: "auto" }}>
+              {NAV_ITEMS.map(item => (
+                <button key={item.id} onClick={() => setPage(item.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, border: "none", cursor: "pointer", background: page === item.id ? "rgba(255,255,255,0.15)" : "transparent", color: page === item.id ? "white" : "rgba(255,255,255,0.65)", fontWeight: page === item.id ? 700 : 500, fontSize: 13, transition: "0.2s", marginBottom: 4 }}>
+                  <Icon n={item.icon} s={18} c="currentColor" /> {item.label}
                 </button>
               ))}
             </nav>
-
-            <div style={{ padding: "40px 30px", background: "rgba(0,0,0,0.2)", display: "flex", alignItems: "center", gap: 15 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 14, background: "var(--p)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900 }}>{currentUser.name[0]}</div>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 900 }}>{currentUser.name} {currentUser.rank}님</div>
-                <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>{currentUser.dept} 마스터</div>
+            <div style={{ padding: "16px 14px", borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Icon n="user" s={18} c="white" />
               </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{current_user.name}</div>
+                <div style={{ fontSize: 10, opacity: 0.6 }}>{current_user.role === "admin" ? "관리자" : "담당자"}</div>
+              </div>
+              <button onClick={() => { sessionStorage.removeItem("gjf_user"); setCurrentUser(null); }} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "rgba(255,255,255,0.15)", color: "white", cursor: "pointer", fontSize: 14 }}>🚪</button>
             </div>
           </aside>
-          
-          {/* 🖥️ 메인 워크스페이스 */}
-          <main style={{ flex: 1, overflowY: "auto", padding: "70px 90px", background: "var(--s2)" }}>
-            {renderPage()}
+
+          {/* MAIN CONTENT */}
+          <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: T.bg }}>
+            <header style={{ height: 60, background: T.white, borderBottom: `1px solid ${T.border}`, padding: "0 28px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.muted }}>경기도일자리재단 북부사업본부</div>
+              <div style={{ fontSize: 11, fontWeight: 700, background: T.p_bg, color: T.p, padding: "5px 12px", borderRadius: 20 }}>🟢 운영중</div>
+            </header>
+            <div style={{ flex: 1, overflowY: "auto", padding: "28px" }}>
+              {renderPage()}
+            </div>
           </main>
         </div>
       );
     }
-/* ═══════════════════════════════════════════════════════════
-       5. COURSE MASTER (과정관리 및 충돌 감지 엔진)
-    ═══════════════════════════════════════════════════════════ */
-    const CourseMgmt = ({ courses, setCourses, rooms, instrs }) => {
-      const [view, setView] = useState("list"); // list, form
-      const [form, setForm] = useState(null);
 
-      // 🛡️ 중복 체크 로직 (날짜/요일/시간 교차 검증)
-      const checkConflict = (newVal) => {
-        const conflict = courses.find(c => {
-          if (c.id === newVal.id) return false;
-          // 1. 강의실 또는 강사가 겹치는지
-          const sameResource = c.room_id === newVal.room_id || c.instr_id === newVal.instr_id;
-          if (!sameResource) return false;
-
-          // 2. 날짜 기간이 겹치는지
-          const dateOverlap = (newVal.from <= c.to && newVal.to >= c.from);
-          if (!dateOverlap) return false;
-
-          // 3. 수업 요일이 겹치는지 (쉼표로 구분된 요일 중 하나라도 겹치면)
-          const days1 = newVal.days.split(',');
-          const days2 = c.days.split(',');
-          const dayOverlap = days1.some(d => days2.includes(d));
-          if (!dayOverlap) return false;
-
-          // 4. 시간대가 겹치는지
-          const timeOverlap = (newVal.tFrom < c.tTo && newVal.tTo > c.tFrom);
-          return timeOverlap;
-        });
-        return conflict;
-      };
-
-      const handleSave = async (e) => {
-        e.preventDefault();
-        const conflict = checkConflict(form);
-        if (conflict) {
-          alert(`⚠️ 자원 충돌 발생!\n\n현재 [${conflict.name}] 과정이\n동일한 자원/시간대에 배정되어 있습니다.`);
-          return;
-        }
-
-        const { data, error } = await sysDB.upsert("courses", form, form.id ? `id=eq.${form.id}` : "");
-        if (!error) {
-          alert("성공적으로 저장되었습니다.");
-          setCourses(prev => form.id ? prev.map(x => x.id === form.id ? form : x) : [...prev, data]);
-          setView("list");
-        }
-      };
-
-      return (
-        <div className="animate-fade-up">
-          <SectionHead 
-            title="교육과정 마스터" 
-            sub={`현재 운영 중인 13개 과정 및 신규 개설 관리`}
-            right={view === "list" && <Btn onClick={() => { setForm({ name: "", cat: "IT/신직무", target: 20, from: "", to: "", days: "월,화,수,목,금", tFrom: "09:00", tTo: "13:00", room_id: 1 }); setView("form"); }} icon="plus">신규 과정 개설</Btn>}
-          />
-
-          {view === "list" ? (
-            <div className="premium-card">
-              <table className="master-table">
-                <thead>
-                  <tr>
-                    <th>분류</th>
-                    <th>과정명 (한글 명칭)</th>
-                    <th>교육 기간</th>
-                    <th>요일/시간</th>
-                    <th>배정 강의실</th>
-                    <th>모집 현황</th>
-                    <th>관리</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {courses.map(c => (
-                    <tr key={c.id}>
-                      <td><Chip label={c.cat} type="info" /></td>
-                      <td style={{ fontWeight: 800 }}>{c.name}</td>
-                      <td style={{ fontSize: 13, color: "var(--mu)" }}>{c.from} ~ {c.to}</td>
-                      <td style={{ fontSize: 13 }}>{c.days} <br/> <b style={{ color: "var(--p)" }}>{c.tFrom}~{c.tTo}</b></td>
-                      <td>{rooms.find(r => r.id === c.room_id)?.name || "미배정"}</td>
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ flex: 1, height: 6, background: "#eee", borderRadius: 3, width: 60 }}>
-                            <div style={{ width: `${(c.current/c.target)*100}%`, height: "100%", background: "var(--ok)", borderRadius: 3 }} />
-                          </div>
-                          <span style={{ fontSize: 12, fontWeight: 700 }}>{c.current}/{c.target}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <button onClick={() => { setForm(c); setView("form"); }} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--mu)" }}><Icon n="edit" s={18} /></button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="premium-card" style={{ padding: 40, maxWidth: 800, margin: "0 auto" }}>
-              <form onSubmit={handleSave} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-                <div style={{ gridColumn: "span 2" }}>
-                  <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>과정명 (직관적인 한글 이름)</label>
-                  <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="예: [IT] 생성형 AI 실무 (1기)" required />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>과정 분류</label>
-                  <select value={form.cat} onChange={e => setForm({...form, cat: e.target.value})}>
-                    <option>IT/신직무</option><option>늘봄교실</option><option>사무/회계</option><option>사회복지</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>정원 (명)</label>
-                  <input type="number" value={form.target} onChange={e => setForm({...form, target: parseInt(e.target.value)})} />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>시작일</label>
-                  <input type="date" value={form.from} onChange={e => setForm({...form, from: e.target.value})} required />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>종료일</label>
-                  <input type="date" value={form.to} onChange={e => setForm({...form, to: e.target.value})} required />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>강의실 배정</label>
-                  <select value={form.room_id} onChange={e => setForm({...form, room_id: parseInt(e.target.value)})}>
-                    {rooms.map(r => <option key={r.id} value={r.id}>{r.name} ({r.capacity}석)</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>수업 요일</label>
-                  <input value={form.days} onChange={e => setForm({...form, days: e.target.value})} placeholder="월,화,수,목,금" />
-                </div>
-                <div style={{ gridColumn: "span 2", display: "flex", gap: 20, marginTop: 20 }}>
-                  <Btn type="submit" style={{ flex: 1 }}>설계 저장 및 충돌 검사</Btn>
-                  <Btn onClick={() => setView("list")} variant="white" style={{ flex: 1 }}>취소</Btn>
-                </div>
-              </form>
-            </div>
-          )}
-        </div>
-      );
-    };
-
-    /* ═══════════════════════════════════════════════════════════
-       6. RESOURCE VISUALIZER (강의실 비주얼 타임라인)
-    ═══════════════════════════════════════════════════════════ */
-    const RoomTimeline = ({ courses, rooms }) => {
-      // 간단한 타임라인 뷰 구현
-      return (
-        <div className="animate-fade-up">
-          <SectionHead title="강의실 인프라 관리" sub="실시간 교육장 가동 현황 및 예약 타임라인" />
-          
-          <div className="premium-card" style={{ padding: 0, overflow: "hidden" }}>
-            <div style={{ display: "flex", background: "var(--s3)", borderBottom: "2px solid var(--bd)" }}>
-              <div style={{ width: 200, padding: 20, borderRight: "2px solid var(--bd)", fontWeight: 800 }}>강의실명 / 시설</div>
-              <div style={{ flex: 1, padding: 20, fontWeight: 800 }}>교육과정 가동 타임라인 (2026년 상반기)</div>
-            </div>
-            {rooms.map(r => (
-              <div key={r.id} style={{ display: "flex", borderBottom: "1px solid var(--bd-light)", minHeight: 100 }}>
-                <div style={{ width: 200, padding: 20, borderRight: "2px solid var(--bd-light)", background: "var(--s2)" }}>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>{r.name}</div>
-                  <div style={{ fontSize: 12, color: "var(--mu)", marginTop: 5 }}>{r.capacity}석 / {r.equip}</div>
-                </div>
-                <div style={{ flex: 1, position: "relative", padding: "20px 0" }}>
-                  {courses.filter(c => c.room_id === r.id).map(c => (
-                    <div key={c.id} style={{ 
-                      position: "absolute", left: `${(new Date(c.from).getMonth() * 15)}%`, width: "30%",
-                      background: "var(--p-soft)", border: "2px solid var(--p)", padding: "10px", borderRadius: 10,
-                      fontSize: 12, fontWeight: 800, color: "var(--p-dark)", boxShadow: "0 4px 10px rgba(0,0,0,0.05)"
-                    }}>
-                      {c.name} <br/>
-                      <span style={{ fontWeight: 500, fontSize: 11 }}>{c.from} ~ {c.to}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    };
-    /* ═══════════════════════════════════════════════════════════
-       7. STUDENT MASTER (지능형 엑셀 연동 및 훈련생 관리)
-    ═══════════════════════════════════════════════════════════ */
-    const StudentMgmt = ({ students, setStudents, courses }) => {
-      const [selCid, setSelCid] = useState("all");
-
-      // 📥 엑셀 일괄 업로드 (Import)
-      const handleExcelImport = (e) => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          const wb = XLSX.read(evt.target.result, { type: 'binary' });
-          const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-          
-          // 데이터 검증 및 2026-ID 부여 로직
-          const validated = data.map((row, idx) => ({
-            ...row,
-            id: Date.now() + idx,
-            sid: `2026-N-${Math.floor(1000 + Math.random() * 9000)}`, // 자동 학번
-            rate: 0,
-            status: "훈련중"
-          }));
-          
-          if(confirm(`${validated.length}명의 데이터를 일괄 등록하시겠습니까?`)) {
-            setStudents(prev => [...prev, ...validated]);
-            alert("행정 처리가 완료되었습니다.");
-          }
-        };
-        reader.readAsBinaryString(file);
-      };
-
-      // 📤 과정별 엑셀 내보내기 (Export)
-      const handleExcelExport = () => {
-        const list = selCid === "all" ? students : students.filter(s => s.cid === parseInt(selCid));
-        const ws = XLSX.utils.json_to_sheet(list);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "훈련생명부");
-        XLSX.writeFile(wb, `북부교육팀_훈련생명부_${new Date().toISOString().slice(0,10)}.xlsx`);
-      };
-
-      const filteredList = selCid === "all" ? students : students.filter(s => s.cid === parseInt(selCid));
-
-      return (
-        <div className="animate-fade-up">
-          <SectionHead 
-            title="훈련생 마스터 관리" 
-            sub="2026-ID 기반 학적 관리 및 엑셀 일괄 행정"
-            right={
-              <div style={{ display: "flex", gap: 12 }}>
-                <input type="file" id="excelUp" hidden onChange={handleExcelImport} accept=".xlsx, .xls" />
-                <Btn onClick={() => document.getElementById('excelUp').click()} variant="white" icon="plus">엑셀 대량 등록</Btn>
-                <Btn onClick={handleExcelExport} icon="dash">명부 엑셀 추출</Btn>
-              </div>
-            }
-          />
-
-          <div className="premium-card" style={{ padding: 25, marginBottom: 25, display: "flex", gap: 20, alignItems: "center" }}>
-            <span style={{ fontWeight: 800 }}>과정별 필터:</span>
-            <select style={{ width: 300 }} value={selCid} onChange={e => setSelCid(e.target.value)}>
-              <option value="all">전체 과정 보기</option>
-              {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <div style={{ marginLeft: "auto", fontSize: 14, fontWeight: 700, color: "var(--mu)" }}>
-              조회 인원: <b style={{ color: "var(--p)" }}>{filteredList.length}</b>명
-            </div>
-          </div>
-
-          <div className="premium-card">
-            <table className="master-table">
-              <thead>
-                <tr>
-                  <th>학번(ID)</th>
-                  <th>성명</th>
-                  <th>과정명</th>
-                  <th>연락처</th>
-                  <th>출석률</th>
-                  <th>상태</th>
-                  <th>관리</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredList.map(s => (
-                  <tr key={s.id}>
-                    <td style={{ fontWeight: 800, color: "var(--mu)" }}>{s.sid || '2026-ID-TMP'}</td>
-                    <td style={{ fontWeight: 900 }}>{s.name}</td>
-                    <td style={{ fontSize: 13 }}>{courses.find(c => c.id === s.cid)?.name}</td>
-                    <td style={{ fontSize: 13 }}>{s.phone}</td>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ flex: 1, height: 6, background: "#eee", borderRadius: 3, width: 50 }}>
-                          <div style={{ width: `${s.rate}%`, height: "100%", background: s.rate < 80 ? "var(--danger)" : "var(--ok)", borderRadius: 3 }} />
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 800 }}>{s.rate}%</span>
-                      </div>
-                    </td>
-                    <td><Chip label={s.status} type={s.status === "훈련중" ? "info" : "success"} /></td>
-                    <td><button style={{ border:"none", background:"none", cursor:"pointer", color:"var(--mu)" }}><Icon n="edit" s={16} /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-    };
-
-    /* ═══════════════════════════════════════════════════════════
-       8. STUDENT MOBILE VIEW (QR 스캔 시 열리는 학생 전용 화면)
-    ═══════════════════════════════════════════════════════════ */
-    const StudentMobileView = ({ cid, courses }) => {
-      const course = courses.find(c => c.id === parseInt(cid));
-      const [step, setStep] = useState(1); // 1: 명단선택, 2: 완료
-      const [loading, setLoading] = useState(false);
-
-      const handleCheckIn = (type) => {
-        setLoading(true);
-        // 여기서 DB에 실시간 insert (출결 기록)
-        setTimeout(() => {
-          setLoading(false);
-          setStep(2);
-          alert(`${type === 'in' ? '입실' : '퇴실'} 처리가 완료되었습니다.`);
-        }, 1000);
-      };
-
-      return (
-        <div style={{ minHeight: "100vh", background: "var(--sb)", padding: 20, display: "flex", flexDirection: "column" }}>
-          <div style={{ background: "#fff", borderRadius: 30, padding: 40, flex: 1, boxShadow: "0 20px 40px rgba(0,0,0,0.3)", textAlign: "center" }}>
-            <div style={{ width: 60, height: 6, background: "var(--bd)", borderRadius: 3, margin: "0 auto 30px" }} />
-            <Icon n="attend" s={60} c="var(--p)" style={{ marginBottom: 20 }} />
-            <h2 style={{ fontSize: 24, fontWeight: 950, marginBottom: 10 }}>{course?.name || "과정 정보 없음"}</h2>
-            <p style={{ color: "var(--mu)", marginBottom: 40 }}>북부교육팀 모바일 출결 시스템</p>
-
-            {step === 1 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                <div style={{ textAlign: "left" }}>
-                  <label style={{ fontWeight: 800, fontSize: 14, marginLeft: 5 }}>본인 이름을 선택하세요</label>
-                  <select style={{ marginTop: 10, fontSize: 18, padding: 20 }}>
-                    <option>훈련생 이름을 선택하세요</option>
-                    <option>강상훈 (010-****-1234)</option>
-                    <option>이지혜 (010-****-5678)</option>
-                  </select>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 15, marginTop: 20 }}>
-                  <button onClick={() => handleCheckIn('in')} style={{ padding: 30, borderRadius: 20, border: "none", background: "var(--p)", color: "#fff", fontSize: 20, fontWeight: 900 }}>입실하기</button>
-                  <button onClick={() => handleCheckIn('out')} style={{ padding: 30, borderRadius: 20, border: "none", background: "var(--tx)", color: "#fff", fontSize: 20, fontWeight: 900 }}>퇴실하기</button>
-                </div>
-                <div style={{ marginTop: 40, padding: 25, background: "var(--p-soft)", borderRadius: 20, textAlign: "left" }}>
-                  <h4 style={{ color: "var(--p-dark)", marginBottom: 10 }}>📚 오늘의 학습 링크</h4>
-                  <a href="#" style={{ display: "block", color: "var(--info)", fontWeight: 700, marginBottom: 5 }}>→ [필독] 생성형 AI 실무 교안.pdf</a>
-                  <a href="#" style={{ display: "block", color: "var(--info)", fontWeight: 700 }}>→ [링크] 실시간 Zoom 강의실 입장</a>
-                </div>
-              </div>
-            ) : (
-              <div className="animate-fade-up">
-                <Icon n="check" s={80} c="var(--ok)" style={{ margin: "40px 0" }} />
-                <h3 style={{ fontSize: 22, fontWeight: 900 }}>처리가 완료되었습니다!</h3>
-                <p style={{ marginTop: 10, color: "var(--mu)" }}>오늘도 열정적인 학습 되세요.</p>
-                <Btn onClick={() => setStep(1)} variant="white" style={{ marginTop: 40, width: "100%" }}>처음으로</Btn>
-              </div>
-            )}
-          </div>
-          <p style={{ color: "rgba(255,255,255,0.5)", textAlign: "center", marginTop: 20, fontSize: 12 }}>© Gyeonggi Job Foundation Northern Edu Team</p>
-        </div>
-      );
-    };
-    /* ═══════════════════════════════════════════════════════════
-       9. ATTENDANCE HUB (정밀 수동 수정 및 실시간 모니터링)
-    ═══════════════════════════════════════════════════════════ */
-    const AttendanceMgmt = ({ students, courses, onManualUpdate }) => {
-      const [selCid, setSelCid] = useState(courses[0]?.id || 1);
-      const filtered = students.filter(s => s.cid === selCid);
-
-      return (
-        <div className="animate-fade-up">
-          <SectionHead 
-            title="실시간 출결 관리" 
-            sub="학생 QR 기록 모니터링 및 담당자 정밀 수동 수정"
-            right={<Btn variant="white" icon="qr" onClick={() => alert('강단용 대형 QR 팝업 실행')}>대형 QR 띄우기</Btn>}
-          />
-
-          <div className="premium-card" style={{ padding: 25, marginBottom: 25 }}>
-            <div style={{ display: "flex", gap: 15, overflowX: "auto", paddingBottom: 10 }}>
-              {courses.map(c => (
-                <button key={c.id} onClick={() => setSelCid(c.id)} style={{
-                  padding: "12px 20px", borderRadius: 12, border: "none", whiteSpace: "nowrap", cursor: "pointer",
-                  background: selCid === c.id ? "var(--p)" : "var(--s3)",
-                  color: selCid === c.id ? "#fff" : "var(--mu)", fontWeight: 800, transition: "0.2s"
-                }}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="premium-card">
-            <table className="master-table">
-              <thead>
-                <tr>
-                  <th>성명</th>
-                  <th>입실 시간</th>
-                  <th>퇴실 시간</th>
-                  <th>현재 상태</th>
-                  <th>정밀 수정</th>
-                  <th>사유/비고</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(s => (
-                  <tr key={s.id}>
-                    <td style={{ fontWeight: 900 }}>{s.name}</td>
-                    <td style={{ fontWeight: 800, color: "var(--info)" }}>{s.in_time || "미입실"}</td>
-                    <td style={{ fontWeight: 800, color: "var(--warn)" }}>{s.out_time || "미퇴실"}</td>
-                    <td>
-                      <Chip 
-                        label={s.status || (s.in_time ? "출석" : "결석")} 
-                        type={s.in_time ? "success" : "danger"} 
-                      />
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <Btn onClick={() => alert('시간 수정 모달')} size="sm" variant="white">입실수정</Btn>
-                        <Btn onClick={() => alert('시간 수정 모달')} size="sm" variant="white">퇴실수정</Btn>
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--mu)" }}>{s.memo || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-    };
-
-    /* ═══════════════════════════════════════════════════════════
-       10. CERTIFICATE ENGINE (A4 정밀 인쇄 및 수료 판정)
-    ═══════════════════════════════════════════════════════════ */
-    const CertMgmt = ({ students, courses }) => {
-      const [selStudent, setSelStudent] = useState(null);
-
-      const printCert = () => {
-        window.print();
-      };
-
-      return (
-        <div className="animate-fade-up">
-          <SectionHead title="수료 및 증명서 발급" sub="수료 요건 자동 판정 및 공식 문서 출력 엔진" />
-          
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 30 }}>
-            {/* 수료 판정 리스트 */}
-            <div className="premium-card" style={{ padding: 25 }}>
-              <h3 style={{ marginBottom: 20, fontWeight: 900 }}>🎓 수료 판정 명부 (80% 기준)</h3>
-              <div style={{ maxHeight: 600, overflowY: "auto" }}>
-                {students.map(s => (
-                  <div key={s.id} onClick={() => setSelStudent(s)} style={{ 
-                    padding: 20, borderRadius: 15, background: selStudent?.id === s.id ? "var(--p-soft)" : "transparent",
-                    border: `1px solid ${selStudent?.id === s.id ? "var(--p)" : "var(--bd-light)"}`,
-                    marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center"
-                  }}>
-                    <div>
-                      <div style={{ fontWeight: 900 }}>{s.name} <span style={{ fontSize: 12, color: "var(--mu)", fontWeight: 500 }}>{s.sid}</span></div>
-                      <div style={{ fontSize: 13, marginTop: 4 }}>출석률: <b style={{ color: s.rate >= 80 ? "var(--ok)" : "var(--danger)" }}>{s.rate}%</b></div>
-                    </div>
-                    <Chip label={s.rate >= 80 ? "수료가능" : "미달"} type={s.rate >= 80 ? "success" : "danger"} />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 증명서 미리보기 (A4 규격) */}
-            <div className="premium-card" style={{ padding: 40, background: "#f0f0f0", display: "flex", justifyContent: "center" }}>
-              {selStudent ? (
-                <div id="print-area" style={{ 
-                  width: "210mm", height: "297mm", background: "#fff", padding: "20mm", 
-                  boxShadow: "0 0 20px rgba(0,0,0,0.1)", textAlign: "center", position: "relative",
-                  display: "flex", flexDirection: "column", justifyContent: "space-between"
-                }}>
-                  <div style={{ border: "10px double var(--p)", height: "100%", padding: "40px", display: "flex", flexDirection: "column" }}>
-                    <div style={{ fontSize: 48, fontWeight: 900, marginTop: 40, letterSpacing: 10 }}>수 료 증</div>
-                    <div style={{ textAlign: "left", marginTop: 80, fontSize: 18, lineHeight: 2.5 }}>
-                      <p>성 명 : {selStudent.name}</p>
-                      <p>생년월일 : {selStudent.birth || '1995.05.20'}</p>
-                      <p>교 육 명 : {courses.find(c => c.id === selStudent.cid)?.name}</p>
-                      <p>교육기간 : 2026.03.02 ~ 2026.06.25</p>
-                    </div>
-                    <div style={{ marginTop: 60, fontSize: 20, lineHeight: 1.8 }}>
-                      위 사람은 경기도일자리재단에서 시행한<br/>
-                      위 교육과정을 성실히 이수하였으므로<br/>
-                      이 증서를 수여합니다.
-                    </div>
-                    <div style={{ marginTop: "auto", marginBottom: 40 }}>
-                      <div style={{ fontSize: 22, fontWeight: 800 }}>2026년 06월 25일</div>
-                      <div style={{ fontSize: 32, fontWeight: 950, marginTop: 40 }}>경기도일자리재단 대표이사 (인)</div>
-                    </div>
-                  </div>
-                  <Btn onClick={printCert} style={{ position: "absolute", top: -60, right: 0 }} icon="cert">이 양식으로 인쇄하기</Btn>
-                </div>
-              ) : (
-                <div style={{ color: "var(--mu)", marginTop: 100 }}>훈련생을 선택하면 수료증 미리보기가 생성됩니다.</div>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    };
+    // ✨ 마운트
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>

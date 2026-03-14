@@ -9,6 +9,7 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body, #root { height: 100%; }
@@ -34,7 +35,89 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useMemo, useEffect, useRef } = React;
+    const { useState, useMemo, useEffect, useRef, useCallback } = React;
+
+    /* ═══════════════════════════════════════════════════════════
+       SUPABASE CONFIG & REST API
+    ═══════════════════════════════════════════════════════════ */
+    const SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";
+    const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";
+    const SB_REST = SB_URL + "/rest/v1";
+    const SB_HEADERS = {
+      "apikey": SB_KEY,
+      "Authorization": "Bearer " + SB_KEY,
+      "Content-Type": "application/json",
+      "Prefer": "return=representation",
+    };
+
+    let sbClient = null;
+    try { if (window.supabase) sbClient = window.supabase.createClient(SB_URL, SB_KEY); } catch(e) {}
+
+    const sbFetch = async (path, opts = {}) => {
+      try {
+        const r = await fetch(SB_REST + path, { headers: SB_HEADERS, ...opts });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); return { data: null, error: d }; }
+        const d = r.status === 204 ? null : await r.json();
+        return { data: d, error: null };
+      } catch(e) {
+        return { data: null, error: e.message };
+      }
+    };
+
+    const dbAPI = {
+      attendance: {
+        record: async (rec) => {
+          const sid = encodeURIComponent(rec.student_id);
+          const dt = encodeURIComponent(rec.attend_date);
+          const { data: ex } = await sbFetch(`/attendance?student_id=eq.${sid}&attend_date=eq.${dt}`);
+          if (ex && ex.length > 0) {
+            return sbFetch(`/attendance?id=eq.${encodeURIComponent(ex[0].id)}`, { method: "PATCH", body: JSON.stringify(rec) });
+          }
+          return sbFetch("/attendance", { method: "POST", body: JSON.stringify(rec) });
+        },
+        getByDate: (cid, date) => sbFetch(`/attendance?course_id=eq.${encodeURIComponent(cid)}&attend_date=eq.${encodeURIComponent(date)}`),
+        getAll: (cid) => sbFetch(`/attendance?course_id=eq.${encodeURIComponent(cid)}&order=id`),
+      },
+      students: {
+        getAll: (cid) => sbFetch(`/students?course_id=eq.${encodeURIComponent(cid)}&order=id`),
+      },
+    };
+
+    // Offline queue – stores records when network is unavailable
+    const offlineQueue = {
+      _key: "gjf_att_queue",
+      add(item) {
+        const q = JSON.parse(localStorage.getItem(this._key) || "[]");
+        q.push({ ...item, _queuedAt: Date.now() });
+        localStorage.setItem(this._key, JSON.stringify(q));
+      },
+      async flush() {
+        const q = JSON.parse(localStorage.getItem(this._key) || "[]");
+        if (!q.length) return 0;
+        const results = await Promise.all(q.map(item => {
+          const { _queuedAt, ...rec } = item;
+          return dbAPI.attendance.record(rec);
+        }));
+        const failed = q.filter((_, i) => results[i].error);
+        localStorage.setItem(this._key, JSON.stringify(failed));
+        return q.length - failed.length;
+      },
+      count() {
+        return JSON.parse(localStorage.getItem(this._key) || "[]").length;
+      },
+    };
+    window.addEventListener("online", () => offlineQueue.flush());
+
+    const timeToMins = (t) => {
+      if (!t) return 0;
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    };
+    const nowTime = () => {
+      const d = new Date();
+      return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+    };
+    const todayDate = () => new Date().toISOString().slice(0, 10);
 
     const T = {
       p: "#EA580C", pm: "#F97316", pl: "#FB923C", pbg: "#FFF7ED",
@@ -400,9 +483,10 @@
       const [startM, setStartM] = useState(0);
       const [lateH, setLateH] = useState(9);
       const [lateM, setLateM] = useState(30);
-      const [endH, setEndH] = useState(13);
-      const [endM, setEndM] = useState(0);
       const [simRunning, setSimRunning] = useState(false);
+      const [showQR, setShowQR] = useState(false);
+      const [realtimeStatus, setRealtimeStatus] = useState("idle"); // idle | connected | error
+      const [queueCount, setQueueCount] = useState(() => offlineQueue.count());
 
       const startTotal = startH * 60 + startM;
       const lateTotal = lateH * 60 + lateM;
@@ -418,6 +502,57 @@
       const checkedInCnt = Object.keys(records).filter(k => records[k].in).length;
       const presentCnt = Object.keys(records).filter(k => records[k].in && calcStatus(records[k].in.mins) === "O").length;
       const lateCnt = Object.keys(records).filter(k => records[k].in && calcStatus(records[k].in.mins) === "L").length;
+
+      // Load today's attendance from Supabase on course change
+      useEffect(() => {
+        dbAPI.attendance.getByDate(course.id, todayDate()).then(({ data, error }) => {
+          if (error || !data) return; // silently skip on error; seed data already rendered
+          const map = {};
+          data.forEach(r => {
+            if (!map[r.student_id]) map[r.student_id] = {};
+            if (r.in_time) map[r.student_id].in = { time: r.in_time, mins: timeToMins(r.in_time) };
+            if (r.out_time) map[r.student_id].out = { time: r.out_time };
+          });
+          if (Object.keys(map).length > 0) setRecords(map);
+        });
+      }, [course.id]);
+
+      // Supabase Realtime subscription
+      useEffect(() => {
+        if (!sbClient) return;
+        setRealtimeStatus("connecting");
+        const channel = sbClient
+          .channel("att-" + course.id)
+          .on("postgres_changes", {
+            event: "*", schema: "public", table: "attendance",
+            filter: "course_id=eq." + course.id,
+          }, (payload) => {
+            const r = payload.new || payload.old;
+            if (!r) return;
+            setRecords(prev => {
+              const next = { ...prev };
+              if (!next[r.student_id]) next[r.student_id] = {};
+              if (r.in_time) next[r.student_id].in = { time: r.in_time, mins: timeToMins(r.in_time) };
+              if (r.out_time) next[r.student_id].out = { time: r.out_time };
+              return next;
+            });
+          })
+          .subscribe((status) => {
+            setRealtimeStatus(status === "SUBSCRIBED" ? "connected" : status === "CHANNEL_ERROR" ? "error" : "connecting");
+          });
+        return () => { sbClient.removeChannel(channel); setRealtimeStatus("idle"); };
+      }, [course.id]);
+
+      // Flush offline queue + update badge when coming back online
+      useEffect(() => {
+        const handler = async () => {
+          const n = await offlineQueue.flush();
+          setQueueCount(offlineQueue.count());
+          if (n > 0) alert(`✅ 오프라인 기록 ${n}건이 동기화되었습니다.`);
+        };
+        window.addEventListener("online", handler);
+        return () => window.removeEventListener("online", handler);
+      }, []);
 
       const startSim = () => {
         if (simRunning) return;
@@ -452,6 +587,14 @@
         A: { label: "결석", bg: "#FEF2F2", color: T.danger },
       };
 
+      // Build QR code URL pointing to the mobile check-in page
+      const baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, "");
+      const qrUrl = baseUrl + "?mode=checkin&cid=" + course.id + "&type=" + qrType;
+      const qrImgUrl = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + encodeURIComponent(qrUrl);
+
+      const rtDot = { connected: T.ok, connecting: T.warn, error: T.danger, idle: T.mu }[realtimeStatus];
+      const rtLabel = { connected: "실시간 연결됨", connecting: "연결 중…", error: "연결 오류", idle: "미연결" }[realtimeStatus];
+
       return (
         <div className="page">
           <div style={{ marginBottom: 18 }}>
@@ -466,6 +609,16 @@
                 {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
+            {/* Realtime status indicator */}
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: rtDot }}/>
+              <span style={{ fontSize: 10, color: T.mu }}>{rtLabel}</span>
+            </div>
+            {queueCount > 0 && (
+              <div style={{ padding: "3px 8px", background: "#FEF2F2", borderRadius: 6, fontSize: 10, color: T.danger, fontWeight: 700 }}>
+                📴 오프라인 대기 {queueCount}건
+              </div>
+            )}
             <div style={{ marginLeft: "auto", display: "flex", gap: 14, alignItems: "center" }}>
               {[{ v: presentCnt, l: "출석", c: T.ok }, { v: lateCnt, l: "지각", c: T.warn }, { v: courseStudents.length - checkedInCnt, l: "미확인", c: T.danger }].map(x => (
                 <div key={x.l} style={{ textAlign: "center" }}>
@@ -486,9 +639,13 @@
                   </button>
                 ))}
               </div>
-              <div style={{ fontSize: 10, color: T.mu, lineHeight: 1.8, padding: "8px 10px", background: T.s2, borderRadius: 7, border: "1px solid " + T.bd }}>
+              <div style={{ fontSize: 10, color: T.mu, lineHeight: 1.8, padding: "8px 10px", background: T.s2, borderRadius: 7, border: "1px solid " + T.bd, marginBottom: 14 }}>
                 <b style={{ color: T.tx }}>과정:</b> {course.name}
               </div>
+              {/* QR 강단용 버튼 */}
+              <button onClick={() => setShowQR(true)} style={{ width: "100%", padding: "11px 0", borderRadius: 10, border: "none", background: "linear-gradient(135deg," + T.sb + "," + T.p + ")", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 14px rgba(234,88,12,.3)" }}>
+                📱 강단용 QR 띄우기
+              </button>
             </Card>
 
             <Card style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}>
@@ -514,6 +671,7 @@
                         <div style={{ fontSize: 13, fontWeight: 700, color: T.tx }}>{s.name}</div>
                         <div style={{ fontSize: 10, color: T.mu, marginTop: 1 }}>
                           {inRec ? <span style={{ color: "#2563EB" }}>📥 {inRec.time}</span> : "대기 중"}
+                          {rec.out && <span style={{ color: T.warn, marginLeft: 8 }}>📤 {rec.out.time}</span>}
                         </div>
                       </div>
                       <div>
@@ -534,6 +692,32 @@
               </div>
             </Card>
           </div>
+
+          {/* QR 모달 */}
+          {showQR && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }} onClick={() => setShowQR(false)}>
+              <div style={{ background: "#fff", borderRadius: 20, padding: 32, textAlign: "center", maxWidth: 380, width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: T.tx, marginBottom: 4 }}>
+                  📱 강단용 QR코드
+                </div>
+                <div style={{ fontSize: 11, color: T.mu, marginBottom: 18 }}>
+                  {course.name} · {qrType === "in" ? "📥 입실" : "📤 퇴실"}
+                </div>
+                <div style={{ display: "inline-block", padding: 12, background: "#fff", borderRadius: 12, border: "2px solid " + T.bd, marginBottom: 16 }}>
+                  <img src={qrImgUrl} alt="QR Code" width={280} height={280} style={{ display: "block", borderRadius: 6 }}/>
+                </div>
+                <div style={{ fontSize: 10, color: T.mu, wordBreak: "break-all", marginBottom: 18, padding: "8px 10px", background: T.s2, borderRadius: 7, fontFamily: "monospace" }}>
+                  {qrUrl}
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                  <button onClick={() => setShowQR(false)} style={{ padding: "9px 22px", borderRadius: 9, border: "none", background: T.s3, color: T.mu, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>닫기</button>
+                  <button onClick={() => window.open(qrUrl, "_blank")} style={{ padding: "9px 22px", borderRadius: 9, border: "none", background: T.p, color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+                    📲 학생 페이지 열기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     };
@@ -690,6 +874,116 @@
     };
 
     // APP
+    // MOBILE CHECK-IN (rendered when ?mode=checkin is in URL)
+    const MobileCheckin = ({ cid, type }) => {
+      const course = COURSES.find(c => c.id === cid) || COURSES[0];
+      const students = SEED_STUDENTS.filter(s => s.cid === course.id);
+      const [done, setDone] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState("");
+      const [offline, setOffline] = useState(!navigator.onLine);
+
+      useEffect(() => {
+        const onOnline = () => setOffline(false);
+        const onOffline = () => setOffline(true);
+        window.addEventListener("online", onOnline);
+        window.addEventListener("offline", onOffline);
+        return () => { window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline); };
+      }, []);
+
+      const handleCheckin = async (student) => {
+        if (loading) return;
+        setLoading(true);
+        setError("");
+        const time = nowTime();
+        const date = todayDate();
+        // Compute status: before 9:30 AM = on-time, after = late
+        const timeMins = timeToMins(time);
+        const computedStatus = type === "in" ? (timeMins <= 9 * 60 + 30 ? "O" : "L") : "O";
+        const rec = {
+          student_id: student.id,
+          course_id: course.id,
+          attend_date: date,
+          in_time: type === "in" ? time : null,
+          out_time: type === "out" ? time : null,
+          status: computedStatus,
+          via_qr: true,
+        };
+        let savedOffline = false;
+        try {
+          if (navigator.onLine) {
+            const { error: err } = await dbAPI.attendance.record(rec);
+            if (err) { offlineQueue.add(rec); savedOffline = true; }
+          } else {
+            offlineQueue.add(rec);
+            savedOffline = true;
+          }
+          setDone({ student, time, type, savedOffline });
+        } catch(e) {
+          offlineQueue.add(rec);
+          setDone({ student, time, type, savedOffline: true });
+        }
+        setLoading(false);
+      };
+
+      const reset = () => setDone(null);
+
+      if (done) {
+        return (
+          <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#7C2D12 0%,#EA580C 50%,#FED7AA 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "#fff", borderRadius: 24, padding: "40px 32px", textAlign: "center", maxWidth: 380, width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,.3)" }}>
+              <div style={{ fontSize: 64, marginBottom: 16 }}>{done.type === "in" ? "✅" : "🚪"}</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: T.tx, marginBottom: 8 }}>{done.student.name}님</div>
+              <div style={{ fontSize: 15, color: T.ok, fontWeight: 700, marginBottom: 4 }}>{done.type === "in" ? "입실" : "퇴실"} 완료!</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: T.p, marginBottom: 4 }}>{done.time}</div>
+              <div style={{ fontSize: 11, color: T.mu, marginBottom: 16 }}>{todayDate()} · {course.name}</div>
+              {done.savedOffline && (
+                <div style={{ padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 11, color: T.danger, marginBottom: 16 }}>
+                  📴 오프라인 기록됨 · 연결 후 자동 동기화됩니다
+                </div>
+              )}
+              <button onClick={reset} style={{ padding: "12px 32px", borderRadius: 12, border: "none", background: T.s3, color: T.mu, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                다른 학생
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#FED7AA 0%,#FDBA74 12%,#FFF7ED 60%,#F1F5F9 100%)", fontFamily: "'Pretendard',-apple-system,sans-serif" }}>
+          <div style={{ background: "linear-gradient(135deg," + T.sb + "," + T.p + ")", padding: "20px 20px 16px", color: "#fff" }}>
+            <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 4 }}>{type === "in" ? "📥 입실 체크인" : "📤 퇴실 체크아웃"}</div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>{course.name}</div>
+            <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{todayDate()} · {nowTime()}</div>
+            {offline && (
+              <div style={{ marginTop: 8, padding: "5px 10px", background: "rgba(220,38,38,.3)", borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+                📴 오프라인 모드
+              </div>
+            )}
+          </div>
+          <div style={{ padding: 16 }}>
+            {error && <div style={{ padding: "10px 14px", background: "#FEF2F2", borderRadius: 10, color: T.danger, fontSize: 12, marginBottom: 12 }}>{error}</div>}
+            <div style={{ fontSize: 12, color: T.mu, fontWeight: 700, marginBottom: 10 }}>이름을 선택하세요</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {students.map(s => (
+                <button key={s.id} onClick={() => handleCheckin(s)} disabled={loading} style={{ padding: "18px 8px", borderRadius: 14, border: "2px solid " + T.bd, background: "#fff", cursor: loading ? "wait" : "pointer", textAlign: "center", boxShadow: "0 2px 8px rgba(0,0,0,.06)", transition: "all .15s" }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 14, background: s.gender === "여" ? "#FDF2F8" : "#EFF6FF", color: s.gender === "여" ? "#BE185D" : "#1D4ED8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 900, margin: "0 auto 8px" }}>{s.name[0]}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: T.tx }}>{s.name}</div>
+                  <div style={{ fontSize: 10, color: T.mu, marginTop: 2 }}>{s.gender}</div>
+                </button>
+              ))}
+            </div>
+            {students.length === 0 && (
+              <div style={{ padding: 32, textAlign: "center", color: T.mu, fontSize: 13 }}>
+                이 과정에 등록된 훈련생이 없습니다.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
     const NAV_ITEMS = [
       { id: "dash", label: "대시보드", icon: "dash" },
       { id: "courses", label: "과정 현황", icon: "book" },
@@ -702,6 +996,11 @@
     ];
 
     function App() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlMode = urlParams.get("mode");
+      const urlCid = parseInt(urlParams.get("cid") || "0", 10);
+      const urlType = urlParams.get("type") || "in";
+
       const [currentUser, setCurrentUser] = useState(() => {
         try { const u = sessionStorage.getItem("gjf_user"); return u ? JSON.parse(u) : null; } catch { return null; }
       });
@@ -710,6 +1009,11 @@
       const [students] = useState(SEED_STUDENTS);
       const [courses] = useState(COURSES);
       const [instructors] = useState(SEED_INSTRUCTORS);
+
+      // Mobile check-in mode — bypass admin UI entirely
+      if (urlMode === "checkin") {
+        return <MobileCheckin cid={urlCid} type={urlType} />;
+      }
 
       if (!currentUser) {
         return <LoginScreen onLogin={user => { sessionStorage.setItem("gjf_user", JSON.stringify(user)); setCurrentUser(user); }}/>;

@@ -1148,10 +1148,15 @@ const AttendanceMgmt = ({ students, courses, attendance, onManual }) => {
    COMPLETION (수료 관리)
 ═══════════════════════════════════════════════════════════ */
 const CompletionMgmt = ({ students, courses }) => {
-  const [course, setCourse] = useState(courses[3] || courses[0]);
+  const [course, setCourse] = useState(courses[0]);
   const [threshold, setThr] = useState(80);
   const [overrides, setOvr] = useState({});
-  const list = students.filter(s=>s.cid===course.id);
+
+  // ★ DB 로딩이 덜 되어 과정이 없을 때의 충돌 방지 로직
+  if (!courses || courses.length === 0) return <div style={{padding:40, textAlign:"center", color:T.mu, fontSize:13}}>과정 데이터를 불러오는 중입니다...</div>;
+  
+  const currentCourse = course || courses[0];
+  const list = students.filter(s=>s.cid===currentCourse.id);
   const get  = s => overrides[s.id] ?? (s.rate>=threshold?"수료":"미수료");
   const completed = list.filter(s=>get(s)==="수료").length;
   const rate = list.length ? Math.round(completed/list.length*100) : 0;
@@ -1161,7 +1166,7 @@ const CompletionMgmt = ({ students, courses }) => {
       <SectionHead title="수료 관리" sub="출석률 기준 자동 판정 · 담당자 수동 조정 가능"/>
       <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
         {courses.map(c=>(
-          <button key={c.id} onClick={()=>setCourse(c)} style={{ padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer", fontSize:11, fontWeight:600, whiteSpace:"nowrap", background: course.id===c.id ? c.cc : T.s3, color: course.id===c.id ? "#fff" : T.mu }}>
+          <button key={c.id} onClick={()=>setCourse(c)} style={{ padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer", fontSize:11, fontWeight:600, whiteSpace:"nowrap", background: currentCourse.id===c.id ? c.cc : T.s3, color: currentCourse.id===c.id ? "#fff" : T.mu, transition:"all .2s" }}>
             {c.name.length>14?c.name.slice(0,14)+"…":c.name}
           </button>
         ))}
@@ -1187,8 +1192,8 @@ const CompletionMgmt = ({ students, courses }) => {
         </Card>
         <Card style={{ padding:"16px 22px" }}>
           <div style={{ fontSize:11, color:T.mu }}>과정 목표</div>
-          <div style={{ fontSize:16, fontWeight:800, color:T.tx, marginTop:4 }}>{course.cGoal}명 수료</div>
-          <div style={{ fontSize:11, color:T.mu, marginTop:2 }}>{course.eGoal}명 취업 목표</div>
+          <div style={{ fontSize:16, fontWeight:800, color:T.tx, marginTop:4 }}>{currentCourse.cGoal}명 수료</div>
+          <div style={{ fontSize:11, color:T.mu, marginTop:2 }}>{currentCourse.eGoal}명 취업 목표</div>
         </Card>
       </div>
 
@@ -1515,10 +1520,52 @@ const SEED_BOOKINGS = [
 const RoomMgmt = ({ courses, rooms, setRooms, bookings, setBookings }) => {
   return (
     <div className="page">
-      <SectionHead title="강의실 관리" sub="현재 업데이트 준비중입니다." />
-      <Card style={{ padding: 40, textAlign: "center", color: T.mu }}>
-        <Icon n="cal" s={40} />
-        <div style={{ marginTop: 10, fontSize: 14 }}>강의실 예약 및 달력 시스템 연동 예정</div>
+      <SectionHead title="강의실 및 시설 관리" sub={`현재 등록된 강의실: ${rooms.length}개`} right={<Btn size="sm"><Icon n="plus" s={13}/> 강의실 추가</Btn>} />
+      
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16, marginBottom:24 }}>
+        {rooms.map(room => (
+          <Card key={room.id} style={{ padding:20 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+              <div>
+                <div style={{ fontSize:16, fontWeight:800, color:T.tx }}>{room.name}</div>
+                <div style={{ fontSize:11, color:T.mu, marginTop:4 }}>📍 {room.addr}</div>
+              </div>
+              <div style={{ background:T.pbg, color:T.p, padding:"4px 8px", borderRadius:6, fontSize:11, fontWeight:700 }}>최대 {room.capacity}명</div>
+            </div>
+            <div style={{ background:T.s2, padding:"10px 14px", borderRadius:8, fontSize:11, color:T.mu, border:`1px solid ${T.bd}` }}>
+              <b>보유장비:</b> {room.equip}
+            </div>
+            <div style={{ marginTop:12, display:"flex", gap:6 }}>
+              <Btn variant="ghost" size="sm" style={{ flex:1 }}>수정</Btn>
+              <Btn variant="ghost" size="sm" style={{ flex:1, color:T.danger }}>삭제</Btn>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <SectionHead title="예약 현황 (이번 주)" />
+      <Card style={{ overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:T.s2 }}>
+              {["강의실","사용 과정","일정","상태"].map(h=><th key={h} style={{ padding:"12px 16px", textAlign:"left", fontSize:11, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}` }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {bookings.map(b => {
+              const r = rooms.find(x=>x.id===b.roomId);
+              const c = courses.find(x=>x.id===b.courseId);
+              return (
+                <tr key={b.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
+                  <td style={{ padding:"14px 16px", fontSize:13, fontWeight:700, color:T.tx }}>{r?.name}</td>
+                  <td style={{ padding:"14px 16px" }}><Chip label={c?.name || b.label} bg={`${b.color}15`} color={b.color}/></td>
+                  <td style={{ padding:"14px 16px", fontSize:12, color:T.mu }}>{b.start} ~ {b.end}</td>
+                  <td style={{ padding:"14px 16px" }}><Chip label="예약됨" bg="#ECFDF5" color={T.ok}/></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </Card>
     </div>
   );
@@ -1589,12 +1636,40 @@ const LoginScreen = ({ onLogin, accounts }) => {
   );
 };
 
-const AccountMgmt = ({ accounts, onSave, onClose }) => {
+const AccountMgmt = ({ accounts, onClose }) => {
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ background:T.s, borderRadius:18, width:400, padding: 20 }}>
-        <h3>계정 관리 (준비중)</h3>
-        <Btn onClick={onClose} style={{ marginTop: 20 }}>닫기</Btn>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }} onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:T.s, borderRadius:16, width:500, maxWidth:"100%", overflow:"hidden", boxShadow:"0 20px 40px rgba(0,0,0,0.2)", animation:"fadeUp 0.2s ease" }}>
+        <div style={{ background:`linear-gradient(135deg,${T.sb},${T.p})`, padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ fontSize:15, fontWeight:800, color:"#fff" }}>👤 담당자 계정 관리</div>
+          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.15)", border:"none", color:"#fff", width:28, height:28, borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><Icon n="x" s={14}/></button>
+        </div>
+        
+        <div style={{ padding:"20px", maxHeight:"60vh", overflowY:"auto" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:12, alignItems:"center" }}>
+            <span style={{ fontSize:12, fontWeight:700, color:T.mu }}>등록된 계정 ({accounts.length}명)</span>
+            <Btn size="sm"><Icon n="plus" s={12}/> 새 계정 추가</Btn>
+          </div>
+          
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {accounts.map(acc => (
+              <div key={acc.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}>
+                <div style={{ width:36, height:36, borderRadius:"50%", background: acc.role==="admin" ? `${T.p}20` : `${T.info}20`, color: acc.role==="admin" ? T.p : T.info, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <Icon n="user" s={16}/>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:T.tx }}>{acc.name} <span style={{ fontSize:10, fontWeight:600, color:T.mu, marginLeft:4 }}>({acc.id===1?"admin":"staff1"})</span></div>
+                  <div style={{ fontSize:11, color:T.mu, marginTop:2 }}>{acc.role==="admin"?"🔑 최고 관리자 권한":"👤 일반 담당자 권한"}</div>
+                </div>
+                <Btn variant="ghost" size="sm" style={{ color:T.danger }}>삭제</Btn>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`, background:T.s2, display:"flex", justifyContent:"flex-end" }}>
+          <Btn onClick={onClose}>닫기</Btn>
+        </div>
       </div>
     </div>
   );

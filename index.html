@@ -1734,60 +1734,90 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
    QR ATTENDANCE  ★ QR 출석 체크
 ═══════════════════════════════════════════════════════════ */
 /* 기존 AttendanceMgmt를 이렇게 교체 */
+/* ═══════════════════════════════════════════════════════════
+   QR ATTENDANCE  ★ 웹캠 QR 스캔 + 수동 출결 혼합 모드
+═══════════════════════════════════════════════════════════ */
 const AttendanceMgmtV2 = ({ students, courses, attendance = [], onRecordQR = async () => true }) => {
   const [course, setCourse] = useState(courses[0]);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [qrType, setQrType] = useState("in");
-  const [records, setRecords] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [loadingId, setLoadingId] = useState(null); // 개별 학생 로딩 상태
+  const [isScanning, setIsScanning] = useState(false); // 📷 카메라 켜짐 상태
 
-  const courseStudents = students.filter(s => s.courseId === course?.id);
-  const todayAttendance = attendance.filter(a => 
-    a.courseId === course?.id && a.attendDate === date
-  );
+  // 현재 선택된 과정의 학생들
+  const courseStudents = students.filter(s => s.cid === course?.id || s.courseId === course?.id);
+  const todayAttendance = attendance.filter(a => a.courseId === course?.id && a.attendDate === date);
 
-  // 훈련생이 QR을 스캔했을 때
-  const handleQRScan = async (studentId) => {
-    setLoading(true);
+  // 📝 출석 처리 함수 (QR 스캔 & 수동 버튼 공통 사용)
+  const handleAttendance = async (studentId) => {
+    setLoadingId(studentId);
     const success = await onRecordQR({
       studentId,
       courseId: course.id,
       type: qrType,
     });
-
-    if (success) {
-      // UI 즉시 반영 (실제 DB는 구독으로 반영됨)
-      setRecords(prev => ({
-        ...prev,
-        [studentId]: {
-          ...(prev[studentId] || {}),
-          [qrType]: new Date().toTimeString().slice(0, 8),
-        },
-      }));
-    }
-    setLoading(false);
+    setLoadingId(null);
+    return success;
   };
+
+  // 📷 카메라 스캐너 작동 로직
+  useEffect(() => {
+    let html5QrcodeScanner;
+    
+    if (isScanning) {
+      html5QrcodeScanner = new Html5QrcodeScanner(
+        "qr-reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        false
+      );
+      
+      html5QrcodeScanner.render(
+        async (decodedText) => {
+          // 스캔 성공 시
+          const scannedId = parseInt(decodedText, 10);
+          console.log("인식된 QR 데이터:", decodedText);
+          
+          // 1. 카메라 끄기
+          html5QrcodeScanner.clear();
+          setIsScanning(false);
+
+          // 2. 학생 찾기 및 출석 처리
+          const targetStudent = courseStudents.find(s => s.id === scannedId);
+          if (targetStudent) {
+            await handleAttendance(scannedId);
+            alert(`✅ [${qrType === 'in' ? '입실' : '퇴실'}] ${targetStudent.name} 훈련생 처리 완료!`);
+          } else {
+            alert(`⚠️ 현재 과정에 등록된 훈련생이 아닙니다.\n(인식된 데이터: ${decodedText})`);
+          }
+        },
+        (errorMessage) => { /* 에러 무시 (바코드 찾는 중 계속 발생하는 로그 방지) */ }
+      );
+    }
+
+    return () => {
+      if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().catch(e => console.error(e));
+      }
+    };
+  }, [isScanning, course, qrType, courseStudents]);
 
   return (
     <div className="page">
       <SectionHead
-        title="📱 QR 출석 관리 (실시간 DB 연동)"
+        title="📱 통합 출결 관리 (QR 스캔 & 수동)"
         sub={`${course?.name} · ${date}`}
       />
 
       {/* 과정 선택 */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {courses.map(c => (
-          <button
-            key={c.id}
-            onClick={() => setCourse(c)}
+          <button key={c.id} onClick={() => setCourse(c)}
             style={{
               padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
               fontSize: 11, fontWeight: 600,
               background: course?.id === c.id ? T.p : T.s3,
               color: course?.id === c.id ? '#fff' : T.mu,
-            }}
-          >
+            }}>
             {c.code}
           </button>
         ))}
@@ -1804,47 +1834,59 @@ const AttendanceMgmtV2 = ({ students, courses, attendance = [], onRecordQR = asy
             fontSize: 12, outline: 'none', background: T.s2,
           }}
         />
-        <span style={{ fontSize: 12, color: T.mu }}>
-          {courseStudents.length}명 · 현재 출석 {todayAttendance.length}명
+        <span style={{ fontSize: 12, color: T.mu, fontWeight: 600 }}>
+          {courseStudents.length}명 중 현재 출석 {todayAttendance.length}명
         </span>
       </Card>
 
-      {/* 입실 / 퇴실 */}
+      {/* 입실 / 퇴실 선택 */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {[
-          { id: 'in', label: '📥 입실', sub: '출석 기록' },
-          { id: 'out', label: '📤 퇴실', sub: '퇴실 기록' },
-        ].map(({ id, label, sub }) => (
-          <button
-            key={id}
-            onClick={() => setQrType(id)}
+          { id: 'in', label: '📥 입실 처리 모드' },
+          { id: 'out', label: '📤 퇴실 처리 모드' },
+        ].map(({ id, label }) => (
+          <button key={id} onClick={() => { setQrType(id); setIsScanning(false); }}
             style={{
               flex: 1, padding: '10px', borderRadius: 10, border: 'none',
               background: qrType === id ? (id === 'in' ? '#2563EB' : T.p) : T.s3,
               color: qrType === id ? '#fff' : T.mu,
-              fontWeight: 700, fontSize: 13, cursor: 'pointer',
-            }}
-          >
+              fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all 0.2s'
+            }}>
             {label}
-            <div style={{ fontSize: 10, marginTop: 2 }}>{sub}</div>
           </button>
         ))}
       </div>
 
-      {/* 훈련생 목록 (QR 스캔 시뮬레이션) */}
+      {/* 📷 카메라 스캔 영역 */}
+      <Card style={{ padding: 20, textAlign: 'center', marginBottom: 16, background: '#F8FAFC' }}>
+        {!isScanning ? (
+          <div style={{ padding: "10px 0" }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>📷</div>
+            <div style={{ fontSize: 13, color: T.tx, marginBottom: 12 }}>
+              스마트폰 QR 스캔이 필요한 경우 아래 버튼을 누르세요.
+            </div>
+            <Btn onClick={() => setIsScanning(true)}>
+              카메라 켜기 / 스캔 시작
+            </Btn>
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, alignItems: "center" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: T.p }}>카메라 스캔 중...</span>
+              <Btn variant="danger" size="sm" onClick={() => setIsScanning(false)}>스캔 취소</Btn>
+            </div>
+            <div id="qr-reader" style={{ width: "100%", maxWidth: "500px", margin: "0 auto", borderRadius: 12, overflow: "hidden" }}></div>
+          </div>
+        )}
+      </Card>
+
+      {/* 훈련생 목록 현황 및 수동 체크 */}
       <Card style={{ overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: T.s2 }}>
-              {['이름', '상태', '입실', '퇴실', 'QR 스캔'].map(h => (
-                <th
-                  key={h}
-                  style={{
-                    padding: '10px 12px', textAlign: h === '이름' ? 'left' : 'center',
-                    fontSize: 11, fontWeight: 700, color: T.mu,
-                    borderBottom: `1px solid ${T.bd}`,
-                  }}
-                >
+              {['이름', '상태', '입실', '퇴실', '수동 처리'].map(h => (
+                <th key={h} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: T.mu, borderBottom: `1px solid ${T.bd}` }}>
                   {h}
                 </th>
               ))}
@@ -1853,53 +1895,49 @@ const AttendanceMgmtV2 = ({ students, courses, attendance = [], onRecordQR = asy
           <tbody>
             {courseStudents.map((s) => {
               const todayRec = todayAttendance.find(a => a.studentId === s.id);
+              const isLoading = loadingId === s.id;
+              
               return (
-                <tr key={s.id} style={{ borderBottom: `1px solid ${T.bd}` }}>
-                  <td style={{ padding: '11px 12px', fontSize: 12, fontWeight: 700 }}>
-                    {s.name}
+                <tr key={s.id} className="row-hover" style={{ borderBottom: `1px solid ${T.bd}` }}>
+                  <td style={{ padding: '11px 12px', fontSize: 12, fontWeight: 700, textAlign: 'center' }}>
+                    {s.name} <span style={{fontSize:9, color:T.mu}}>(ID:{s.id})</span>
                   </td>
                   <td style={{ padding: '11px 12px', textAlign: 'center' }}>
                     {todayRec ? (
-                      <Chip
-                        label={todayRec.status === 'O' ? '출석' : '지각'}
-                        bg={todayRec.status === 'O' ? '#ECFDF5' : '#FFFBEB'}
-                        color={todayRec.status === 'O' ? T.ok : T.warn}
-                      />
-                    ) : (
-                      <span style={{ fontSize: 11, color: T.mu }}>—</span>
-                    )}
+                      <Chip label={todayRec.status === 'O' ? '출석' : '지각'} bg={todayRec.status === 'O' ? '#ECFDF5' : '#FFFBEB'} color={todayRec.status === 'O' ? T.ok : T.warn} />
+                    ) : <span style={{ fontSize: 11, color: T.mu }}>대기중</span>}
                   </td>
-                  <td style={{ padding: '11px 12px', textAlign: 'center', fontSize: 11, color: T.mu }}>
+                  <td style={{ padding: '11px 12px', textAlign: 'center', fontSize: 11, color: T.tx, fontWeight: 600 }}>
                     {todayRec?.inTime || '—'}
                   </td>
-                  <td style={{ padding: '11px 12px', textAlign: 'center', fontSize: 11, color: T.mu }}>
+                  <td style={{ padding: '11px 12px', textAlign: 'center', fontSize: 11, color: T.tx, fontWeight: 600 }}>
                     {todayRec?.outTime || '—'}
                   </td>
-                  <td style={{ padding: '11px 12px', textAlign: 'center' }}>
-                    <Btn
-                      size="sm"
-                      onClick={() => handleQRScan(s.id)}
-                      variant={loading ? 'ghost' : 'primary'}
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    {/* 수동 출석 버튼 */}
+                    <Btn 
+                      size="sm" 
+                      variant={isLoading ? "ghost" : (qrType === 'in' ? "outline" : "primary")}
+                      onClick={() => handleAttendance(s.id)}
+                      style={{ padding: '4px 10px', fontSize: 11 }}
                     >
-                      {qrType === 'in' ? '📥' : '📤'}
+                      {isLoading ? "처리중..." : (qrType === 'in' ? "수동 입실" : "수동 퇴실")}
                     </Btn>
                   </td>
                 </tr>
               );
             })}
+            
+            {courseStudents.length === 0 && (
+              <tr>
+                <td colSpan={5} style={{ padding: 30, textAlign: 'center', fontSize: 12, color: T.mu }}>
+                  이 과정에 등록된 훈련생이 없습니다.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </Card>
-
-      {/* DB ���영 상태 안내 */}
-      <div style={{
-        marginTop: 16, padding: '10px 14px', borderRadius: 8,
-        background: '#FFFBEB', border: '1px solid #FDE68A',
-        fontSize: 11, color: '#92400E',
-      }}>
-        ✅ QR 출석이 <b>Supabase에 실시간 저장</b>됩니다.
-        모든 담당자 화면에서 즉시 반영됩니다.
-      </div>
     </div>
   );
 };

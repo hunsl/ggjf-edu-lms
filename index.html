@@ -4246,17 +4246,23 @@ function App() {
   }, [currentUser, dbReady]);
 
   // ── 훈련생 CRUD ──
+ // ── 훈련생 CRUD ──
   const addStudents = useCallback(async (newOnes) => {
     // ① 로컬 즉시 반영 (임시 음수 ID로 충돌 방지)
     const withTempId = newOnes.map((s, i) => ({ ...s, id: -(Date.now() + i) }));
     setStudents(prev => [...prev, ...withTempId]);
-    // ② DB 저장 항상 시도 (dbReady 무관)
+    
+    // ② DB 저장 시도
     try {
       const { data, error } = await sbInsert("students", newOnes.map(fromStudent));
+      
+      // 🚨 여기가 핵심! DB에서 에러가 나면 팝업창을 띄우고 가짜 데이터를 지웁니다.
       if (error) {
-        console.warn("DB 저장 실패 (로컬 유지):", error.message || error);
+        alert("❌ DB 저장 실패!\n원인: " + JSON.stringify(error));
+        setStudents(prev => prev.filter(s => !withTempId.find(t => t.id === s.id)));
         return;
       }
+
       // DB에서 받은 실제 ID로 임시 ID 교체
       if (data) {
         const dbRows = (Array.isArray(data) ? data : [data]).map(toStudent);
@@ -4267,40 +4273,9 @@ function App() {
         console.log("✅ 훈련생 DB 저장 완료:", dbRows.length, "명");
       }
     } catch(e) {
-      console.warn("DB 저장 오류 (로컬 유지):", e.message);
-    }
-  }, []);
-
-  const updateStudent = useCallback(async (updated) => {
-    setStudents(prev => prev.map(s => s.id===updated.id ? updated : s)); // 즉시 반영
-    try {
-      const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
-      if (error) console.warn("DB 수정 실패 (로컬 유지):", error.message);
-    } catch(e) { console.warn("DB 수정 오류:", e.message); }
-  }, []);
-
-  const deleteStudent = useCallback(async (id) => {
-    if (!window.confirm("이 훈련생을 삭제하시겠습니까?")) return;
-    setStudents(prev => prev.filter(s => s.id!==id)); // 즉시 반영
-    if (dbReady) {
-      const { error } = await sbDelete("students", `id=eq.${id}`);
-      if (error) console.warn("DB 삭제 실패:", error);
-    }
-  }, []);
-
-  const resetData = useCallback(async () => {
-    setStudents([]);
-    if (dbReady) {
-      const { error } = await sbDelete("students", "id=gte.0");
-      if (error) console.warn("DB 초기화 실패:", error);
-    }
-  }, []);
-
-  const resetCoursStudents = useCallback(async (cid) => {
-    setStudents(prev => prev.filter(s => s.cid !== cid));
-    if (dbReady) {
-      const { error } = await sbDelete("students", `cid=eq.${cid}`);
-      if (error) console.warn("DB 과정 초기화 실패:", error);
+      // 네트워크 에러 시 팝업
+      alert("❌ 네트워크 또는 DB 오류: " + e.message);
+      setStudents(prev => prev.filter(s => !withTempId.find(t => t.id === s.id)));
     }
   }, []);
 

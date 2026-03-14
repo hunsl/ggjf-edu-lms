@@ -85,6 +85,25 @@
       { id:3, name:"컴퓨터실", addr:"양주시 남면로 20", capacity:20, equip:"PC 20대·프린터" },
     ];
 
+    const BOOKING_COLORS = ["#EA580C","#C2410C","#7C2D12","#9A3412","#DC2626","#2563EB","#7C3AED","#059669"];
+
+    const SEED_BOOKINGS = [
+      { id:1, roomId:1, courseId:1,  label:"초등 피지컬 코딩", start:"2026-06-01", end:"2026-07-31", color:BOOKING_COLORS[0] },
+      { id:2, roomId:1, courseId:8,  label:"행정회계 사무 OA", start:"2026-03-02", end:"2026-05-29", color:BOOKING_COLORS[1] },
+      { id:3, roomId:3, courseId:4,  label:"ERP·지게차",       start:"2026-03-04", end:"2026-05-30", color:BOOKING_COLORS[3] },
+      { id:4, roomId:2, courseId:10, label:"HACCP 전문인력",   start:"2026-04-01", end:"2026-05-31", color:BOOKING_COLORS[4] },
+    ];
+
+    const INIT_ACCOUNTS = [
+      { id:1, name:"관리자", role:"admin", pw:"admin1234" },
+      { id:2, name:"김담당", role:"staff", pw:"gjf2026" },
+      { id:3, name:"이담당", role:"staff", pw:"gjf2026" },
+    ];
+
+    // Collision-resistant ID generator
+    let _idCounter = Date.now();
+    const genId = () => ++_idCounter;
+
     // COMPONENTS
     const Chip = (props) => {
       const bgColor = props.bg || "#f1f5f9";
@@ -151,6 +170,15 @@
 
     const GStyle = () => (
       <style>{"@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}body,#root{font-family:'Pretendard',-apple-system,sans-serif}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:#f1f5f9}::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:3px}input,select,button,textarea{font-family:inherit}@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes loginBg{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}.page{animation:fadeUp .3s ease both}.row-hover:hover{background:#fff7ed!important}.btn-nav{transition:all .15s}.btn-nav:hover{background:rgba(255,255,255,.12)!important}"}</style>
+    );
+
+    const FLD = ({ label, children, required }) => (
+      <div>
+        <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:4 }}>
+          {label}{required && <span style={{ color:T.danger }}>*</span>}
+        </label>
+        {children}
+      </div>
     );
 
     // DASHBOARD
@@ -372,20 +400,373 @@
       );
     };
 
-    // ROOMS
-    const RoomMgmt = () => {
+    // ROOMS — BookModal, RoomModal, RoomMgmt, RoomGanttChart
+    const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onAudit }) => {
+      const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
+      const empty = { roomId:rooms[0]?.id||1, courseId:courses[0]?.id||1, label:"", start:"", end:"", color:BOOKING_COLORS[0] };
+      const [form, setForm] = useState(init || empty);
+      const set = (k,v) => setForm(p=>({...p,[k]:v}));
+      const isEdit = !!(init?.id);
+
+      const conflicts = (form.start && form.end && form.roomId)
+        ? bookings.filter(b => b.roomId===form.roomId && b.id!==init?.id && b.start<=form.end && b.end>=form.start)
+        : [];
+      const hasConflict = conflicts.length > 0;
+
+      return (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+          <div style={{ background:T.s, borderRadius:16, width:440, maxWidth:"96vw", boxShadow:"0 24px 64px rgba(0,0,0,.28)", overflow:"hidden", animation:"fadeUp .2s ease" }}>
+            <div style={{ background:`linear-gradient(135deg,${T.sb},${T.p})`, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontSize:14, fontWeight:800, color:"#fff" }}>{isEdit?"강의 일정 수정":"강의 일정 추가"}</div>
+              <button onClick={onClose} style={{ width:26, height:26, borderRadius:6, border:"none", background:"rgba(255,255,255,.15)", color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><Icon n="x" s={13}/></button>
+            </div>
+            <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+              <FLD label="강의실">
+                <select value={form.roomId} onChange={e=>set("roomId",+e.target.value)}
+                  style={{...inp, cursor:"pointer", borderColor:hasConflict?T.danger:T.bd, background:hasConflict?"#FEF2F2":T.s2 }}>
+                  {rooms.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </FLD>
+              <FLD label="과정">
+                <select value={form.courseId} onChange={e=>{ const c=courses.find(x=>x.id===+e.target.value); set("courseId",+e.target.value); if(c) set("label",c.name); }}
+                  style={{...inp, cursor:"pointer"}}>
+                  {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </FLD>
+              <FLD label="표시 이름">
+                <input value={form.label||""} onChange={e=>set("label",e.target.value)} placeholder="캘린더에 표시될 이름" style={inp}/>
+              </FLD>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <FLD label="시작일"><input type="date" value={form.start||""} onChange={e=>set("start",e.target.value)} style={{...inp, borderColor:hasConflict?T.danger:T.bd}}/></FLD>
+                <FLD label="종료일"><input type="date" value={form.end||""} onChange={e=>set("end",e.target.value)} style={{...inp, borderColor:hasConflict?T.danger:T.bd}}/></FLD>
+              </div>
+              {hasConflict && (
+                <div style={{ padding:"10px 12px", borderRadius:8, background:"#FEF2F2", border:"1px solid #FECACA", fontSize:11, color:T.danger }}>
+                  <div style={{ fontWeight:700, marginBottom:4 }}>⚠️ 강의실 중복! 아래 일정과 겹칩니다</div>
+                  {conflicts.map(b=>(
+                    <div key={b.id} style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 0", borderTop:"1px solid #FEE2E2" }}>
+                      <div style={{ width:8, height:8, borderRadius:2, background:b.color, flexShrink:0 }}/>
+                      <span style={{ fontWeight:600 }}>{b.label}</span>
+                      <span style={{ color:"#991B1B", marginLeft:"auto" }}>{b.start} ~ {b.end}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:6 }}>색상</label>
+                <div style={{ display:"flex", gap:6 }}>
+                  {BOOKING_COLORS.map(col=>(
+                    <button key={col} type="button" onClick={()=>set("color",col)} style={{ width:24, height:24, borderRadius:6, background:col, border:"none", cursor:"pointer", outline:form.color===col?`3px solid ${col}`:"none", outlineOffset:2 }}/>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`, display:"flex", justifyContent:"space-between", alignItems:"center", background:T.s2 }}>
+              {isEdit
+                ? <Btn variant="danger" size="sm" onClick={()=>{ onAudit&&onAudit("bookings","DELETE",init.id,init,null); setBookings(p=>p.filter(b=>b.id!==init.id)); onClose(); }}>삭제</Btn>
+                : <div/>}
+              <div style={{ display:"flex", gap:8 }}>
+                <Btn variant="ghost" onClick={onClose}>취소</Btn>
+                <Btn variant={hasConflict?"danger":"primary"} onClick={()=>{
+                  if(!form.label||!form.start||!form.end) { alert("이름·시작일·종료일은 필수입니다."); return; }
+                  if(form.start>form.end) { alert("시작일이 종료일보다 늦습니다."); return; }
+                  if(hasConflict && !window.confirm(`⚠️ 중복 예약됩니다.\n\n${conflicts.map(b=>`• ${b.label} (${b.start}~${b.end})`).join("\n")}\n\n그래도 저장하시겠습니까?`)) return;
+                  if(isEdit) {
+                    onAudit&&onAudit("bookings","UPDATE",init.id,init,form);
+                    setBookings(p=>p.map(b=>b.id===init.id?{...form}:b));
+                  } else {
+                    const newBook = {...form, id:genId()};
+                    onAudit&&onAudit("bookings","INSERT",newBook.id,null,newBook);
+                    setBookings(p=>[...p, newBook]);
+                  }
+                  onClose();
+                }}>
+                  <Icon n="check" s={13}/>{hasConflict?"⚠️ 강행 저장":isEdit?"저장":"추가"}
+                </Btn>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const RoomModal = ({ room, onClose, setRooms, onAudit }) => {
+      const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
+      const empty = { name:"", addr:"", capacity:20, equip:"" };
+      const [form, setForm] = useState(room||empty);
+      const set = (k,v) => setForm(p=>({...p,[k]:v}));
+      const isEdit = !!(room?.id);
+      return (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+          <div style={{ background:T.s, borderRadius:16, width:400, maxWidth:"96vw", boxShadow:"0 24px 64px rgba(0,0,0,.28)", overflow:"hidden", animation:"fadeUp .2s ease" }}>
+            <div style={{ background:`linear-gradient(135deg,${T.sb},${T.p})`, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontSize:14, fontWeight:800, color:"#fff" }}>{isEdit?"강의실 수정":"강의실 추가"}</div>
+              <button onClick={onClose} style={{ width:26, height:26, borderRadius:6, border:"none", background:"rgba(255,255,255,.15)", color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><Icon n="x" s={13}/></button>
+            </div>
+            <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:11 }}>
+              <FLD label="강의실 이름" required><input value={form.name||""} onChange={e=>set("name",e.target.value)} placeholder="101호 강의실" style={inp}/></FLD>
+              <FLD label="주소"><input value={form.addr||""} onChange={e=>set("addr",e.target.value)} placeholder="의정부시 청사로 1" style={inp}/></FLD>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <FLD label="수용 인원"><input type="number" value={form.capacity||""} onChange={e=>set("capacity",+e.target.value)} placeholder="20" style={inp}/></FLD>
+                <FLD label="설비"><input value={form.equip||""} onChange={e=>set("equip",e.target.value)} placeholder="PC·빔프로젝터" style={inp}/></FLD>
+              </div>
+            </div>
+            <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`, display:"flex", justifyContent:"space-between", background:T.s2 }}>
+              {isEdit
+                ? <Btn variant="danger" size="sm" onClick={()=>{ onAudit&&onAudit("rooms","DELETE",room.id,room,null); setRooms(p=>p.filter(r=>r.id!==room.id)); onClose(); }}>삭제</Btn>
+                : <div/>}
+              <div style={{ display:"flex", gap:8 }}>
+                <Btn variant="ghost" onClick={onClose}>취소</Btn>
+                <Btn onClick={()=>{
+                  if(!form.name) { alert("강의실 이름은 필수입니다."); return; }
+                  if(isEdit) {
+                    onAudit&&onAudit("rooms","UPDATE",room.id,room,form);
+                    setRooms(p=>p.map(r=>r.id===room.id?{...form}:r));
+                  } else {
+                    const newRoom = {...form, id:genId()};
+                    onAudit&&onAudit("rooms","INSERT",newRoom.id,null,newRoom);
+                    setRooms(p=>[...p,newRoom]);
+                  }
+                  onClose();
+                }}><Icon n="check" s={13}/>{isEdit?"저장":"추가"}</Btn>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const RoomMgmt = ({ rooms, setRooms, bookings, setBookings, courses, onAudit }) => {
+      const today = new Date();
+      const [year, setYear] = useState(today.getFullYear());
+      const [month, setMonth] = useState(today.getMonth());
+      const [showRoomModal, setShowRM] = useState(false);
+      const [showBookModal, setShowBM] = useState(false);
+      const [editRoom, setEditRoom] = useState(null);
+      const [editBook, setEditBook] = useState(null);
+      const [selRoom, setSelRoom] = useState(0);
+      const [viewMode, setViewMode] = useState("calendar"); // "calendar" | "gantt"
+
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+      const weeks = [];
+      let day = 1 - firstDay;
+      while(day <= daysInMonth) {
+        const week = [];
+        for(let d=0; d<7; d++, day++) week.push(day>0 && day<=daysInMonth ? day : null);
+        weeks.push(week);
+      }
+
+      const dateStr = d => `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+
+      const bookingsForDay = (roomId, d) => {
+        if(!d) return [];
+        const ds = dateStr(d);
+        return bookings.filter(b => (roomId===0||b.roomId===roomId) && b.start<=ds && b.end>=ds);
+      };
+
+      const hasConflictOnDay = d => {
+        if(!d) return false;
+        const ds = dateStr(d);
+        const roomIds = [...new Set(bookings.map(b=>b.roomId))];
+        return roomIds.some(rid => bookings.filter(b=>b.roomId===rid && b.start<=ds && b.end>=ds).length >= 2);
+      };
+
+      const prevMonth = () => { if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1); };
+      const nextMonth = () => { if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1); };
+
+      const MONTH_KR = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+      const DAY_KR = ["일","월","화","수","목","금","토"];
+
       return (
         <div className="page">
-          <div style={{ marginBottom: 20 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, color: T.tx }}>강의실 관리</h2>
-            <p style={{ fontSize: 12, color: T.mu, marginTop: 3 }}>월간 캘린더 · 강의실 예약</p>
+          {showBookModal && (
+            <BookModal
+              init={editBook?.id ? editBook : null}
+              onClose={()=>{ setShowBM(false); setEditBook(null); }}
+              rooms={rooms} bookings={bookings} courses={courses}
+              setBookings={setBookings} onAudit={onAudit}/>
+          )}
+          {showRoomModal && (
+            <RoomModal room={editRoom} onClose={()=>{ setShowRM(false); setEditRoom(null); }}
+              setRooms={setRooms} onAudit={onAudit}/>
+          )}
+
+          <div style={{ marginBottom:18, display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:10 }}>
+            <div>
+              <h2 style={{ fontSize:20, fontWeight:800, color:T.tx }}>강의실 관리</h2>
+              <p style={{ fontSize:12, color:T.mu, marginTop:3 }}>월간 캘린더 · 강의실 예약 · Gantt 차트</p>
+            </div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <div style={{ display:"flex", borderRadius:8, overflow:"hidden", border:`1px solid ${T.bd}` }}>
+                {[["calendar","📅 캘린더"],["gantt","📊 Gantt"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>setViewMode(v)} style={{ padding:"6px 14px", border:"none", cursor:"pointer", fontSize:11, fontWeight:700, background:viewMode===v?T.p:T.s2, color:viewMode===v?"#fff":T.mu }}>{l}</button>
+                ))}
+              </div>
+              <Btn variant="ghost" size="sm" onClick={()=>{ setEditRoom(null); setShowRM(true); }}><Icon n="plus" s={13}/> 강의실 추가</Btn>
+              <Btn size="sm" onClick={()=>{ setEditBook({}); setShowBM(true); }}><Icon n="plus" s={13}/> 일정 추가</Btn>
+            </div>
           </div>
-          <Card style={{ padding: 40, textAlign: "center", color: T.mu }}>
-            <Icon n="cal" s={32} style={{ opacity: 0.3, marginBottom: 10 }}/>
-            <p style={{ fontSize: 14, fontWeight: 700, color: T.tx, marginBottom: 5 }}>강의실 관리 모듈</p>
-            <p style={{ fontSize: 12, color: T.mu }}>월간 캘린더와 강의실 예약 기능이 포함됩니다.</p>
+
+          {/* 강의실 필터 탭 */}
+          <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+            <button onClick={()=>setSelRoom(0)} style={{ padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer", fontSize:11, fontWeight:600, background:selRoom===0?T.p:T.s3, color:selRoom===0?"#fff":T.mu }}>전체</button>
+            {rooms.map(r=>(
+              <button key={r.id} onClick={()=>setSelRoom(r.id)} style={{ padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer", fontSize:11, fontWeight:600, background:selRoom===r.id?T.p:T.s3, color:selRoom===r.id?"#fff":T.mu }}>{r.name}</button>
+            ))}
+            {selRoom!==0 && (
+              <button onClick={()=>{ setEditRoom(rooms.find(r=>r.id===selRoom)); setShowRM(true); }}
+                style={{ padding:"5px 10px", borderRadius:16, border:`1px solid ${T.bd}`, background:"transparent", color:T.mu, cursor:"pointer", fontSize:11 }}>
+                <Icon n="edit" s={11}/> 수정
+              </button>
+            )}
+          </div>
+
+          {selRoom!==0 && (() => {
+            const r = rooms.find(x=>x.id===selRoom);
+            return r ? (
+              <Card style={{ padding:"12px 16px", marginBottom:14, display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
+                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  <span style={{ fontSize:18 }}>🏫</span>
+                  <div><div style={{ fontSize:13, fontWeight:800, color:T.tx }}>{r.name}</div><div style={{ fontSize:11, color:T.mu }}>{r.addr}</div></div>
+                </div>
+                <Chip label={`수용 ${r.capacity}명`} bg={T.pbg} color={T.p}/>
+                <div style={{ fontSize:11, color:T.mu }}>{r.equip}</div>
+              </Card>
+            ) : null;
+          })()}
+
+          {viewMode === "gantt" ? (
+            <RoomGanttChart rooms={rooms} bookings={bookings} courses={courses}
+              onEditBook={(b)=>{ setEditBook(b); setShowBM(true); }}/>
+          ) : (
+            <Card style={{ padding:0, overflow:"hidden" }}>
+              <div style={{ padding:"12px 18px", borderBottom:`1px solid ${T.bd}`, display:"flex", alignItems:"center", gap:12 }}>
+                <button onClick={prevMonth} style={{ width:30, height:30, borderRadius:8, border:`1px solid ${T.bd}`, background:T.s2, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+                <div style={{ fontSize:16, fontWeight:800, color:T.tx, minWidth:120, textAlign:"center" }}>{year}년 {MONTH_KR[month]}</div>
+                <button onClick={nextMonth} style={{ width:30, height:30, borderRadius:8, border:`1px solid ${T.bd}`, background:T.s2, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+                <button onClick={()=>{ setYear(today.getFullYear()); setMonth(today.getMonth()); }}
+                  style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${T.bd}`, background:T.s2, cursor:"pointer", fontSize:11, color:T.mu, marginLeft:4 }}>오늘</button>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`1px solid ${T.bd}` }}>
+                {DAY_KR.map((d,i)=>(
+                  <div key={d} style={{ padding:"8px 0", textAlign:"center", fontSize:12, fontWeight:700, color:i===0?"#EF4444":i===6?"#3B82F6":T.mu, background:T.s2 }}>{d}</div>
+                ))}
+              </div>
+              {weeks.map((week, wi)=>(
+                <div key={wi} style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`1px solid ${T.bd}` }}>
+                  {week.map((d, di)=>{
+                    const bdays = bookingsForDay(selRoom, d);
+                    const conflict = hasConflictOnDay(d);
+                    const isToday = d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                    return (
+                      <div key={di} onClick={()=>{ if(d){ setEditBook({ roomId:selRoom||rooms[0]?.id||1, start:dateStr(d), end:dateStr(d) }); setShowBM(true); } }}
+                        style={{ minHeight:80, padding:6, borderRight:`1px solid ${T.bd}`, background:d?T.s:"#FAFAFA", cursor:d?"pointer":"default", position:"relative" }}>
+                        {d && (
+                          <>
+                            <div style={{ fontSize:11, fontWeight:isToday?900:600, color:isToday?T.p:di===0?"#EF4444":di===6?"#3B82F6":T.tx, marginBottom:3 }}>{d}</div>
+                            {conflict && <div style={{ fontSize:8, color:T.danger, fontWeight:700 }}>⚠️ 중복</div>}
+                            {bdays.slice(0,2).map(b=>(
+                              <div key={b.id} onClick={e=>{ e.stopPropagation(); setEditBook(b); setShowBM(true); }}
+                                style={{ background:b.color, color:"#fff", fontSize:9, fontWeight:600, borderRadius:3, padding:"2px 4px", marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer" }}>
+                                {b.label}
+                              </div>
+                            ))}
+                            {bdays.length > 2 && <div style={{ fontSize:9, color:T.mu }}>+{bdays.length-2}개</div>}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </Card>
+          )}
+
+          {/* 범례 */}
+          <Card style={{ padding:12, marginTop:14, display:"flex", gap:16, flexWrap:"wrap", alignItems:"center" }}>
+            <span style={{ fontSize:11, fontWeight:600, color:T.tx }}>📌 범례</span>
+            {BOOKING_COLORS.map((c,i)=>(
+              <div key={i} style={{ display:"flex", gap:5, alignItems:"center" }}>
+                <div style={{ width:14, height:14, borderRadius:3, background:c }}/>
+                <span style={{ fontSize:10, color:T.mu }}>{COURSES[i]?.name?.slice(0,8) || "과정"}</span>
+              </div>
+            ))}
+            <div style={{ display:"flex", gap:5, alignItems:"center" }}>
+              <div style={{ width:14, height:14, borderRadius:3, border:`2px solid ${T.danger}`, background:T.s3 }}/>
+              <span style={{ fontSize:10, color:T.mu }}>중복 예약</span>
+            </div>
           </Card>
         </div>
+      );
+    };
+
+    // GANTT CHART
+    const RoomGanttChart = ({ rooms, bookings, courses, onEditBook }) => {
+      const today = new Date();
+      const [year, setYear] = useState(today.getFullYear());
+      const [month, setMonth] = useState(today.getMonth());
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+      const MONTH_KR = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+
+      const dateStr = d => `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+
+      const prevMonth = () => { if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1); };
+      const nextMonth = () => { if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1); };
+
+      return (
+        <Card style={{ overflow:"auto", padding:0 }}>
+          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.bd}`, display:"flex", alignItems:"center", gap:12, background:T.s2 }}>
+            <button onClick={prevMonth} style={{ padding:"5px 10px", borderRadius:6, border:"none", background:T.pbg, color:T.p, cursor:"pointer", fontSize:13 }}>◀</button>
+            <span style={{ fontSize:14, fontWeight:800, color:T.tx, minWidth:120, textAlign:"center" }}>{year}년 {MONTH_KR[month]}</span>
+            <button onClick={nextMonth} style={{ padding:"5px 10px", borderRadius:6, border:"none", background:T.pbg, color:T.p, cursor:"pointer", fontSize:13 }}>▶</button>
+            <button onClick={()=>{ setYear(today.getFullYear()); setMonth(today.getMonth()); }}
+              style={{ padding:"5px 12px", borderRadius:6, border:"none", background:T.s3, color:T.mu, cursor:"pointer", fontSize:11, marginLeft:"auto" }}>오늘</button>
+          </div>
+          <div style={{ minWidth: 120 + daysInMonth * 30, padding:14 }}>
+            {/* 날짜 헤더 */}
+            <div style={{ display:"grid", gridTemplateColumns:`120px repeat(${daysInMonth}, 30px)`, gap:1, marginBottom:8 }}>
+              <div style={{ fontWeight:700, color:T.mu, fontSize:10, padding:"4px 6px" }}>강의실</div>
+              {Array.from({length:daysInMonth}).map((_,i)=>{
+                const ds = dateStr(i+1);
+                const dow = new Date(year, month, i+1).getDay();
+                const isToday = ds === `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+                return (
+                  <div key={i} style={{ textAlign:"center", fontSize:9, fontWeight:isToday?900:600, color:isToday?T.p:dow===0?"#EF4444":dow===6?"#3B82F6":T.mu, padding:"4px 0", background:isToday?T.pbg:"transparent", borderRadius:4 }}>
+                    {i+1}
+                  </div>
+                );
+              })}
+            </div>
+            {/* 강의실별 행 */}
+            {rooms.map(room=>(
+              <div key={room.id} style={{ display:"grid", gridTemplateColumns:`120px repeat(${daysInMonth}, 30px)`, gap:1, marginBottom:4 }}>
+                <div style={{ fontWeight:600, color:T.tx, fontSize:11, padding:"6px 6px", display:"flex", alignItems:"center", background:T.s2, borderRadius:6 }}>
+                  {room.name.slice(0,7)}
+                </div>
+                {Array.from({length:daysInMonth}).map((_,dayIdx)=>{
+                  const ds = dateStr(dayIdx+1);
+                  const dayBooks = bookings.filter(b => b.roomId===room.id && b.start<=ds && b.end>=ds);
+                  const conflict = dayBooks.length > 1;
+                  return (
+                    <div key={dayIdx}
+                      onClick={()=>{ if(dayBooks.length>0 && onEditBook) onEditBook(dayBooks[0]); }}
+                      title={conflict?"⚠️ 중복 예약!":dayBooks[0]?.label||""}
+                      style={{ height:28, borderRadius:4, background:dayBooks.length>0?dayBooks[0].color:T.s2, border:conflict?`2px solid ${T.danger}`:"none", cursor:dayBooks.length>0?"pointer":"default", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+                      {dayBooks.length>0 && (
+                        <span style={{ fontSize:8, color:"#fff", fontWeight:600, padding:"0 2px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {conflict?"⚠️":dayBooks[0].label.slice(0,4)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </Card>
       );
     };
 
@@ -689,6 +1070,247 @@
       );
     };
 
+    // AUDIT LOG VIEWER
+    const AuditLogViewer = ({ auditLogs }) => {
+      const [filter, setFilter] = useState({ table:"all", action:"all", days:30 });
+      const [diffLog, setDiffLog] = useState(null);
+
+      const cutoff = new Date(Date.now() - filter.days * 86400000).toISOString();
+      const visible = auditLogs.filter(l => {
+        if(l.changed_at < cutoff) return false;
+        if(filter.table !== "all" && l.table_name !== filter.table) return false;
+        if(filter.action !== "all" && l.action !== filter.action) return false;
+        return true;
+      });
+
+      const sel = { padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:11, outline:"none", background:T.s2, cursor:"pointer", color:T.tx };
+
+      const actionColor = a => a==="INSERT"?"#ECFDF5":a==="UPDATE"?"#FFFBEB":"#FEF2F2";
+      const actionText  = a => a==="INSERT"?T.ok:a==="UPDATE"?T.warn:T.danger;
+
+      return (
+        <div>
+          {diffLog && (
+            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}
+              onClick={()=>setDiffLog(null)}>
+              <div style={{ background:T.s, borderRadius:16, width:520, maxWidth:"96vw", maxHeight:"80vh", overflow:"hidden", boxShadow:"0 24px 64px rgba(0,0,0,.3)", animation:"fadeUp .2s ease" }}
+                onClick={e=>e.stopPropagation()}>
+                <div style={{ background:`linear-gradient(135deg,${T.sb},${T.p})`, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ fontSize:14, fontWeight:800, color:"#fff" }}>📋 변경 상세</div>
+                  <button onClick={()=>setDiffLog(null)} style={{ width:26, height:26, borderRadius:6, border:"none", background:"rgba(255,255,255,.15)", color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><Icon n="x" s={13}/></button>
+                </div>
+                <div style={{ padding:"16px 20px", overflowY:"auto", maxHeight:"calc(80vh - 56px)" }}>
+                  <div style={{ marginBottom:12 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:T.mu, marginBottom:4 }}>변경 전 (OLD)</div>
+                    <pre style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8, padding:"10px 12px", fontSize:11, color:T.tx, overflowX:"auto", whiteSpace:"pre-wrap", wordBreak:"break-all" }}>
+                      {diffLog.old_values ? JSON.stringify(diffLog.old_values, null, 2) : "(없음)"}
+                    </pre>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, color:T.mu, marginBottom:4 }}>변경 후 (NEW)</div>
+                    <pre style={{ background:"#ECFDF5", border:"1px solid #A7F3D0", borderRadius:8, padding:"10px 12px", fontSize:11, color:T.tx, overflowX:"auto", whiteSpace:"pre-wrap", wordBreak:"break-all" }}>
+                      {diffLog.new_values ? JSON.stringify(diffLog.new_values, null, 2) : "(없음)"}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <h3 style={{ fontSize:16, fontWeight:800, color:T.tx, marginBottom:12 }}>📋 감사 로그</h3>
+          <Card style={{ padding:"12px 16px", marginBottom:14, display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+            <select value={filter.table} onChange={e=>setFilter({...filter, table:e.target.value})} style={sel}>
+              <option value="all">전체 테이블</option>
+              <option value="students">훈련생</option>
+              <option value="courses">과정</option>
+              <option value="attendance">출석</option>
+              <option value="instructors">강사</option>
+              <option value="rooms">강의실</option>
+              <option value="bookings">예약</option>
+            </select>
+            <select value={filter.action} onChange={e=>setFilter({...filter, action:e.target.value})} style={sel}>
+              <option value="all">전체 작업</option>
+              <option value="INSERT">추가</option>
+              <option value="UPDATE">수정</option>
+              <option value="DELETE">삭제</option>
+            </select>
+            <input type="number" min="1" max="365" value={filter.days}
+              onChange={e=>setFilter({...filter, days:Math.max(1,parseInt(e.target.value)||1)})}
+              style={{...sel, width:80}} placeholder="일 수"/>
+            <span style={{ fontSize:11, color:T.mu, marginLeft:"auto" }}>총 {visible.length}건</span>
+          </Card>
+          <Card style={{ overflow:"hidden" }}>
+            {visible.length === 0 ? (
+              <div style={{ padding:40, textAlign:"center", color:T.mu, fontSize:13 }}>
+                {auditLogs.length===0 ? "아직 기록된 감사 로그가 없습니다.\n강의실 예약·계정 변경 시 자동으로 기록됩니다." : "필터 조건에 맞는 로그가 없습니다."}
+              </div>
+            ) : (
+              <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                <thead>
+                  <tr style={{ background:T.s2 }}>
+                    {["시간","사용자","테이블","작업","설명",""].map(h=>(
+                      <th key={h} style={{ padding:"10px 12px", textAlign:"left", fontSize:11, fontWeight:700, borderBottom:`1px solid ${T.bd}`, color:T.mu }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map(log=>(
+                    <tr key={log.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
+                      <td style={{ padding:"10px 12px", fontSize:11, color:T.mu, whiteSpace:"nowrap" }}>
+                        {new Date(log.changed_at).toLocaleString("ko-KR")}
+                      </td>
+                      <td style={{ padding:"10px 12px", fontSize:12, fontWeight:600, color:T.tx }}>{log.user_name}</td>
+                      <td style={{ padding:"10px 12px" }}><Chip label={log.table_name} bg={T.p+"15"} color={T.p}/></td>
+                      <td style={{ padding:"10px 12px" }}>
+                        <Chip label={log.action} bg={actionColor(log.action)} color={actionText(log.action)}/>
+                      </td>
+                      <td style={{ padding:"10px 12px", fontSize:11, color:T.mu, maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{log.description}</td>
+                      <td style={{ padding:"10px 12px", textAlign:"center" }}>
+                        <button onClick={()=>setDiffLog(log)} style={{ fontSize:10, color:T.p, cursor:"pointer", border:"none", background:"none", fontWeight:600 }}>상세보기</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+        </div>
+      );
+    };
+
+    // ACCOUNT TAB (계정 관리 + 감사 로그)
+    const AccountTab = ({ accounts, setAccounts, currentUser, auditLogs, onAudit }) => {
+      const [editIdx, setEditIdx] = useState(null);
+      const [newPw, setNewPw] = useState("");
+      const [newPw2, setNewPw2] = useState("");
+      const [pwErr, setPwErr] = useState("");
+      const [addForm, setAddForm] = useState({ name:"", role:"staff", pw:"", pw2:"" });
+      const [showAdd, setShowAdd] = useState(false);
+      const [subTab, setSubTab] = useState("accounts");
+
+      const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2, fontFamily:"inherit" };
+
+      const savePw = (idx) => {
+        if(newPw.length < 4) { setPwErr("비밀번호는 4자 이상이어야 합니다."); return; }
+        if(newPw !== newPw2)  { setPwErr("비밀번호가 일치하지 않습니다."); return; }
+        const updated = accounts.map((a,i) => i===idx ? {...a, pw:newPw} : a);
+        onAudit("accounts","UPDATE",accounts[idx].id, accounts[idx], {...accounts[idx],pw:"[변경됨]"});
+        setAccounts(updated);
+        setEditIdx(null); setNewPw(""); setNewPw2(""); setPwErr("");
+      };
+
+      const delAccount = (idx) => {
+        if(accounts[idx].id === currentUser.id) { alert("현재 로그인 중인 계정은 삭제할 수 없습니다."); return; }
+        if(!window.confirm(`"${accounts[idx].name}" 계정을 삭제하시겠습니까?`)) return;
+        onAudit("accounts","DELETE",accounts[idx].id,accounts[idx],null);
+        setAccounts(accounts.filter((_,i)=>i!==idx));
+      };
+
+      const addAccount = () => {
+        if(!addForm.name.trim()) { alert("이름을 입력하세요."); return; }
+        if(addForm.pw.length < 4) { alert("비밀번호는 4자 이상"); return; }
+        if(addForm.pw !== addForm.pw2) { alert("비밀번호 불일치"); return; }
+        const newAcc = { id:genId(), name:addForm.name.trim(), role:addForm.role, pw:addForm.pw };
+        onAudit("accounts","INSERT",newAcc.id,null,{...newAcc,pw:"[설정됨]"});
+        setAccounts(p=>[...p,newAcc]);
+        setAddForm({ name:"", role:"staff", pw:"", pw2:"" });
+        setShowAdd(false);
+      };
+
+      const roleColor = r => r==="admin"?T.p:T.ok;
+      const roleLabel = r => r==="admin"?"관리자":"담당자";
+
+      return (
+        <div className="page">
+          <div style={{ marginBottom:18 }}>
+            <h2 style={{ fontSize:20, fontWeight:800, color:T.tx }}>계정 관리</h2>
+            <p style={{ fontSize:12, color:T.mu, marginTop:3 }}>사용자 계정 · 비밀번호 · 감사 로그</p>
+          </div>
+
+          {/* 서브탭 */}
+          <div style={{ display:"flex", gap:0, marginBottom:18, borderBottom:`2px solid ${T.bd}` }}>
+            {[["accounts","👤 계정 관리"],["audit","📋 감사 로그"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setSubTab(v)} style={{
+                padding:"10px 20px", border:"none", cursor:"pointer", fontSize:13, fontWeight:700,
+                background:"transparent", color:subTab===v?T.p:T.mu,
+                borderBottom:subTab===v?`2px solid ${T.p}`:"2px solid transparent", marginBottom:-2 }}>{l}</button>
+            ))}
+          </div>
+
+          {subTab === "accounts" ? (
+            <div style={{ maxWidth:600 }}>
+              <div style={{ padding:"10px 14px", borderRadius:8, background:"#FFF7ED", border:`1px solid ${T.pl}60`, fontSize:11, color:"#92400E", marginBottom:16 }}>
+                🔒 <b>비밀번호는 4자 이상</b>으로 설정하세요. 실제 운영 시 백엔드 서버 인증으로 교체를 권장합니다.
+              </div>
+              {accounts.map((acc, idx)=>(
+                <Card key={acc.id} style={{ padding:"14px 16px", marginBottom:10, border:`1px solid ${editIdx===idx?T.p:T.bd}` }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:editIdx===idx?12:0 }}>
+                    <div style={{ width:36, height:36, borderRadius:10, flexShrink:0, background:`${roleColor(acc.role)}18`, color:roleColor(acc.role), display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:900 }}>{acc.name[0]}</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:T.tx, display:"flex", alignItems:"center", gap:7 }}>
+                        {acc.name}
+                        {acc.id===currentUser.id && <span style={{ fontSize:9, background:T.pbg, color:T.p, padding:"1px 6px", borderRadius:4, fontWeight:700 }}>현재</span>}
+                      </div>
+                      <div style={{ display:"flex", gap:5, marginTop:3 }}>
+                        <span style={{ fontSize:10, background:`${roleColor(acc.role)}15`, color:roleColor(acc.role), padding:"1px 7px", borderRadius:4, fontWeight:700 }}>{roleLabel(acc.role)}</span>
+                        <span style={{ fontSize:10, color:T.mu }}>비밀번호: {"•".repeat(Math.min(acc.pw.length,8))}</span>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:5 }}>
+                      <button onClick={()=>{ setEditIdx(editIdx===idx?null:idx); setNewPw(""); setNewPw2(""); setPwErr(""); }}
+                        style={{ padding:"5px 10px", borderRadius:7, border:`1px solid ${T.bd}`, background:"transparent", cursor:"pointer", fontSize:11, fontWeight:600, color:editIdx===idx?T.p:T.mu }}>
+                        {editIdx===idx?"닫기":"비밀번호 변경"}
+                      </button>
+                      {acc.id !== currentUser.id && (
+                        <button onClick={()=>delAccount(idx)} style={{ padding:"5px 10px", borderRadius:7, border:"1px solid #FECACA", background:"transparent", cursor:"pointer", fontSize:11, fontWeight:600, color:T.danger }}>삭제</button>
+                      )}
+                    </div>
+                  </div>
+                  {editIdx===idx && (
+                    <div style={{ display:"flex", flexDirection:"column", gap:8, padding:"12px 14px", borderRadius:8, background:"#fff", border:`1px solid ${T.bd}` }}>
+                      <input type="password" value={newPw} onChange={e=>{ setNewPw(e.target.value); setPwErr(""); }} placeholder="새 비밀번호 (4자 이상)" style={inp}/>
+                      <input type="password" value={newPw2} onChange={e=>{ setNewPw2(e.target.value); setPwErr(""); }} placeholder="새 비밀번호 확인" style={inp}/>
+                      {pwErr && <div style={{ fontSize:11, color:T.danger }}>⚠️ {pwErr}</div>}
+                      <div style={{ display:"flex", gap:7, justifyContent:"flex-end" }}>
+                        <Btn variant="ghost" size="sm" onClick={()=>{ setEditIdx(null); setNewPw(""); setNewPw2(""); setPwErr(""); }}>취소</Btn>
+                        <Btn size="sm" onClick={()=>savePw(idx)}><Icon n="check" s={12}/> 변경 저장</Btn>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              ))}
+              {showAdd ? (
+                <Card style={{ padding:"14px 16px", border:`1.5px dashed ${T.p}`, background:T.pbg }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:T.p, marginBottom:10 }}>새 계정 추가</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8 }}>
+                      <input value={addForm.name} onChange={e=>setAddForm(p=>({...p,name:e.target.value}))} placeholder="이름 (예: 박담당)" style={inp}/>
+                      <select value={addForm.role} onChange={e=>setAddForm(p=>({...p,role:e.target.value}))} style={{...inp, cursor:"pointer"}}>
+                        <option value="staff">담당자</option>
+                        <option value="admin">관리자</option>
+                      </select>
+                    </div>
+                    <input type="password" value={addForm.pw} onChange={e=>setAddForm(p=>({...p,pw:e.target.value}))} placeholder="비밀번호 (4자 이상)" style={inp}/>
+                    <input type="password" value={addForm.pw2} onChange={e=>setAddForm(p=>({...p,pw2:e.target.value}))} placeholder="비밀번호 확인" style={inp}/>
+                    <div style={{ display:"flex", gap:7, justifyContent:"flex-end" }}>
+                      <Btn variant="ghost" size="sm" onClick={()=>setShowAdd(false)}>취소</Btn>
+                      <Btn size="sm" onClick={addAccount}><Icon n="plus" s={12}/> 추가</Btn>
+                    </div>
+                  </div>
+                </Card>
+              ) : (
+                <button onClick={()=>setShowAdd(true)}
+                  style={{ width:"100%", padding:"12px 0", borderRadius:10, border:`2px dashed ${T.bd}`, background:"transparent", cursor:"pointer", fontSize:12, fontWeight:700, color:T.mu, display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+                  <Icon n="plus" s={14}/> 새 담당자 계정 추가
+                </button>
+              )}
+            </div>
+          ) : (
+            <AuditLogViewer auditLogs={auditLogs}/>
+          )}
+        </div>
+      );
+    };
+
     // APP
     const NAV_ITEMS = [
       { id: "dash", label: "대시보드", icon: "dash" },
@@ -699,6 +1321,7 @@
       { id: "attendance", label: "출결 관리", icon: "check" },
       { id: "completion", label: "수료 관리", icon: "check" },
       { id: "cert", label: "증명서 발급", icon: "dl" },
+      { id: "account", label: "계정 관리", icon: "user" },
     ];
 
     function App() {
@@ -710,9 +1333,29 @@
       const [students] = useState(SEED_STUDENTS);
       const [courses] = useState(COURSES);
       const [instructors] = useState(SEED_INSTRUCTORS);
+      const [rooms, setRooms] = useState(SEED_ROOMS);
+      const [bookings, setBookings] = useState(SEED_BOOKINGS);
+      const [accounts, setAccounts] = useState(INIT_ACCOUNTS);
+      const [auditLogs, setAuditLogs] = useState([]);
+
+      const logAudit = (tableName, action, recordId, oldData, newData) => {
+        const desc = `${tableName} ${action}: ID ${recordId}`;
+        setAuditLogs(prev => [{
+          id: genId(),
+          user_id: currentUser?.id,
+          user_name: currentUser?.name || "-",
+          table_name: tableName,
+          action: action,
+          record_id: recordId,
+          old_values: oldData,
+          new_values: newData,
+          description: desc,
+          changed_at: new Date().toISOString(),
+        }, ...prev]);
+      };
 
       if (!currentUser) {
-        return <LoginScreen onLogin={user => { sessionStorage.setItem("gjf_user", JSON.stringify(user)); setCurrentUser(user); }}/>;
+        return <LoginScreen accounts={accounts} onLogin={user => { sessionStorage.setItem("gjf_user", JSON.stringify(user)); setCurrentUser(user); }}/>;
       }
 
       const renderPage = () => {
@@ -721,10 +1364,11 @@
           case "courses": return <CourseList courses={courses}/>;
           case "students": return <StudentMgmt students={students} courses={courses}/>;
           case "instructors": return <InstructorMgmt instructors={instructors} courses={courses}/>;
-          case "rooms": return <RoomMgmt/>;
+          case "rooms": return <RoomMgmt rooms={rooms} setRooms={setRooms} bookings={bookings} setBookings={setBookings} courses={courses} onAudit={logAudit}/>;
           case "attendance": return <AttendanceMgmt students={students} courses={courses}/>;
           case "completion": return <CompletionMgmt students={students} courses={courses}/>;
           case "cert": return <CertMgmt students={students} courses={courses}/>;
+          case "account": return <AccountTab accounts={accounts} setAccounts={setAccounts} currentUser={currentUser} auditLogs={auditLogs} onAudit={logAudit}/>;
           default: return null;
         }
       };
@@ -793,11 +1437,7 @@
     }
 
     const LoginScreen = (props) => {
-      const accounts = [
-        { id: 1, name: "관리자", pw: "admin1234" },
-        { id: 2, name: "김담당", pw: "gjf2026" },
-        { id: 3, name: "이담당", pw: "gjf2026" },
-      ];
+      const accounts = props.accounts || INIT_ACCOUNTS;
       const [selId, setSelId] = useState(1);
       const [pw, setPw] = useState("");
       const [error, setError] = useState("");

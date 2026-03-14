@@ -4169,18 +4169,17 @@ function App() {
   }, []);
 
   // ── 로그인 전이면 LoginScreen 표시 ──
-  if (!currentUser) {
-    return (
-      <>
-        <GStyle/>
-        <LoginScreen accounts={accounts} onLogin={user => {
-          sessionStorage.setItem("gjf_user", JSON.stringify(user));
-          setCurrentUser(user);
-          setPiDismissed(false);
-        }}/>
-      </>
-    );
-  }
+if (!currentUser) {
+  return (
+    <>
+      <GStyle/>
+      <LoginScreenDB onLogin={user => {
+        setCurrentUser(user);
+        setPiDismissed(false);
+      }}/>
+    </>
+  );
+}
 
   // ── DB 로딩 중에도 UI 표시 (백그라운드 로드) ──
 
@@ -4218,14 +4217,13 @@ function App() {
           onClose={()=>setShowDataMgr(false)}
         />
       )}
-      {showAccMgr && currentUser.role==="admin" && (
-        <AccountMgmt
-          accounts={accounts}
-          currentUser={currentUser}
-          onSave={updated => { setAccounts(updated); setCurrentUser(prev=>updated.find(a=>a.id===prev.id)||prev); }}
-          onClose={()=>setShowAccMgr(false)}
-        />
-      )}
+      // ✅ 이렇게 변경
+{showAccMgr && currentUser.role==="admin" && (
+  <AccountMgmtDB
+    currentUser={currentUser}
+    onClose={()=>setShowAccMgr(false)}
+  />
+)}
 
       <div style={{ display:"flex", height:"100vh",
         background:"linear-gradient(160deg,#FED7AA 0%,#FDBA74 12%,#FFF7ED 45%,#F1F5F9 75%,#FFEDD5 100%)",
@@ -4396,6 +4394,854 @@ function App() {
   );
 }
 
+// 기존 코드의 Supabase API 섹션 다음에 추가
+
+/* ═══════════════════════════════════════════════════════════
+   🔐 계정 관리 API (Supabase 연동)
+═══════════════════════════════════════════════════════════ */
+
+// 계정 관련 함수들
+const accountAPI = {
+  login: async (username, password) => {
+    try {
+      const { data: user, error: userError } = await sbGet(
+        'users',
+        `username=eq.${username}&is_active=eq.true`
+      );
+
+      if (userError || !user || user.length === 0) {
+        return { data: null, error: '사용자를 찾을 수 없습니다.' };
+      }
+
+      if (user[0].password_hash !== password) {
+        return { data: null, error: '비밀번호가 올바르지 않습니다.' };
+      }
+
+      const token = `${user[0].id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      await sbInsert('user_sessions', [{
+        user_id: user[0].id,
+        token: token,
+        expires_at: expiresAt,
+        ip_address: 'browser',
+        user_agent: navigator.userAgent,
+      }]);
+
+      await sbUpdate('users', `id=eq.${user[0].id}`, {
+        last_login: new Date().toISOString(),
+      });
+
+      return {
+        data: {
+          id: user[0].id,
+          username: user[0].username,
+          name: user[0].name,
+          role: user[0].role,
+          email: user[0].email,
+          token: token,
+        },
+        error: null,
+      };
+    } catch (e) {
+      return { data: null, error: e.message };
+    }
+  },
+
+  logout: async (token) => {
+    const { error } = await sbDelete('user_sessions', `token=eq.${token}`);
+    return { error };
+  },
+
+  verifySession: async (token) => {
+    const { data, error } = await sbGet(
+      'user_sessions',
+      `token=eq.${token}&expires_at=gte.${new Date().toISOString()}`
+    );
+
+    if (error || !data || data.length === 0) {
+      return { data: null, error: '세션이 만료되었습니다.' };
+    }
+
+    const { data: user } = await sbGet('users', `id=eq.${data[0].user_id}`);
+    return { data: user[0], error: null };
+  },
+
+  getUsers: async () => {
+    const { data, error } = await sbGet('users', 'select=id,username,name,role,email,is_active,last_login&order=id');
+    return { data, error };
+  },
+
+  createUser: async (username, name, role, email, password) => {
+    const { data, error } = await sbInsert('users', [{
+      username,
+      name,
+      role,
+      email,
+      password_hash: password,
+      is_active: true,
+    }]);
+
+    if (error) return { data: null, error };
+    return { data: data[0], error: null };
+  },
+
+  updateUser: async (userId, updates) => {
+    const { data, error } = await sbUpdate('users', `id=eq.${userId}`, {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    });
+    return { data, error };
+  },
+
+  changePassword: async (userId, newPassword) => {
+    const { error } = await sbUpdate('users', `id=eq.${userId}`, {
+      password_hash: newPassword,
+      updated_at: new Date().toISOString(),
+    });
+    return { error };
+  },
+
+  deactivateUser: async (userId) => {
+    const { error } = await sbUpdate('users', `id=eq.${userId}`, {
+      is_active: false,
+    });
+    if (!error) {
+      await sbDelete('user_sessions', `user_id=eq.${userId}`);
+    }
+    return { error };
+  },
+
+  deleteUser: async (userId) => {
+    await sbDelete('user_sessions', `user_id=eq.${userId}`);
+    const { error } = await sbDelete('users', `id=eq.${userId}`);
+    return { error };
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════
+   개선된 LoginScreen (DB 기반)
+═══════════════════════════════════════════════════════════ */
+const LoginScreenDB = ({ onLogin }) => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [shaking, setShaking] = useState(false);
+  const [showNotice, setShowNotice] = useState(false);
+
+  const handleLogin = async () => {
+    if (!agreed) {
+      setError("개인정보 수집·이용 동의가 필요합니다.");
+      return;
+    }
+    if (!username.trim() || !password.trim()) {
+      setError("아이디와 비밀번호를 입력하세요.");
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
+    setLoading(true);
+    const { data, error: loginError } = await accountAPI.login(username, password);
+
+    if (loginError) {
+      setError(loginError);
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      setPassword("");
+      setLoading(false);
+      return;
+    }
+
+    sessionStorage.setItem("gjf_user", JSON.stringify(data));
+    sessionStorage.setItem("gjf_token", data.token);
+    onLogin(data);
+    setLoading(false);
+  };
+
+  const inp = {
+    width: "100%",
+    padding: "11px 14px",
+    border: `1.5px solid ${error ? T.danger : T.bd}`,
+    borderRadius: 10,
+    fontSize: 14,
+    outline: "none",
+    color: T.tx,
+    background: "#fff",
+    fontFamily: "inherit",
+    transition: "border-color .15s",
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "linear-gradient(135deg,#7C2D12 0%,#EA580C 40%,#F97316 70%,#FED7AA 100%)",
+      backgroundSize: "400% 400%",
+      animation: "loginBg 12s ease infinite",
+      fontFamily: "'Pretendard',-apple-system,sans-serif",
+      padding: 20,
+      animation: shaking ? "shake .4s ease" : "none",
+    }}>
+      <div style={{ width: "100%", maxWidth: 440, animation: "fadeUp .5s ease" }}>
+
+        {/* 로고 */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{
+            width: 64,
+            height: 64,
+            borderRadius: 18,
+            background: "rgba(255,255,255,.2)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            margin: "0 auto 14px",
+            boxShadow: "0 8px 32px rgba(0,0,0,.2)",
+            fontSize: 28,
+          }}>
+            🎓
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#fff", letterSpacing: "-.3px" }}>
+            경기북부 직업교육
+          </div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", marginTop: 4 }}>
+            학사관리시스템 v2026
+          </div>
+        </div>
+
+        {/* 로그인 카드 */}
+        <div style={{
+          background: "rgba(255,255,255,.96)",
+          borderRadius: 20,
+          padding: "30px 32px",
+          boxShadow: "0 24px 64px rgba(0,0,0,.25)",
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: T.tx, marginBottom: 22, textAlign: "center" }}>
+            🔐 담당자 로그인
+          </div>
+
+          {/* 아이디 */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: T.mu, display: "block", marginBottom: 6 }}>
+              아이디
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => { setUsername(e.target.value); setError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
+              placeholder="사용자명 입력"
+              style={inp}
+            />
+          </div>
+
+          {/* 비밀번호 */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: T.mu, display: "block", marginBottom: 6 }}>
+              비밀번호
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                type={showPw ? "text" : "password"}
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
+                placeholder="비밀번호를 입력하세요"
+                style={{ ...inp, paddingRight: 44 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                style={{
+                  position: "absolute",
+                  right: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  color: T.mu,
+                  fontSize: 16,
+                  padding: 0,
+                }}
+              >
+                {showPw ? "🙈" : "👁️"}
+              </button>
+            </div>
+            {error && (
+              <div style={{ marginTop: 6, fontSize: 11, color: T.danger, fontWeight: 600 }}>
+                ⚠️ {error}
+              </div>
+            )}
+          </div>
+
+          {/* 개인정보 동의 */}
+          <div style={{
+            marginBottom: 20,
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: "#FFFBEB",
+            border: `1px solid #FDE68A`,
+          }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <input
+                type="checkbox"
+                id="piAgree"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                style={{ marginTop: 2, accentColor: T.p, width: 15, height: 15, cursor: "pointer", flexShrink: 0 }}
+              />
+              <label htmlFor="piAgree" style={{ fontSize: 11, color: T.tx, lineHeight: 1.7, cursor: "pointer" }}>
+                이 시스템은 <b>훈련생 개인정보</b>를 포함하고 있습니다.<br />
+                「개인정보보호법」에 따라 업무 목적 외 사용·유출을 금지합니다.<br />
+                <span style={{ color: T.p, fontWeight: 700 }}>본인은 이를 준수할 것에 동의합니다.</span>
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowNotice(!showNotice)}
+              style={{
+                marginTop: 8,
+                fontSize: 10,
+                color: T.p,
+                background: "transparent",
+                border: `1px solid ${T.pl}60`,
+                borderRadius: 5,
+                padding: "2px 8px",
+                cursor: "pointer",
+              }}
+            >
+              {showNotice ? "▲ 접기" : "▼ 개인정보 처리방침 보기"}
+            </button>
+            {showNotice && (
+              <div style={{
+                marginTop: 8,
+                padding: "10px 12px",
+                background: "#fff",
+                borderRadius: 8,
+                border: `1px solid ${T.bd}`,
+                fontSize: 10,
+                color: T.mu,
+                lineHeight: 1.8,
+              }}>
+                <b style={{ color: T.tx }}>수집 항목:</b> 성명, 생년월일, 주소, 연락처, 출결정보<br />
+                <b style={{ color: T.tx }}>수집 목적:</b> 직업훈련 학사관리 및 수료증 발급<br />
+                <b style={{ color: T.tx }}>보유 기간:</b> 훈련 종료 후 3년<br />
+                <b style={{ color: T.tx }}>담당부서:</b> 경기도일자리재단 북부사업본부 북부교육팀<br />
+                <b style={{ color: T.danger }}>⚠ 무단 반출·유출 시 관련 법령에 따라 처벌 받을 수 있습니다.</b>
+              </div>
+            )}
+          </div>
+
+          {/* 로그인 버튼 */}
+          <button
+            onClick={handleLogin}
+            disabled={loading || !agreed}
+            style={{
+              width: "100%",
+              padding: "13px 0",
+              borderRadius: 11,
+              border: "none",
+              background: agreed && !loading ? `linear-gradient(135deg,${T.sb},${T.p})` : T.s3,
+              color: agreed && !loading ? "#fff" : T.mu,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: agreed && !loading ? "pointer" : "not-allowed",
+              boxShadow: agreed && !loading ? "0 6px 20px rgba(234,88,12,.35)" : "none",
+              transition: "all .2s",
+              letterSpacing: "1px",
+            }}
+          >
+            {loading ? "로그인 중..." : "로그인"}
+          </button>
+
+          <div style={{ marginTop: 12, fontSize: 10, color: T.mu, textAlign: "center" }}>
+            비밀번호 분실 시 관리자에게 문의하세요 · 초기 비밀번호: <code style={{ background: T.s3, padding: "1px 5px", borderRadius: 4 }}>gjf2026</code>
+          </div>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 16, fontSize: 10, color: "rgba(255,255,255,.4)" }}>
+          © 2026 경기도일자리재단 북부사업본부 · 개인정보보호 시스템
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════
+   개선된 계정 관리 모달 (DB 기반)
+═══════════════════════════════════════════════════════════ */
+const AccountMgmtDB = ({ currentUser, onClose }) => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editPw, setEditPw] = useState({});
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ username: "", name: "", role: "staff", email: "", password: "" });
+
+  // 계정 목록 로드
+  useEffect(() => {
+    const loadUsers = async () => {
+      const { data, error: loadError } = await accountAPI.getUsers();
+      if (loadError) {
+        setError("계정 목록 로드 실패");
+        console.error(loadError);
+      } else {
+        setUsers(data || []);
+      }
+      setLoading(false);
+    };
+    loadUsers();
+  }, []);
+
+  // 계정 추가
+  const handleAddUser = async () => {
+    if (!addForm.username.trim() || !addForm.name.trim() || !addForm.password.trim()) {
+      alert("필수 항목을 모두 입력하세요.");
+      return;
+    }
+
+    const { data, error: addError } = await accountAPI.createUser(
+      addForm.username,
+      addForm.name,
+      addForm.role,
+      addForm.email,
+      addForm.password
+    );
+
+    if (addError) {
+      alert("계정 추가 실패: " + (addError.message || addError));
+    } else {
+      setUsers([...users, data]);
+      setAddForm({ username: "", name: "", role: "staff", email: "", password: "" });
+      setShowAdd(false);
+      alert("✅ 새 계정이 추가되었습니다.");
+    }
+  };
+
+  // 비밀번호 변경
+  const handleChangePassword = async (userId, newPw) => {
+    if (newPw.length < 4) {
+      alert("비밀번호는 4자 이상이어야 합니다.");
+      return;
+    }
+
+    const { error: pwError } = await accountAPI.changePassword(userId, newPw);
+    if (pwError) {
+      alert("비밀번호 변경 실패: " + pwError);
+    } else {
+      alert("✅ 비밀번호가 변경되었습니다.");
+      setEditingId(null);
+      setEditPw({});
+    }
+  };
+
+  // 계정 삭제
+  const handleDeleteUser = async (userId) => {
+    if (userId === currentUser.id) {
+      alert("현재 로그인 중인 계정은 삭제할 수 없습니다.");
+      return;
+    }
+
+    if (!window.confirm("정말 이 계정을 삭제하시겠습니까? (되돌릴 수 없습니다)")) return;
+
+    const { error: delError } = await accountAPI.deleteUser(userId);
+    if (delError) {
+      alert("계정 삭제 실패: " + delError);
+    } else {
+      setUsers(users.filter(u => u.id !== userId));
+      alert("✅ 계정이 삭제되었습니다.");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.5)",
+        zIndex: 1100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}>
+        <div style={{ fontSize: 14, color: "#fff", fontWeight: 700 }}>⏳ 로드 중...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.5)",
+        zIndex: 1100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        background: T.s,
+        borderRadius: 18,
+        width: 520,
+        maxWidth: "96vw",
+        maxHeight: "88vh",
+        display: "flex",
+        flexDirection: "column",
+        boxShadow: "0 24px 64px rgba(0,0,0,.3)",
+        overflow: "hidden",
+        animation: "fadeUp .2s ease",
+      }}>
+
+        {/* 헤더 */}
+        <div style={{
+          background: `linear-gradient(135deg,${T.sb},${T.p})`,
+          padding: "16px 22px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexShrink: 0,
+        }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>👤 계정 관리</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,.55)", marginTop: 2 }}>
+              DB 기반 계정 관리 · {users.length}명
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: "none",
+              background: "rgba(255,255,255,.15)",
+              color: "#fff",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Icon n="x" s={14} />
+          </button>
+        </div>
+
+        {/* 콘텐츠 */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", display: "flex", flexDirection: "column", gap: 10 }}>
+
+          {error && (
+            <div style={{
+              background: "#FEF2F2",
+              border: `1px solid #FECACA`,
+              borderRadius: 8,
+              padding: "10px 14px",
+              color: T.danger,
+              fontSize: 11,
+            }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          {/* 계정 목록 */}
+          {users.map((user) => (
+            <div
+              key={user.id}
+              style={{
+                padding: "14px 16px",
+                borderRadius: 10,
+                border: editingId === user.id ? `1.5px solid ${T.p}` : `1px solid ${T.bd}`,
+                background: T.s2,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: editingId === user.id ? 12 : 0 }}>
+                <div style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  flexShrink: 0,
+                  background: user.role === "admin" ? `${T.p}18` : `${T.ok}18`,
+                  color: user.role === "admin" ? T.p : T.ok,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 15,
+                  fontWeight: 900,
+                }}>
+                  {user.name[0]}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: T.tx,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                  }}>
+                    {user.name}
+                    {user.id === currentUser.id && (
+                      <span style={{
+                        fontSize: 9,
+                        background: T.pbg,
+                        color: T.p,
+                        padding: "1px 6px",
+                        borderRadius: 4,
+                        fontWeight: 700,
+                      }}>
+                        현재
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 3, fontSize: 10, color: T.mu }}>
+                    <span style={{
+                      background: user.role === "admin" ? `${T.p}15` : `${T.ok}15`,
+                      color: user.role === "admin" ? T.p : T.ok,
+                      padding: "1px 7px",
+                      borderRadius: 4,
+                      fontWeight: 700,
+                    }}>
+                      {user.role === "admin" ? "🔑 관리자" : "👤 담당자"}
+                    </span>
+                    {user.email && <span>📧 {user.email}</span>}
+                    {user.last_login && (
+                      <span>🕐 {new Date(user.last_login).toLocaleDateString()}</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 5 }}>
+                  <button
+                    onClick={() => { setEditingId(editingId === user.id ? null : user.id); setEditPw({}); }}
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: 6,
+                      border: `1px solid ${T.bd}`,
+                      background: "transparent",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: editingId === user.id ? T.p : T.mu,
+                    }}
+                  >
+                    {editingId === user.id ? "닫기" : "비밀번호 변경"}
+                  </button>
+                  {user.id !== currentUser.id && (
+                    <button
+                      onClick={() => handleDeleteUser(user.id)}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 6,
+                        border: "1px solid #FECACA",
+                        background: "#FEF2F2",
+                        cursor: "pointer",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: T.danger,
+                      }}
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 비밀번호 변경 폼 */}
+              {editingId === user.id && (
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  padding: "12px 14px",
+                  borderRadius: 8,
+                  background: "#fff",
+                  border: `1px solid ${T.bd}`,
+                }}>
+                  <input
+                    type="password"
+                    value={editPw[user.id] || ""}
+                    onChange={(e) => setEditPw({ ...editPw, [user.id]: e.target.value })}
+                    placeholder="새 비밀번호 (4자 이상)"
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      border: `1px solid ${T.bd}`,
+                      borderRadius: 8,
+                      fontSize: 12,
+                      outline: "none",
+                      color: T.tx,
+                      background: T.s2,
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 7, justifyContent: "flex-end" }}>
+                    <Btn variant="ghost" size="sm" onClick={() => { setEditingId(null); setEditPw({}); }}>
+                      취소
+                    </Btn>
+                    <Btn
+                      size="sm"
+                      onClick={() => handleChangePassword(user.id, editPw[user.id] || "")}
+                    >
+                      <Icon n="check" s={12} /> 변경 저장
+                    </Btn>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* 계정 추가 */}
+          {showAdd ? (
+            <div style={{
+              padding: "14px 16px",
+              borderRadius: 10,
+              border: `1.5px dashed ${T.p}`,
+              background: T.pbg,
+              display: "flex",
+              flexDirection: "column",
+              gap: 9,
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.p }}>➕ 새 계정 추가</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <input
+                  value={addForm.username}
+                  onChange={(e) => setAddForm({ ...addForm, username: e.target.value })}
+                  placeholder="아이디"
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    border: `1px solid ${T.bd}`,
+                    borderRadius: 8,
+                    fontSize: 12,
+                    outline: "none",
+                    color: T.tx,
+                    background: T.s2,
+                  }}
+                />
+                <input
+                  value={addForm.name}
+                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                  placeholder="이름"
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    border: `1px solid ${T.bd}`,
+                    borderRadius: 8,
+                    fontSize: 12,
+                    outline: "none",
+                    color: T.tx,
+                    background: T.s2,
+                  }}
+                />
+              </div>
+              <input
+                value={addForm.email}
+                onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                placeholder="이메일 (선택)"
+                type="email"
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  border: `1px solid ${T.bd}`,
+                  borderRadius: 8,
+                  fontSize: 12,
+                  outline: "none",
+                  color: T.tx,
+                  background: T.s2,
+                }}
+              />
+              <input
+                type="password"
+                value={addForm.password}
+                onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
+                placeholder="비밀번호 (4자 이상)"
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  border: `1px solid ${T.bd}`,
+                  borderRadius: 8,
+                  fontSize: 12,
+                  outline: "none",
+                  color: T.tx,
+                  background: T.s2,
+                }}
+              />
+              <select
+                value={addForm.role}
+                onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  border: `1px solid ${T.bd}`,
+                  borderRadius: 8,
+                  fontSize: 12,
+                  outline: "none",
+                  background: T.s2,
+                  color: T.tx,
+                  cursor: "pointer",
+                }}
+              >
+                <option value="staff">👤 담당자</option>
+                <option value="admin">🔑 관리자</option>
+              </select>
+              <div style={{ display: "flex", gap: 7, justifyContent: "flex-end" }}>
+                <Btn variant="ghost" size="sm" onClick={() => setShowAdd(false)}>
+                  취소
+                </Btn>
+                <Btn size="sm" onClick={handleAddUser}>
+                  <Icon n="plus" s={12} /> 계정 추가
+                </Btn>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAdd(true)}
+              style={{
+                padding: "12px 0",
+                borderRadius: 10,
+                border: `2px dashed ${T.bd}`,
+                background: "transparent",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+                color: T.mu,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+              }}
+            >
+              <Icon n="plus" s={14} /> 새 담당자 계정 추가
+            </button>
+          )}
+        </div>
+
+        {/* 푸터 */}
+        <div style={{
+          padding: "13px 22px",
+          borderTop: `1px solid ${T.bd}`,
+          display: "flex",
+          justifyContent: "flex-end",
+          background: T.s2,
+          flexShrink: 0,
+        }}>
+          <Btn onClick={onClose}>
+            <Icon n="check" s={13} /> 완료
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+};    
+    
 /* ── 앱 마운트 ── */
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);

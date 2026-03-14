@@ -1049,8 +1049,8 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
-   QR ATTENDANCE  ★ 관리자용 대형 QR 모달
+    /* ═══════════════════════════════════════════════════════════
+   QR ATTENDANCE  ★ 관리자용 대형 QR 모달 (디자인 고급화)
 ═══════════════════════════════════════════════════════════ */
 const BigQrModal = ({ course, onClose }) => {
   const qrRef = useRef();
@@ -1059,91 +1059,109 @@ const BigQrModal = ({ course, onClose }) => {
   useEffect(() => {
     if (qrRef.current) {
       qrRef.current.innerHTML = "";
-      new QRCode(qrRef.current, { text: checkInUrl, width: 320, height: 320, colorDark: "#7C2D12", colorLight: "#ffffff" });
+      new QRCode(qrRef.current, { text: checkInUrl, width: 340, height: 340, colorDark: "#EA580C", colorLight: "#ffffff" });
     }
   }, [course, checkInUrl]);
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000 }}>
-      <div style={{ background: "#fff", padding: "40px", borderRadius: "24px", textAlign: "center", position: "relative", animation: "fadeUp 0.3s ease" }}>
-        <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "none", border: "none", cursor: "pointer", color:T.mu }}><Icon n="x" s={24}/></button>
-        <h2 style={{ fontSize: "24px", fontWeight: 800, color: T.sb, marginBottom: "8px" }}>{course.name}</h2>
-        <p style={{ color: T.mu, marginBottom: "30px", fontSize: 14 }}>학생들은 스마트폰으로 아래 QR을 찍어주세요</p>
-        <div style={{ display: "inline-block", padding: "15px", background: "#fff", borderRadius: "12px", boxShadow: "0 0 20px rgba(0,0,0,0.1)" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000 }} onClick={onClose}>
+      <div style={{ background: "#fff", padding: "40px 50px", borderRadius: "24px", textAlign: "center", position: "relative", animation: "popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(0,0,0,0.05)", border: "none", cursor: "pointer", color:T.mu, width:32, height:32, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}><Icon n="x" s={16}/></button>
+        <h2 style={{ fontSize: "26px", fontWeight: 900, color: "#1E293B", marginBottom: "8px", letterSpacing: "-0.5px" }}>{course.name}</h2>
+        <p style={{ color: "#64748B", marginBottom: "32px", fontSize: 15, fontWeight: 500 }}>학생들은 스마트폰 카메라로 아래 QR을 스캔해 주세요.</p>
+        <div style={{ display: "inline-block", padding: "20px", background: "#fff", borderRadius: "16px", border: "2px solid #F1F5F9" }}>
           <div ref={qrRef}></div>
         </div>
-        <div style={{ marginTop: "24px", fontSize: "12px", color: T.mu }}>{checkInUrl}</div>
+        <div style={{ marginTop: "24px", fontSize: "13px", color: T.mu, fontWeight:600 }}>{checkInUrl}</div>
       </div>
     </div>
   );
 };
 
 /* ═══════════════════════════════════════════════════════════
-   ATTENDANCE MANAGEMENT (관리자 출결 관리 탭)
+   ATTENDANCE MANAGEMENT (관리자 하이브리드 출결 관리 탭)
 ═══════════════════════════════════════════════════════════ */
 const AttendanceMgmt = ({ students, courses, attendance, onManual }) => {
-  const [selCid, setSelCid] = useState(courses[0]?.id);
+  const [selCid, setSelCid] = useState(courses[0]?.id || null);
   const [showQrModal, setShowQrModal] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  
+  // 한국 시간 기준 오늘 날짜 (YYYY-MM-DD)
+  const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const courseStudents = students.filter(s => s.cid === selCid);
-  const course = courses.find(c => c.id === selCid);
-  const todayAttendance = attendance.filter(a => a.courseId === selCid && a.attendDate === today);
+  const courseStudents = useMemo(() => students.filter(s => s.cid === selCid), [students, selCid]);
+  const currentCourse = useMemo(() => courses.find(c => c.id === selCid), [courses, selCid]);
+  const todayAttendance = useMemo(() => attendance.filter(a => a.courseId === selCid && a.attendDate === today), [attendance, selCid, today]);
 
-  const handleManualClick = (studentId, type, val) => {
-    onManual({ studentId, courseId: selCid, type, val, attendDate: today });
+  // 수동 제어 버튼 클릭 핸들러 (입실, 퇴실, 결석)
+  const handleManualClick = (studentId, type, val, statusVal) => {
+    onManual({ studentId, courseId: selCid, type, val, statusVal, attendDate: today });
   };
 
   return (
     <div className="page">
       <SectionHead
-        title="실시간 출결 현황"
-        sub={`${today} 기준 (학생들이 QR을 찍으면 자동으로 새로고침 됩니다)`}
-        right={<Btn onClick={() => setShowQrModal(true)} style={{ boxShadow: "0 4px 12px rgba(234,88,12,0.3)" }}>📱 강단용 QR코드 띄우기</Btn>}
+        title="실시간 하이브리드 출결 관리"
+        sub={`학생이 스캔하면 즉시 표에 반영됩니다. (${today} 기준)`}
+        right={<Btn onClick={() => setShowQrModal(true)} style={{ boxShadow: "0 4px 14px rgba(234,88,12,0.3)", padding:"10px 18px", fontSize:13 }}>📱 강단용 QR 띄우기</Btn>}
       />
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-        {courses.map(c => <button key={c.id} onClick={() => setSelCid(c.id)} style={{ padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, background: selCid === c.id ? T.p : T.s3, color: selCid === c.id ? "#fff" : T.mu }}>{c.code}</button>)}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
+        {courses.map(c => (
+          <button key={c.id} onClick={() => setSelCid(c.id)} style={{ padding: "8px 16px", borderRadius: "20px", border: "1px solid", borderColor: selCid === c.id ? "#EA580C" : "#E2E8F0", background: selCid === c.id ? "#FFF7ED" : "#fff", color: selCid === c.id ? "#EA580C" : "#64748B", fontWeight: 700, fontSize: "12px", cursor: "pointer", transition: "all 0.2s" }}>
+            {c.name}
+          </button>
+        ))}
       </div>
 
       <Card style={{ overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ background: T.s2, borderBottom: `1px solid ${T.bd}` }}>
-              {["성명", "입실", "퇴실", "방식", "상태", "수동 처리"].map(h => <th key={h} style={{ padding: "12px", textAlign: "center", fontSize: 11, color: T.mu, fontWeight: 700 }}>{h}</th>)}
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "center" }}>
+          <thead style={{ background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
+            <tr>
+              <th style={{ padding: "14px", fontSize: "12px", color: "#64748B" }}>이름</th>
+              <th style={{ padding: "14px", fontSize: "12px", color: "#64748B" }}>입실 시간</th>
+              <th style={{ padding: "14px", fontSize: "12px", color: "#64748B" }}>퇴실 시간</th>
+              <th style={{ padding: "14px", fontSize: "12px", color: "#64748B" }}>방식</th>
+              <th style={{ padding: "14px", fontSize: "12px", color: "#64748B" }}>상태</th>
+              <th style={{ padding: "14px", fontSize: "12px", color: "#64748B", textAlign: "right" }}>수동 제어</th>
             </tr>
           </thead>
           <tbody>
-            {courseStudents.length === 0 && <tr><td colSpan={6} style={{padding:30, textAlign:'center', color:T.mu, fontSize:13}}>이 과정에 등록된 훈련생이 없습니다.</td></tr>}
-            {courseStudents.map(s => {
-              const att = todayAttendance.find(a => a.studentId === s.id);
-              return (
-                <tr key={s.id} className="row-hover" style={{ borderBottom: `1px solid ${T.bd}` }}>
-                  <td style={{ padding: 12, textAlign: "center", fontSize: 13, fontWeight: 700 }}>{s.name}</td>
-                  <td style={{ padding: 12, textAlign: "center", fontSize: 12, fontWeight:600, color:T.tx }}>{att?.inTime || "-"}</td>
-                  <td style={{ padding: 12, textAlign: "center", fontSize: 12, fontWeight:600, color:T.tx }}>{att?.outTime || "-"}</td>
-                  <td style={{ padding: 12, textAlign: "center" }}>
-                    {att ? <Chip label={att.viaQr ? 'QR 스캔' : '수동'} bg={T.s3} color={T.mu} /> : "-"}
-                  </td>
-                  <td style={{ padding: 12, textAlign: "center" }}>
-                    {att ? <Chip label={att.status} bg={att.status === '출석' ? "#ECFDF5" : "#FEF2F2"} color={att.status === '출석' ? T.ok : T.danger} /> : <span style={{ color: "#ccc", fontSize:11 }}>대기중</span>}
-                  </td>
-                  <td style={{ padding: 12, textAlign: "center" }}>
-                    <Btn size="sm" variant="ghost" onClick={() => handleManualClick(s.id, 'in', '09:00')} style={{ marginRight: 4 }}>수동 입실</Btn>
-                    <Btn size="sm" variant="ghost" onClick={() => handleManualClick(s.id, 'out', '13:00')} style={{ marginRight: 4 }}>수동 퇴실</Btn>
-                    <Btn size="sm" variant="danger" onClick={() => handleManualClick(s.id, 'status', '결석')}>결석</Btn>
-                  </td>
-                </tr>
-              );
-            })}
+            {courseStudents.length === 0 ? (
+              <tr><td colSpan="6" style={{ padding: "40px", color: "#94A3B8" }}>해당 과정에 등록된 훈련생이 없습니다.</td></tr>
+            ) : (
+              courseStudents.map(s => {
+                const att = todayAttendance.find(a => a.studentId === s.id);
+                return (
+                  <tr key={s.id} className="row-hover" style={{ borderBottom: "1px solid #F1F5F9" }}>
+                    <td style={{ padding: "14px", fontWeight: 800, color: "#1E293B", fontSize: "14px" }}>{s.name}</td>
+                    <td style={{ padding: "14px", fontWeight: 700, color: att?.inTime ? "#0F172A" : "#CBD5E1" }}>{att?.inTime || "--:--"}</td>
+                    <td style={{ padding: "14px", fontWeight: 700, color: att?.outTime ? "#0F172A" : "#CBD5E1" }}>{att?.outTime || "--:--"}</td>
+                    <td style={{ padding: "14px" }}>
+                      {att ? <Chip label={att.viaQr ? 'QR 스캔' : '수동 입력'} bg={att.viaQr ? '#EFF6FF' : '#F8FAFC'} color={att.viaQr ? '#2563EB' : '#475569'} /> : '-'}
+                    </td>
+                    <td style={{ padding: "14px" }}>
+                      {att ? <Chip label={att.status} bg={att.status==='출석'?'#ECFDF5':att.status==='지각'?'#FFFBEB':'#FEF2F2'} color={att.status==='출석'?'#059669':att.status==='지각'?'#D97706':'#DC2626'}/> : <Chip label="대기중" bg="#F1F5F9" color="#64748B"/>}
+                    </td>
+                    <td style={{ padding: "12px 14px", textAlign: "right" }}>
+                      <div style={{ display: "inline-flex", gap: "6px" }}>
+                        <Btn variant="ghost" size="sm" onClick={() => handleManualClick(s.id, 'in', '09:00', null)} style={{border:"1px solid #E2E8F0"}}>입실</Btn>
+                        <Btn variant="ghost" size="sm" onClick={() => handleManualClick(s.id, 'out', '13:00', null)} style={{border:"1px solid #E2E8F0"}}>퇴실</Btn>
+                        <Btn variant="danger" size="sm" onClick={() => handleManualClick(s.id, 'status', null, '결석')}>결석</Btn>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </Card>
-      {showQrModal && course && <BigQrModal course={course} onClose={() => setShowQrModal(false)} />}
+      
+      {showQrModal && currentCourse && <BigQrModal course={currentCourse} onClose={() => setShowQrModal(false)} />}
     </div>
   );
 };
-
+    
 /* ═══════════════════════════════════════════════════════════
    COMPLETION (수료 관리)
 ═══════════════════════════════════════════════════════════ */

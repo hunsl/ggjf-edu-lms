@@ -1004,54 +1004,6 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
 /* ═══════════════════════════════════════════════════════════
    EDIT MODAL  ★ 훈련생 면접 및 정보 수정 모달
 ═══════════════════════════════════════════════════════════ */
-const FLD = ({ label, required, children }) => (
-  <div>
-    <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
-      {label}{required && <span style={{ color:T.danger, marginLeft:2 }}>*</span>}
-    </label>
-    {children}
-  </div>
-);
-
-const EditModal = ({ student, courses, isNew, onSave, onClose }) => {
-  const empty = { cid:courses[0]?.id||"", name:"", gender:"남", birth:"", idBack:"", phone:"", addrCity:"", edu:"", major:"", career:"", certs:"", rate:100, itvScore:"", itvGrade:"", itvPass:true, memo:"" };
-  const [form, setForm] = useState(student || empty);
-  const set = (k,v) => setForm(p=>({...p, [k]:v}));
-  const inp = { width:"100%", padding:"10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:13, outline:"none", color:T.tx, background:T.s2 };
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.6)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ background:T.s, borderRadius:16, width:500, maxWidth:"96vw", maxHeight:"90vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(0,0,0,.2)" }}>
-        <div style={{ padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${T.bd}` }}>
-          <div style={{ fontSize:16, fontWeight:800, color:T.tx }}>{isNew?"훈련생 등록":"훈련생 수정"}</div>
-          <button onClick={onClose} style={{ border:"none", background:"transparent", cursor:"pointer", color:T.mu }}><Icon n="x" s={16}/></button>
-        </div>
-        <div style={{ flex:1, overflowY:"auto", padding:"20px", display:"flex", flexDirection:"column", gap:14 }}>
-           <div>
-             <label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>지원 과정</label>
-             <select value={form.cid || ""} onChange={e=>set("cid",+e.target.value)} style={inp}>
-               {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-             </select>
-           </div>
-           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-             {[{k:"name", l:"이름"}, {k:"phone", l:"연락처"}, {k:"birth", l:"생년월일 (YYYY-MM-DD)"}, {k:"addrCity", l:"거주지 (시/군)"}].map(({k,l}) => (
-               <div key={k}>
-                 <label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>{l}</label>
-                 <input value={form[k] || ""} onChange={e=>set(k, e.target.value)} style={inp}/>
-               </div>
-             ))}
-           </div>
-           <div><label style={{fontSize:11,fontWeight:700,color:T.mu,display:"block",marginBottom:4}}>메모</label><input value={form.memo || ""} onChange={e=>set("memo",e.target.value)} style={inp}/></div>
-        </div>
-        <div style={{ padding:"16px 20px", borderTop:`1px solid ${T.bd}`, display:"flex", justifyContent:"flex-end", gap:8 }}>
-          <Btn variant="ghost" onClick={onClose}>취소</Btn>
-          <Btn onClick={()=>{ onSave({...form, id:form.id||Date.now()}); onClose(); }}>저장</Btn>
-        </div>
-      </div>
-    </div>
-  );
-};
-
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
       <div style={{ background:T.s, borderRadius:16, width:500, maxWidth:"96vw", maxHeight:"92vh", display:"flex", flexDirection:"column", boxShadow:"0 24px 64px rgba(0,0,0,.28)", overflow:"hidden", animation:"fadeUp .2s ease" }}>

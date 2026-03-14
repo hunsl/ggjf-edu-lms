@@ -2,1148 +2,842 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>경기북부 학사관리시스템 v2026</title>
-  <meta name="description" content="경기도일자리재단 북부사업본부 통합 학사관리"/>
-  
-  <!-- Fonts & Styles -->
-  <link rel="preconnect" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"/>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"/>
-  
-  <!-- Libraries -->
-  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>경기북부 직업교육 학사관리시스템</title>
+  <meta name="description" content="경기도일자리재단 북부사업본부 직업훈련 학사관리"/>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"/>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    /* ═══════════════════════════════════════════════════════════
-       GLOBAL RESET & BASE STYLES
-    ═══════════════════════════════════════════════════════════ */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; width: 100%; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
     body {
       font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #F8FAFC;
-      color: #1E293B;
+      background: #F8F9FA;
       -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
     }
-    
-    #root { height: 100%; display: flex; }
-    input, select, button, textarea { font-family: inherit; }
-    
-    /* ─── Loading Screen ─── */
     #loading {
-      position: fixed; inset: 0; z-index: 9999;
+      position: fixed; inset: 0;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       background: linear-gradient(135deg, #7C2D12, #EA580C, #FFF7ED);
-      color: #fff;
+      font-family: 'Pretendard', sans-serif;
+      z-index: 9999;
+      transition: opacity .4s;
     }
-    #loading.fade { animation: fadeOut 0.8s ease forwards; }
-    @keyframes fadeOut { to { opacity: 0; pointer-events: none; } }
-    #loading .spinner {
-      width: 60px; height: 60px; border: 4px solid rgba(255,255,255,0.2);
-      border-top-color: #fff; border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #loading .text { margin-top: 20px; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; }
-    
-    /* ─── Animations ─── */
-    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes slideIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
-    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
-    @keyframes scanLine { 0% { top: 0; } 100% { top: 100%; } }
-    
-    .animate-up { animation: fadeUp 0.4s ease both; }
-    .animate-in { animation: slideIn 0.3s ease both; }
-    
-    /* ─── Scrollbar ─── */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #F1F5F9; }
-    ::-webkit-scrollbar-thumb { background: #94A3B8; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #64748B; }
-    
-    /* ─── Print Styles ─── */
-    @media print {
-      .no-print { display: none !important; }
-      body { background: #fff; overflow: visible; }
-      .page { page-break-after: always; }
-    }
+    #loading .icon { font-size: 48px; margin-bottom: 16px; animation: pulse 1.5s ease infinite; }
+    #loading .msg  { font-size: 15px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+    #loading .sub  { font-size: 12px; color: rgba(255,255,255,.6); }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
   </style>
 </head>
-
 <body>
   <div id="loading">
-    <div class="spinner"></div>
-    <div class="text">🎓 경기북부 학사관리시스템 v2026</div>
-    <div style="font-size: 12px; opacity: 0.7; margin-top: 8px;">시스템을 준비하는 중입니다…</div>
+    <div class="icon">🎓</div>
+    <div class="msg">경기북부 학사관리시스템</div>
+    <div class="sub">시스템을 준비하는 중입니다…</div>
   </div>
-  
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
+    const { useState, useMemo, useEffect, useRef, useCallback } = React;
 
-    /* ═══════════════════════════════════════════════════════════
-       1️⃣ GLOBAL STATE & THEME
-    ═══════════════════════════════════════════════════════════ */
-    const AppContext = createContext();
-    
-    const THEME = {
-      // Brand
-      primary: "#EA580C", primaryDark: "#C2410C", primaryLight: "#FB923C", primaryBg: "#FFF7ED",
-      dark: "#7C2D12",
-      // Status
-      success: "#10B981", warning: "#F59E0B", danger: "#EF4444", info: "#2563EB", purple: "#8B5CF6",
-      // Neutral
-      text: "#1E293B", textSub: "#334155", muted: "#64748B", border: "#E2E8F0", borderLight: "#F1F5F9",
-      bg: "#FFFFFF", bgSecond: "#F8FAFC", bgTertiary: "#F1F5F9",
+    // ════════════════════════════════════════════════════════════
+    // THEME & CONSTANTS
+    // ════════════════════════════════════════════════════════════
+    const T = {
+      p: "#EA580C", pm: "#F97316", pl: "#FB923C", pbg: "#FFF7ED",
+      sb: "#7C2D12",
+      ok: "#059669", warn: "#D97706", danger: "#DC2626", info: "#2563EB",
+      s: "#FFFFFF", s2: "#F8FAFC", s3: "#F1F5F9",
+      bd: "#E2E8F0", tx: "#1E293B", mu: "#64748B",
     };
 
-    // 로컬스토리지 관리
-    const Storage = {
-      set: (key, val) => localStorage.setItem(key, JSON.stringify(val)),
-      get: (key, def = null) => {
-        try { return JSON.parse(localStorage.getItem(key)) || def; } catch { return def; }
-      },
-      remove: (key) => localStorage.removeItem(key),
-    };
-
-    /* ═══════════════════════════════════════════════════════════
-       2️⃣ SEED DATA
-    ═══════════════════════════════════════════════════════════ */
-    const SEED_COURSES = [
-      { id:1, cat:"늘봄강사양성", cc:"#EA580C", name:"초등 피지컬 코딩강사 양성", code:"NB-01", dateFrom:"2026-06-01", dateTo:"2026-07-31", period:"6~7월", method:"블렌디드", hours:92, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 목", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-      { id:2, cat:"늘봄강사양성", cc:"#EA580C", name:"AI 딥러닝 전문강사 양성", code:"NB-02", dateFrom:"2026-06-01", dateTo:"2026-08-31", period:"6~8월", method:"블렌디드", hours:104, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-      { id:3, cat:"늘봄강사양성", cc:"#EA580C", name:"늘봄학교 창의융합교육강사 양성", code:"NB-03", dateFrom:"2026-04-01", dateTo:"2026-06-30", period:"4~6월", method:"대면", hours:140, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 목", schedTimeFrom:"09:00", schedTimeTo:"14:00" },
-      { id:4, cat:"지역연계·기여", cc:"#C2410C", name:"ERP·지게차 물류관리 실무자 양성", code:"JY-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월", method:"대면", hours:182, tgt:15, cGoal:14, eGoal:9, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-      { id:5, cat:"지역연계·기여", cc:"#C2410C", name:"승강기 전문가 양성", code:"JY-02", dateFrom:"2026-05-04", dateTo:"2026-06-26", period:"5~6월", method:"대면", hours:80, tgt:15, cGoal:14, eGoal:9, schedDays:"월, 화, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-      { id:6, cat:"지역연계·기여", cc:"#C2410C", name:"중장년 기회강사 양성", code:"JY-03", dateFrom:"2026-05-01", dateTo:"2026-07-31", period:"5~7월", method:"블렌디드", hours:83, tgt:15, cGoal:14, eGoal:9, schedDays:"화, 목", schedTimeFrom:"09:30", schedTimeTo:"13:30" },
-      { id:7, cat:"지역연계·기여", cc:"#C2410C", name:"미지정 공모과정 (지역연계)", code:"JY-04", dateFrom:"", dateTo:"", period:"-", method:"-", hours:0, tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-      { id:8, cat:"사무분야", cc:"#9A3412", name:"행정회계 사무 OA (1기)", code:"SM-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월", method:"대면", hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-      { id:9, cat:"사무분야", cc:"#9A3412", name:"행정회계 사무 OA (2기)", code:"SM-02", dateFrom:"2026-07-01", dateTo:"2026-09-30", period:"7~9월", method:"대면", hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-      { id:10, cat:"식품분야", cc:"#DC2626", name:"HACCP 전문인력 양성", code:"FD-01", dateFrom:"2026-04-01", dateTo:"2026-05-31", period:"4~5월", method:"대면", hours:112, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목", schedTimeFrom:"09:00", schedTimeTo:"14:00" },
-      { id:11, cat:"IT 신직무", cc:"#F97316", name:"AI 시대의 캐릭터 크리에이터 양성", code:"IT-01", dateFrom:"2026-08-03", dateTo:"2026-09-30", period:"8~9월", method:"비대면", hours:108, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금", schedTimeFrom:"10:00", schedTimeTo:"14:00" },
-      { id:12, cat:"IT 신직무", cc:"#F97316", name:"미지정 공모과정 (IT-A)", code:"IT-02", dateFrom:"", dateTo:"", period:"-", method:"-", hours:0, tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-      { id:13, cat:"IT 신직무", cc:"#F97316", name:"미지정 공모과정 (IT-B)", code:"IT-03", dateFrom:"", dateTo:"", period:"-", method:"-", hours:0, tgt:15, cGoal:14, eGoal:9, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+    const COURSES = [
+      { id:1,  cat:"늘봄강사양성",  cc:"#EA580C", name:"초등 피지컬 코딩강사 양성",      code:"NB-01", dateFrom:"2026-06-01", dateTo:"2026-07-31", period:"6~7월",  method:"블렌디드", hours:92,  tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 목", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:2,  cat:"늘봄강사양성",  cc:"#EA580C", name:"AI 딥러닝 전문강사 양성",         code:"NB-02", dateFrom:"2026-06-01", dateTo:"2026-08-31", period:"6~8월",  method:"블렌디드", hours:104, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:3,  cat:"늘봄강사양성",  cc:"#EA580C", name:"늘봄학교 창의융합교육강사 양성",  code:"NB-03", dateFrom:"2026-04-01", dateTo:"2026-06-30", period:"4~6월",  method:"대면",     hours:140, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 목", schedTimeFrom:"09:00", schedTimeTo:"14:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:4,  cat:"지역연계·기여", cc:"#C2410C", name:"ERP·지게차 물류관리 실무자 양성", code:"JY-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월",  method:"대면",     hours:182, tgt:15, cGoal:14, eGoal:9,  schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:5,  cat:"지역연계·기여", cc:"#C2410C", name:"승강기 전문가 양성",               code:"JY-02", dateFrom:"2026-05-04", dateTo:"2026-06-26", period:"5~6월",  method:"대면",     hours:80,  tgt:15, cGoal:14, eGoal:9,  schedDays:"월, 화, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:6,  cat:"지역연계·기여", cc:"#C2410C", name:"중장년 기회강사 양성",             code:"JY-03", dateFrom:"2026-05-01", dateTo:"2026-07-31", period:"5~7월",  method:"블렌디드", hours:83,  tgt:15, cGoal:14, eGoal:9,  schedDays:"화, 목",     schedTimeFrom:"09:30", schedTimeTo:"13:30", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:7,  cat:"지역연계·기여", cc:"#C2410C", name:"미지정 공모과정 (지역연계)",       code:"JY-04", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:8,  cat:"사무분야",      cc:"#9A3412", name:"행정회계 사무 OA (1기)",           code:"SM-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:9,  cat:"사무분야",      cc:"#9A3412", name:"행정회계 사무 OA (2기)",           code:"SM-02", dateFrom:"2026-07-01", dateTo:"2026-09-30", period:"7~9월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:10, cat:"식품분야",      cc:"#DC2626", name:"HACCP 전문인력 양성",               code:"FD-01", dateFrom:"2026-04-01", dateTo:"2026-05-31", period:"4~5월",  method:"대면",     hours:112, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목",  schedTimeFrom:"09:00", schedTimeTo:"14:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:11, cat:"IT 신직무",     cc:"#F97316", name:"AI 시대의 캐릭터 크리에이터 양성",  code:"IT-01", dateFrom:"2026-08-03", dateTo:"2026-09-30", period:"8~9월",  method:"비대면",   hours:108, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금",     schedTimeFrom:"10:00", schedTimeTo:"14:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:12, cat:"IT 신직무",     cc:"#F97316", name:"미지정 공모과정 (IT-A)",            code:"IT-02", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
+      { id:13, cat:"IT 신직무",     cc:"#F97316", name:"미지정 공모과정 (IT-B)",            code:"IT-03", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:15, cGoal:14, eGoal:9,  schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00", links:[], notes:"", pdfName:"", pdfData:"" },
     ];
 
     const SEED_STUDENTS = [
-      { id:1, cid:4, name:"김민준", gender:"남", birth:"1992-04-15", idBack:"1234567", phone:"010-1234-5678", addrCity:"의정부시", edu:"대졸", major:"기계공학", career:"물류창고 2년", unemployment:true, disabled:false, veteran:false, itvDate:"2026-02-14", itvScore:88, itvGrade:"A", itvPass:true, memo:"취업의지 강함", rate:94 },
-      { id:2, cid:4, name:"이서연", gender:"여", birth:"1997-07-22", idBack:"2345678", phone:"010-2345-6789", addrCity:"양주시", edu:"대졸", major:"경영학", career:"없음", unemployment:false, disabled:false, veteran:false, itvDate:"2026-02-14", itvScore:72, itvGrade:"B", itvPass:true, memo:"학습의지 높음", rate:75 },
-      { id:3, cid:4, name:"박지훈", gender:"남", birth:"1990-01-30", idBack:"3456789", phone:"010-3456-7890", addrCity:"포천시", edu:"고졸", major:"", career:"제조업 5년", unemployment:true, disabled:false, veteran:false, itvDate:"2026-02-15", itvScore:65, itvGrade:"C", itvPass:true, memo:"출석 관리 주의", rate:62 },
-      { id:4, cid:4, name:"최수아", gender:"여", birth:"1999-11-05", idBack:"4567890", phone:"010-4567-8901", addrCity:"의정부시", edu:"대졸", major:"교육학", career:"없음", unemployment:false, disabled:false, veteran:false, itvDate:"2026-02-15", itvScore:95, itvGrade:"A+", itvPass:true, memo:"우수학습자", rate:97 },
-      { id:5, cid:4, name:"정우진", gender:"남", birth:"1995-08-14", idBack:"5678901", phone:"010-5678-9012", addrCity:"남양주시", edu:"대졸", major:"산업공학", career:"물류업 1년", unemployment:false, disabled:false, veteran:true, itvDate:"2026-02-16", itvScore:83, itvGrade:"B+", itvPass:true, memo:"국가유공자", rate:88 },
-      { id:6, cid:8, name:"강다은", gender:"여", birth:"1993-03-20", idBack:"6789012", phone:"010-6789-0123", addrCity:"의정부시", edu:"대졸", major:"회계학", career:"사무보조 3년", unemployment:true, disabled:false, veteran:false, itvDate:"2026-02-10", itvScore:90, itvGrade:"A", itvPass:true, memo:"회계경력보유", rate:91 },
-      { id:7, cid:8, name:"윤서준", gender:"남", birth:"1996-12-08", idBack:"7890123", phone:"010-7890-1234", addrCity:"동두천시", edu:"고졸", major:"", career:"편의점 2년", unemployment:false, disabled:true, veteran:false, itvDate:"2026-02-10", itvScore:70, itvGrade:"B", itvPass:true, memo:"장애 3급", rate:78 },
-      { id:8, cid:1, name:"임지수", gender:"여", birth:"2000-06-17", idBack:"8901234", phone:"010-8901-2345", addrCity:"양주시", edu:"대졸", major:"컴퓨터교육", career:"없음", unemployment:false, disabled:false, veteran:false, itvDate:"2026-02-18", itvScore:98, itvGrade:"A+", itvPass:true, memo:"코딩관심높음", rate:100 },
-      { id:9, cid:1, name:"한예린", gender:"여", birth:"1988-09-11", idBack:"9012345", phone:"010-9012-3456", addrCity:"의정부시", edu:"대학원졸", major:"교육공학", career:"강사 5년", unemployment:false, disabled:false, veteran:false, itvDate:"2026-02-18", itvScore:87, itvGrade:"A", itvPass:true, memo:"강사경력풍부", rate:83 },
-      { id:10, cid:10, name:"오민혁", gender:"남", birth:"1994-02-25", idBack:"0123456", phone:"010-0123-4567", addrCity:"포천시", edu:"고졸", major:"", career:"식품공장 3년", unemployment:true, disabled:false, veteran:false, itvDate:"2026-02-20", itvScore:60, itvGrade:"C", itvPass:true, memo:"결석주의", rate:55 },
+      { id:1,  cid:4,  name:"김민준", gender:"남", birth:"1992-04-15", idBack:"1234567", phone:"010-1234-5678", addrCity:"의정부시", itvDate:"2026-02-14", itvScore:88, itvGrade:"A", itvPass:true, memo:"취업의지 강함", rate:94 },
+      { id:2,  cid:4,  name:"이서연", gender:"여", birth:"1997-07-22", idBack:"2345678", phone:"010-2345-6789", addrCity:"양주시", itvDate:"2026-02-14", itvScore:72, itvGrade:"B", itvPass:true, memo:"경력 없으나 학습 의지 높음", rate:75 },
+      { id:3,  cid:4,  name:"박지훈", gender:"남", birth:"1990-01-30", idBack:"3456789", phone:"010-3456-7890", addrCity:"포천시", itvDate:"2026-02-15", itvScore:65, itvGrade:"C", itvPass:true, memo:"실업급여 수급 중", rate:62 },
+      { id:4,  cid:4,  name:"최수아", gender:"여", birth:"1999-11-05", idBack:"4567890", phone:"010-4567-8901", addrCity:"의정부시", itvDate:"2026-02-15", itvScore:95, itvGrade:"A+", itvPass:true, memo:"성실하고 적극적", rate:97 },
+      { id:5,  cid:4,  name:"정우진", gender:"남", birth:"1995-08-14", idBack:"5678901", phone:"010-5678-9012", addrCity:"남양주시", itvDate:"2026-02-16", itvScore:83, itvGrade:"B+", itvPass:true, memo:"이수 의지 강함", rate:88 },
+      { id:6,  cid:8,  name:"강다은", gender:"여", birth:"1993-03-20", idBack:"6789012", phone:"010-6789-0123", addrCity:"의정부시", itvDate:"2026-02-10", itvScore:90, itvGrade:"A", itvPass:true, memo:"회계 경력 보유", rate:91 },
+      { id:7,  cid:8,  name:"윤서준", gender:"남", birth:"1996-12-08", idBack:"7890123", phone:"010-7890-1234", addrCity:"동두천시", itvDate:"2026-02-10", itvScore:70, itvGrade:"B", itvPass:true, memo:"장애 3급", rate:78 },
+      { id:8,  cid:1,  name:"임지수", gender:"여", birth:"2000-06-17", idBack:"8901234", phone:"010-8901-2345", addrCity:"양주시", itvDate:"2026-02-18", itvScore:98, itvGrade:"A+", itvPass:true, memo:"코딩 교육 관심", rate:100 },
+      { id:9,  cid:1,  name:"한예린", gender:"여", birth:"1988-09-11", idBack:"9012345", phone:"010-9012-3456", addrCity:"의정부시", itvDate:"2026-02-18", itvScore:87, itvGrade:"A", itvPass:true, memo:"강사 경력 풍부", rate:83 },
+      { id:10, cid:10, name:"오민혁", gender:"남", birth:"1994-02-25", idBack:"0123456", phone:"010-0123-4567", addrCity:"포천시", itvDate:"2026-02-20", itvScore:60, itvGrade:"C", itvPass:true, memo:"HACCP 실무 경험", rate:55 },
     ];
 
-    const SEED_INSTRUCTORS = [
-      { id:1, name:"김민준", type:"주강사", subject:"코딩·AI", phone:"010-1111-2222", email:"kim@gjf.or.kr", career:"5년", cids:[1,2], note:"초등코딩전문" },
-      { id:2, name:"이수연", type:"주강사", subject:"행정회계", phone:"010-3333-4444", email:"lee@gjf.or.kr", career:"8년", cids:[8,9], note:"" },
-      { id:3, name:"박현우", type:"보조강사", subject:"물류·ERP", phone:"010-5555-6666", email:"park@gjf.or.kr", career:"3년", cids:[4], note:"" },
-    ];
+    const DATES = ["2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13"];
 
-    const SEED_ROOMS = [
-      { id:1, name:"101호 강의실", addr:"의정부시 청사로 1", capacity:25, equip:"빔프로젝터·PC 25대" },
-      { id:2, name:"세미나실 A", addr:"의정부시 청사로 1", capacity:15, equip:"TV·노트북연결" },
-      { id:3, name:"컴퓨터실", addr:"양주시 남면로 20", capacity:20, equip:"PC 20대·프린터" },
-    ];
+    // ════════════════════════════════════════════════════════════
+    // TINY COMPONENTS
+    // ════════════════════════════════════════════════════════════
+    const Chip = ({ label, bg, color, size=11 }) => (
+      <span style={{ background:bg, color, fontSize:size, fontWeight:700, padding:"2px 8px", borderRadius:20, whiteSpace:"nowrap", letterSpacing:".2px" }}>{label}</span>
+    );
 
-    /* ═══════════════════════════════════════════════════════════
-       3️⃣ REUSABLE COMPONENTS
-    ═══════════════════════════════════════════════════════════ */
-    
-    // Icon Component
-    const Icon = ({ n, s = 16, c = "currentColor", style = {} }) => {
-      const paths = {
-        dash: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
-        book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
-        people: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
-        check: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
-        alert: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
-        plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
-        x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
-        edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
-        download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
-        upload: <><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></>,
-        filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>,
-        search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
-      };
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0, ...style}}>
-          {paths[n]}
-        </svg>
-      );
-    };
+    const rateColor = r => r >= 80 ? T.ok : r >= 70 ? T.warn : T.danger;
 
-    // Button
-    const Btn = ({ children, onClick, variant = "primary", size = "md", disabled = false, style = {} }) => {
-      const variants = {
-        primary: { bg: THEME.primary, tx: "#fff", border: "none" },
-        ghost: { bg: THEME.bgSecond, tx: THEME.muted, border: "none" },
-        outline: { bg: "transparent", tx: THEME.primary, border: `2px solid ${THEME.primary}` },
-        danger: { bg: "#FEF2F2", tx: THEME.danger, border: "none" },
-      };
-      const sizes = {
-        sm: { padding: "6px 12px", fontSize: "11px" },
-        md: { padding: "8px 16px", fontSize: "12px" },
-        lg: { padding: "12px 24px", fontSize: "13px" },
-      };
-      const v = variants[variant] || variants.primary;
-      const sz = sizes[size] || sizes.md;
-      return (
-        <button
-          onClick={onClick}
-          disabled={disabled}
-          style={{
-            ...v, ...sz,
-            borderRadius: "8px",
-            cursor: disabled ? "not-allowed" : "pointer",
-            fontWeight: 700,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.15s",
-            opacity: disabled ? 0.5 : 1,
-            ...style
-          }}
-        >
-          {children}
-        </button>
-      );
-    };
-
-    // Card
-    const Card = ({ children, style = {} }) => (
-      <div style={{
-        background: THEME.bg,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: "12px",
-        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(0, 0, 0, 0.02)",
-        ...style
-      }}>
-        {children}
+    const RBar = ({ r, h=5 }) => (
+      <div style={{ width:"100%", height:h, background:T.bd, borderRadius:h, overflow:"hidden" }}>
+        <div style={{ height:"100%", width:`${Math.min(r,100)}%`, background:rateColor(r), borderRadius:h, transition:"width 1s ease" }}/>
       </div>
     );
 
-    // Chip
-    const Chip = ({ label, bg, tx, size = "11px" }) => (
-      <span style={{
-        display: "inline-block",
-        background: bg,
-        color: tx,
-        fontSize: size,
-        fontWeight: 700,
-        padding: "3px 10px",
-        borderRadius: "20px",
-        whiteSpace: "nowrap"
-      }}>
-        {label}
-      </span>
+    const Card = ({ children, style={} }) => (
+      <div style={{ background:T.s, borderRadius:12, border:`1px solid ${T.bd}`, boxShadow:"0 1px 4px rgba(15,118,110,.06),0 4px 12px rgba(0,0,0,.03)", ...style }}>{children}</div>
     );
 
-    // Progress Bar
-    const ProgressBar = ({ value, max = 100, height = 6 }) => (
-      <div style={{ width: "100%", height, background: THEME.borderLight, borderRadius: height, overflow: "hidden" }}>
-        <div style={{
-          height: "100%",
-          width: `${Math.min(value / max * 100, 100)}%`,
-          background: value >= 80 ? THEME.success : value >= 60 ? THEME.warning : THEME.danger,
-          borderRadius: height,
-          transition: "width 0.6s ease"
-        }} />
-      </div>
-    );
+    const Btn = ({ children, onClick, variant="primary", size="md", style={} }) => {
+      const base = { border:"none", borderRadius:8, cursor:"pointer", fontWeight:700, display:"inline-flex", alignItems:"center", gap:6, transition:"all .15s", ...style };
+      const sizes = { sm:{padding:"5px 12px",fontSize:11}, md:{padding:"8px 16px",fontSize:12}, lg:{padding:"10px 20px",fontSize:13} };
+      const vars = {
+        primary:  { background:T.p, color:"#fff" },
+        ghost:    { background:T.s2, color:T.mu },
+        danger:   { background:"#FEF2F2", color:T.danger },
+        outline:  { background:"transparent", color:T.p, border:`1px solid ${T.p}` },
+      };
+      return <button onClick={onClick} style={{...base,...sizes[size],...vars[variant]}}>{children}</button>;
+    };
 
-    // Section Header
+    const Icon = ({ n, s=16 }) => {
+      const d = {
+        dash:    <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
+        book:    <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
+        people:  <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+        cal:     <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
+        check:   <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+        award:   <><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></>,
+        upload:  <><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></>,
+        dl:      <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+        search:  <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+        alert:   <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+        user:    <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+        plus:    <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+        bars:    <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>,
+        x:       <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+        edit:    <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
+        refresh: <><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>,
+      };
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0, display:"block" }}>{d[n]}</svg>
+      );
+    };
+
     const SectionHead = ({ title, sub, right }) => (
-      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:20 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 900, color: THEME.text, letterSpacing: "-0.5px" }}>
-            {title}
-          </h2>
-          {sub && <p style={{ fontSize: 13, color: THEME.muted, marginTop: 4 }}>{sub}</p>}
+          <h2 style={{ fontSize:20, fontWeight:800, color:T.tx, letterSpacing:"-.3px" }}>{title}</h2>
+          {sub && <p style={{ fontSize:12, color:T.mu, marginTop:3 }}>{sub}</p>}
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>{right}</div>
+        {right}
       </div>
     );
 
-    /* ═══════════════════════════════════════════════════════════
-       4️⃣ MAIN APP COMPONENT
-    ═══════════════════════════════════════════════════════════ */
+    const GStyle = () => (
+      <style>{`
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
+        body, #root { font-family:'Pretendard',-apple-system,sans-serif; }
+        ::-webkit-scrollbar { width:5px; height:5px; }
+        ::-webkit-scrollbar-track { background:#f1f5f9; }
+        ::-webkit-scrollbar-thumb { background:#94a3b8; border-radius:3px; }
+        input,select,button,textarea { font-family:inherit; }
+        @keyframes fadeUp   { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeIn   { from{opacity:0} to{opacity:1} }
+        @keyframes slideIn  { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes ping     { 0%{transform:scale(1);opacity:1} 75%,100%{transform:scale(2);opacity:0} }
+        @keyframes scanLine { 0%{top:0} 50%{top:calc(100% - 3px)} 100%{top:0} }
+        @keyframes checkIn  { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes loginBg  { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+        @keyframes shake    { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+        .page { animation: fadeUp .3s ease both; }
+        .row-hover:hover { background:#fff7ed !important; }
+        .btn-nav { transition: all .15s; }
+        .btn-nav:hover { background: rgba(255,255,255,.12) !important; }
+        .drop-zone { transition: all .2s; }
+        .drop-zone.drag-over { border-color:#EA580C !important; background:#fff7ed !important; transform:scale(1.01); }
+        .course-card { transition: all .2s; }
+        .course-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(234,88,12,.15) !important; }
+        .checkin-row { animation: checkIn .4s ease both; }
+      `}</style>
+    );
+
+    // ════════════════════════════════════════════════════════════
+    // DASHBOARD
+    // ════════════════════════════════════════════════════════════
+    const Dashboard = ({ students, courses }) => {
+      const totalTgt = courses.reduce((a,b)=>a+b.tgt,0);
+      const totalCG  = courses.reduce((a,b)=>a+b.cGoal,0);
+      const totalEG  = courses.reduce((a,b)=>a+b.eGoal,0);
+      const avgRate  = students.length ? (students.reduce((a,b)=>a+b.rate,0)/students.length).toFixed(1) : 0;
+      const atRisk   = students.filter(s=>s.rate<80);
+      return (
+        <div className="page">
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:12, marginBottom:20 }}>
+            {[
+              { label:"총 모집 목표", val:`${totalTgt}명`, sub:`${courses.length}개 과정`, icon:"people", color:T.p },
+              { label:"수료 목표 (90%)", val:`${totalCG}명`, sub:"연간 목표", icon:"check", color:T.ok },
+              { label:"취업 목표 (65%)", val:`${totalEG}명`, sub:"수료자 기준", icon:"award", color:"#D97706" },
+              { label:"현재 위험 훈련생", val:`${atRisk.length}명`, sub:"출석률 80% 미만", icon:"alert", color:T.danger },
+              { label:"평균 출석률", val:`${avgRate}%`, sub:"전체 훈련생", icon:"cal", color:T.info },
+            ].map((k,i) => (
+              <Card key={i} style={{ padding:"18px 20px", display:"flex", gap:12, alignItems:"flex-start" }}>
+                <div style={{ width:42, height:42, borderRadius:10, background:`${k.color}15`, color:k.color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><Icon n={k.icon} s={20}/></div>
+                <div>
+                  <div style={{ fontSize:24, fontWeight:800, color:T.tx, lineHeight:1 }}>{k.val}</div>
+                  <div style={{ fontSize:11, color:T.mu, marginTop:3 }}>{k.label}</div>
+                  {k.sub && <div style={{ fontSize:10, color:k.color, marginTop:1, fontWeight:600 }}>{k.sub}</div>}
+                </div>
+              </Card>
+            ))}
+          </div>
+          <Card style={{ padding:20 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:14, display:"flex", gap:8 }}>
+              <Icon n="info" s={15}/> 2026년 사업 개요
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:10 }}>
+              {[
+                {l:"사업기간",v:"2026.01 ~ 12월"},
+                {l:"사업대상",v:"만 18세↑ 미취업 경기도민"},
+                {l:"총 사업량",v:"13개 과정 / 240명"},
+                {l:"수료율 목표",v:"90% 이상"},
+                {l:"취업률 목표",v:"65% 이상"},
+              ].map(({l,v})=>(
+                <div key={l} style={{ padding:"11px 13px", background:T.s2, borderRadius:8, border:`1px solid ${T.bd}` }}>
+                  <div style={{ fontSize:10, color:T.mu }}>{l}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:T.tx, marginTop:3 }}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      );
+    };
+
+    // ════════════════════════════════════════════════════════════
+    // ATTENDANCE MANAGEMENT - QR
+    // ════════════════════════════════════════════════════════════
+    const AttendanceMgmt = ({ students, courses }) => {
+      const [course, setCourse]   = useState(courses[3] || courses[0]);
+      const [date, setDate]       = useState(DATES[DATES.length-1]);
+      const [qrType, setQrType]   = useState("in");
+      const [records, setRecords] = useState({});
+      const [startH, setStartH] = useState(9);
+      const [startM, setStartM] = useState(0);
+      const [lateH,  setLateH]  = useState(9);
+      const [lateM,  setLateM]  = useState(30);
+      const [endH,   setEndH]   = useState(13);
+      const [endM,   setEndM]   = useState(0);
+      const [simRunning, setSimRunning] = useState(false);
+      const [timeCustomized, setTimeCustomized] = useState(false);
+      const [showTimeSetting, setShowTimeSetting] = useState(false);
+
+      const startTotal = startH * 60 + startM;
+      const lateTotal = lateH * 60 + lateM;
+      const endTotal = endH * 60 + endM;
+
+      const fmtTime = (h, m) => `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+
+      const handleCourseChange = (c) => {
+        setCourse(c);
+        setRecords({});
+        if (!timeCustomized) {
+          const [sh, sm] = [c.schedTimeFrom?.split(":")[0]||9, c.schedTimeFrom?.split(":")[1]||0];
+          const [eh, em] = [c.schedTimeTo?.split(":")[0]||13, c.schedTimeTo?.split(":")[1]||0];
+          setStartH(+sh); setStartM(+sm);
+          setEndH(+eh); setEndM(+em);
+          setLateH(+sh); setLateM(+sm + 30);
+        }
+      };
+
+      const calcStatus = (inMins) => {
+        if (inMins === null) return "A";
+        if (inMins <= lateTotal) return "O";
+        return "L";
+      };
+
+      const courseStudents = students.filter(s=>s.cid===course.id);
+      const checkedInCnt  = Object.values(records).filter(r=>r.in).length;
+      const checkedOutCnt = Object.values(records).filter(r=>r.out).length;
+      const presentCnt    = Object.values(records).filter(r=>r.in && calcStatus(r.in.mins)==="O").length;
+      const lateCnt       = Object.values(records).filter(r=>r.in && calcStatus(r.in.mins)==="L").length;
+      const absentCnt = courseStudents.length - checkedInCnt;
+
+      const startSim = () => {
+        if(simRunning) return;
+        setSimRunning(true);
+        if(qrType==="in") setRecords({});
+
+        // ✅ FIX: 각 학생별 독립적 타이머로 처리 (중복 방지)
+        courseStudents.forEach((s, idx) => {
+          setTimeout(() => {
+            const offsetMins = Math.floor(Math.random() * 80) - 10;
+            const mins = Math.max(0, startTotal + offsetMins);
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            const time = fmtTime(h, m);
+
+            if(qrType === "in") {
+              setRecords(prev => ({...prev, [s.id]: { in: { time, mins } }}));
+            } else {
+              const outOffset = endTotal + Math.floor(Math.random()*20) - 5;
+              const oh = Math.floor(outOffset/60), om = outOffset%60;
+              setRecords(prev => ({...prev, [s.id]: { ...(prev[s.id]||{}), out: { time: fmtTime(oh,om) } }}));
+            }
+          }, idx * 250); // 250ms 간격
+        });
+
+        setTimeout(() => setSimRunning(false), courseStudents.length * 250);
+      };
+
+      const ATT_MAP = {
+        O: { label:"출석", bg:"#ECFDF5", color:T.ok    },
+        L: { label:"지각", bg:"#FFFBEB", color:T.warn   },
+        A: { label:"결석", bg:"#FEF2F2", color:T.danger },
+      };
+
+      const inpSel = { padding:"5px 8px", border:`1px solid ${T.bd}`, borderRadius:7, fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer", width:64 };
+
+      return (
+        <div className="page">
+          <SectionHead title="출결 관리" sub="QR 코드 출석으로 실시간 출결을 관리합니다"/>
+
+          <Card style={{ padding:"14px 18px", marginBottom:16, display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
+            <button onClick={()=>setShowTimeSetting(v=>!v)} style={{ width:"100%", padding:"11px 18px", border:"none", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
+              <Icon n="cal" s={14}/>
+              <div style={{ fontSize:12, fontWeight:700, color:T.tx }}>⏰ 수업 시간 설정</div>
+              {timeCustomized && (<span style={{ fontSize:10, fontWeight:700, color:T.warn, background:"#FFFBEB", padding:"1px 7px", borderRadius:4 }}>수동 수정됨</span>)}
+              <div style={{ marginLeft:"auto", display:"flex", gap:12, alignItems:"center", fontSize:12 }}>
+                <span style={{ color:T.ok }}>수업 {fmtTime(startH,startM)} ~ {fmtTime(endH,endM)}</span>
+                <span style={{ color:T.warn }}>지각기준 {fmtTime(lateH,lateM)} 이후</span>
+              </div>
+            </button>
+            {showTimeSetting && (
+              <div style={{ width:"100%", padding:"14px 18px", borderTop:`1px solid ${T.bd}`, display:"flex", gap:20, flexWrap:"wrap", alignItems:"flex-end" }}>
+                {[
+                  { label:"수업 시작", h:startH, m:startM, setH:(v)=>{setStartH(v);setTimeCustomized(true);}, setM:(v)=>{setStartM(v);setTimeCustomized(true);}, color:T.ok },
+                  { label:"지각 기준", h:lateH, m:lateM, setH:(v)=>{setLateH(v);setTimeCustomized(true);}, setM:(v)=>{setLateM(v);setTimeCustomized(true);}, color:T.warn },
+                  { label:"수업 종료", h:endH, m:endM, setH:(v)=>{setEndH(v);setTimeCustomized(true);}, setM:(v)=>{setEndM(v);setTimeCustomized(true);}, color:T.p },
+                ].map(({label,h,m,setH,setM,color})=>(
+                  <div key={label}>
+                    <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>{label}</label>
+                    <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                      <select value={h} onChange={e=>setH(+e.target.value)} style={{...inpSel,borderColor:color, width:auto}}>
+                        {Array.from({length:24},(_,i)=>i).map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}시</option>)}
+                      </select>
+                      <span style={{ fontSize:14, fontWeight:700, color:T.mu }}>:</span>
+                      <select value={m} onChange={e=>setM(+e.target.value)} style={{...inpSel,borderColor:color, width:auto}}>
+                        {[0,10,20,30,40,50].map(v=><option key={v} value={v}>{String(v).padStart(2,"0")}분</option>)}
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card style={{ padding:"14px 18px", marginBottom:16, display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>과정 선택</div>
+              <select value={course.id} onChange={e=>handleCourseChange(courses.find(c=>c.id===+e.target.value)||courses[0])} style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
+                {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>수업일</div>
+              <select value={date} onChange={e=>setDate(e.target.value)} style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
+                {DATES.map(d=><option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
+              {[
+                {v: Object.values(records).filter(r=>r.in && calcStatus(r.in.mins)==="O").length, l:"출석", c:T.ok},
+                {v: Object.values(records).filter(r=>r.in && calcStatus(r.in.mins)==="L").length, l:"지각", c:T.warn},
+                {v: courseStudents.length - Object.values(records).filter(r=>r.in).length, l:"미확인", c:T.danger},
+              ].map(({v,l,c})=>(
+                <div key={l} style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:18, fontWeight:800, color:c }}>{v}</div>
+                  <div style={{ fontSize:9, color:T.mu }}>{l}</div>
+                </div>
+              ))}
+              <div style={{ fontSize:13, color:T.mu }}>/ {courseStudents.length}명</div>
+            </div>
+          </Card>
+
+          <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:16 }}>
+            <Card style={{ padding:20, width:280, flexShrink:0 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:16 }}>
+                {[
+                  { id:"in",  label:"📥 입실 QR", color:"#2563EB" },
+                  { id:"out", label:"📤 퇴실 QR", color:T.p },
+                ].map(({id,label,color})=>(
+                  <button key={id} onClick={()=>setQrType(id)} style={{ padding:"10px 6px", borderRadius:9, border:"none", cursor:"pointer", background: qrType===id ? color : T.s3, color: qrType===id ? "#fff" : T.mu, fontWeight:700, fontSize:11, transition:"all .15s" }}>{label}</button>
+                ))}
+              </div>
+              <div style={{ fontSize:10, color:T.mu, lineHeight:1.8, marginBottom:10, padding:"8px 10px", background:T.s2, borderRadius:7, border:`1px solid ${T.bd}` }}>
+                <b style={{color:T.tx}}>과정:</b> {course.name}<br/>
+                <b style={{color:T.tx}}>날짜:</b> {date}<br/>
+                <b style={{color:T.ok}}>수업시작:</b> {fmtTime(startH,startM)}<br/>
+                <b style={{color:T.warn}}>지각기준:</b> {fmtTime(lateH,lateM)} 이후<br/>
+                <b style={{color:T.p}}>수업종료:</b> {fmtTime(endH,endM)}<br/>
+                <b style={{color:"#2563EB"}}>현재 QR:</b> {qrType==="in"?"입실":"퇴실"}
+              </div>
+            </Card>
+
+            <Card style={{ overflow:"hidden", display:"flex", flexDirection:"column" }}>
+              <div style={{ padding:"12px 18px", borderBottom:`1px solid ${T.bd}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.tx, display:"flex", alignItems:"center", gap:8 }}>
+                  📡 실시간 출석 현황
+                  {simRunning && (<span style={{ fontSize:10, color:T.ok, display:"inline-flex", alignItems:"center", gap:4 }}><span style={{ width:6, height:6, background:T.ok, borderRadius:"50%", animation:"ping 1.2s ease infinite"}}/>LIVE</span>)}
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <Btn size="sm" variant="ghost" onClick={()=>{ setRecords({}); setSimRunning(false); }}>초기화</Btn>
+                  <Btn size="sm" onClick={startSim} variant={simRunning?"ghost":"primary"}><Icon n="refresh" s={13}/>{simRunning ? "스캔 중…" : `${qrType==="in"?"입실":"퇴실"} 시뮬레이션`}</Btn>
+                </div>
+              </div>
+
+              <div style={{ flex:1, padding:14, overflowY:"auto", maxHeight:400 }}>
+                {courseStudents.map(s => {
+                  const rec = records[s.id] || {};
+                  const inRec = rec.in;
+                  const status = inRec ? calcStatus(inRec.mins) : "A";
+                  const att = ATT_MAP[inRec ? status : "A"];
+                  return (
+                    <div key={s.id} className={inRec?"checkin-row":""} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", borderRadius:8, marginBottom:6, background: inRec ? att.bg : T.s2, border:`1px solid ${inRec ? att.color+"30" : T.bd}`, transition:"all .3s" }}>
+                      <div style={{ width:34, height:34, borderRadius:9, flexShrink:0, background: inRec ? `${att.color}20` : T.bd, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, color: inRec ? att.color : T.mu }}>{inRec ? att.label[0] : "?"}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</div>
+                        <div style={{ fontSize:10, color:T.mu, marginTop:1, display:"flex", gap:8 }}>{inRec ? <span style={{color:"#2563EB"}}>📥 입실 {inRec.time}</span> : "대기 중"}</div>
+                      </div>
+                      <div style={{ display:"flex", gap:5, alignItems:"center" }}>
+                        {inRec && <Chip label={att.label} bg={att.bg} color={att.color}/>}
+                        {!inRec && <Chip label="미확인" bg={T.s3} color={T.mu}/>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ padding:"11px 18px", borderTop:`1px solid ${T.bd}`, background:T.s2 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                  <span style={{ fontSize:11, color:T.mu }}>입실 진행률</span>
+                  <span style={{ fontSize:11, fontWeight:700, color:T.p }}>{courseStudents.length ? Math.round(checkedInCnt/courseStudents.length*100) : 0}% <span style={{ fontSize:10, color:T.mu, fontWeight:400, marginLeft:4 }}>({checkedInCnt}/{courseStudents.length})</span></span>
+                </div>
+                <RBar r={courseStudents.length ? checkedInCnt/courseStudents.length*100 : 0} h={8}/>
+              </div>
+            </Card>
+          </div>
+        </div>
+      );
+    };
+
+    // ════════════════════════════════════════════════════════════
+    // CERTIFICATE GENERATION
+    // ════════════════════════════════════════════════════════════
+    const printAttendCert = (s, c, certNo, issueDate) => {
+      const birthFmt = s.birth ? s.birth.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, day) => `${y}. ${String(+m)}. ${String(+day)}`) : "　　. 　. 　";
+      
+      // ✅ FIX: ⑥ 수강기간 실시간 포맷팅
+      const periodLine = (() => {
+        const fmtDate = d => d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, day) => `${y}. ${String(+m)}. ${String(+day)}`) : "　　. 　. 　";
+        const p = (c.dateFrom || c.dateTo) ? `${fmtDate(c.dateFrom)} ~ ${fmtDate(c.dateTo)}` : (c.period || "　　. 　. 　 ~ 　　. 　. 　");
+        const days  = c.schedDays     || "";
+        const tFrom = c.schedTimeFrom || "";
+        const tTo   = c.schedTimeTo   || "";
+        const dayStr  = days        ? ` / 매주 ${days}` : "";
+        const timeStr = (tFrom&&tTo) ? ` ${tFrom} ∼ ${tTo}` : "";
+        return p + dayStr + timeStr;
+      })();
+
+      const addr = s.addrCity || "　　　　　　　　　";
+
+      const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/><title>수강증명서 - ${s.name}</title><style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Pretendard','맑은 고딕',sans-serif;background:#fff;display:flex;align-items:flex-start;justify-content:center;padding:20px 0;}
+        .doc{width:210mm;min-height:297mm;padding:22mm 24mm 20mm;background:#fff;display:flex;flex-direction:column;}
+        .doc-title{text-align:center;margin-bottom:28px;}
+        .doc-title h1{font-size:24pt;font-weight:900;letter-spacing:12px;color:#111;border-bottom:3px double #333;display:inline-block;padding-bottom:8px;}
+        .doc-no{font-size:10pt;color:#555;text-align:right;margin-bottom:20px;}
+        .section{border:1.5px solid #333;margin-bottom:0;}
+        .section+.section{border-top:none;}
+        .section-title{background:#f0f0f0;padding:5px 12px;font-size:11pt;font-weight:800;color:#111;border-bottom:1px solid #bbb;letter-spacing:4px;}
+        .row{display:flex;align-items:stretch;border-bottom:1px solid #ccc;min-height:36px;}
+        .row:last-child{border-bottom:none;}
+        .field-no{width:26px;background:#f8f8f8;display:flex;align-items:center;justify-content:center;font-size:9pt;color:#555;border-right:1px solid #ccc;flex-shrink:0;font-weight:700;}
+        .field-label{width:88px;padding:7px 10px;font-size:10pt;font-weight:700;color:#222;border-right:1px solid #ccc;display:flex;align-items:center;background:#fafafa;flex-shrink:0;}
+        .field-value{flex:1;padding:7px 12px;font-size:11pt;color:#111;display:flex;align-items:center;}
+        .field-value.name-val{font-weight:800;font-size:13pt;}
+        .body-text{text-align:center;font-size:11pt;line-height:2.2;color:#222;margin:28px 0 24px;}
+        .sign-wrap{text-align:center;}
+        .sign-date{font-size:12pt;color:#222;margin-bottom:36px;}
+        .sign-line{display:inline-flex;align-items:center;gap:16px;}
+        .sign-title{font-size:14pt;font-weight:700;color:#111;letter-spacing:3px;}
+        .stamp-box{width:54px;height:54px;border:2px solid #333;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#333;font-size:13pt;font-weight:900;}
+        .print-btn{position:fixed;bottom:24px;right:24px;background:#EA580C;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(234,88,12,.4);font-family:'Pretendard',sans-serif;z-index:99;}
+        @media print{body{padding:0;}.doc{padding:18mm 22mm 16mm;page-break-after:always;}.print-btn{display:none;}@page{size:A4 portrait;margin:0;}}
+      </style></head><body><div class="doc">
+        <div class="doc-title"><h1>직업교육훈련 수강증명서</h1></div>
+        <div class="doc-no">제 2026-북부-수강-${certNo} 호</div>
+        <div class="section">
+          <div class="section-title">훈련생</div>
+          <div class="row"><div class="field-no">①</div><div class="field-label">성　　명</div><div class="field-value name-val">${s.name}</div></div>
+          <div class="row"><div class="field-no">②</div><div class="field-label">생년월일</div><div class="field-value">${birthFmt}</div></div>
+          <div class="row"><div class="field-no">③</div><div class="field-label">주　　소</div><div class="field-value">${addr}</div></div>
+        </div>
+        <div class="section">
+          <div class="section-title">수강명세</div>
+          <div class="row"><div class="field-no">④</div><div class="field-label">훈련기관</div><div class="field-value">경기도일자리재단 북부사업본부</div></div>
+          <div class="row"><div class="field-no">⑤</div><div class="field-label">수강직종</div><div class="field-value">${c.name}</div></div>
+          <div class="row" style="min-height:46px;"><div class="field-no">⑥</div><div class="field-label">수강기간</div><div class="field-value" style="font-size:10.5pt;">${periodLine}</div></div>
+        </div>
+        <div class="body-text">위의 사실이 틀림없음을 증명합니다.</div>
+        <div class="sign-wrap">
+          <div class="sign-date">${issueDate}</div>
+          <div class="sign-line">
+            <div class="sign-title">경기도일자리재단 대표이사</div>
+            <div class="stamp-box">(인)</div>
+          </div>
+        </div>
+      </div>
+      <button class="print-btn" onclick="window.print()">🖨️ PDF 저장 / 인쇄</button>
+      </body></html>`;
+
+      const w = window.open("", "_blank", "width=900,height=1200");
+      w.document.write(html);
+      w.document.close();
+    };
+
+    const CertMgmt = ({ students, courses }) => {
+      const [course, setCourse] = useState(courses[3] || courses[0]);
+      const [issued, setIssued] = useState({});
+      const [issueDate, setIssueDate] = useState("2026년 　 월 　 일");
+      const [customDate, setCustomDate] = useState("");
+
+      const eligible = students.filter(s => s.cid===course.id && s.rate>0);
+      const getCertNo = (s, idx) => issued[s.id]?.no ?? `${course.code}-${String(idx+1).padStart(3,"0")}`;
+      const fmtDate = raw => {
+        if (!raw) return "";
+        const [y,m,d] = raw.split("-");
+        return `${y}년 ${m}월 ${d}일`;
+      };
+
+      const handleIssue = (s, idx) => {
+        const no = getCertNo(s, idx);
+        setIssued(p => ({ ...p, [s.id]: { no, date: issueDate } }));
+        printAttendCert(s, course, no, issueDate);
+      };
+
+      const handleIssueAll = () => eligible.forEach((s, idx) => handleIssue(s, idx));
+
+      return (
+        <div className="page">
+          <SectionHead title="증명서 발급" sub="수강증명서 공식 양식 출력 · 브라우저 인쇄 → PDF 저장"/>
+
+          <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+            {courses.map(c => (
+              <button key={c.id} onClick={()=>setCourse(c)} style={{ padding:"6px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:11, fontWeight:600, background: course.id===c.id ? c.cc : T.s3, color: course.id===c.id ? "#fff" : T.mu }}>
+                {c.name.length>14 ? c.name.slice(0,14)+"…" : c.name}
+              </button>
+            ))}
+          </div>
+
+          <Card style={{ padding:"14px 18px", marginBottom:16, display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ fontSize:12, fontWeight:700, color:T.tx }}>📅 발급일자</div>
+            <input type="date" value={customDate} onChange={e => { setCustomDate(e.target.value); setIssueDate(fmtDate(e.target.value)); }} style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:12, outline:"none", background:T.s2, cursor:"pointer" }}/>
+            <div style={{ fontSize:12, color:T.mu }}>→ <b style={{color:T.p}}>{issueDate}</b></div>
+            <div style={{ marginLeft:"auto" }}>
+              <Btn size="sm" onClick={handleIssueAll}><Icon n="dl" s={13}/> 전체 {eligible.length}명 출력</Btn>
+            </div>
+          </Card>
+
+          <Card style={{ overflow:"hidden" }}>
+            <div style={{ padding:"12px 18px", borderBottom:`1px solid ${T.bd}` }}>
+              <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>수강 대상자</span>
+              <span style={{ fontSize:12, color:T.mu, marginLeft:8 }}>{eligible.length}명</span>
+            </div>
+
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:T.s2 }}>
+                  {["번호","이름","생년월일","출석률","문서번호","발급여부",""].map(h=>(
+                    <th key={h} style={{ padding:"10px 14px", textAlign:h==="이름"?"left":"center", fontSize:11, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {eligible.length===0 && (
+                  <tr><td colSpan={7} style={{ padding:"40px 0", textAlign:"center", fontSize:13, color:T.mu }}>수강자가 없습니다</td></tr>
+                )}
+                {eligible.map((s, idx) => {
+                  const cert = issued[s.id];
+                  const no = getCertNo(s, idx);
+                  return (
+                    <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
+                      <td style={{ padding:"12px 14px", textAlign:"center", fontSize:12, color:T.mu }}>{idx+1}</td>
+                      <td style={{ padding:"12px 14px" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <div style={{ width:28, height:28, borderRadius:8, background:`${T.p}15`, color:T.p, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, flexShrink:0 }}>{s.name[0]}</div>
+                          <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding:"12px 14px", textAlign:"center", fontSize:12, color:T.mu }}>{s.birth||"—"}</td>
+                      <td style={{ padding:"12px 14px", textAlign:"center" }}>
+                        <span style={{ fontSize:14, fontWeight:800, color: s.rate>=80?T.ok:s.rate>=60?T.warn:T.danger }}>{s.rate}%</span>
+                      </td>
+                      <td style={{ padding:"12px 14px", textAlign:"center", fontSize:11, color:T.mu, fontFamily:"monospace" }}>
+                        {cert ? `2026-북부-수강-${no}호` : <span style={{color:T.bd}}>미발급</span>}
+                      </td>
+                      <td style={{ padding:"12px 14px", textAlign:"center" }}>
+                        <Chip label={cert?"발급완료":"미발급"} bg={cert?T.pbg:T.s3} color={cert?T.p:T.mu}/>
+                      </td>
+                      <td style={{ padding:"12px 14px", textAlign:"center" }}>
+                        <Btn size="sm" variant={cert?"ghost":"primary"} onClick={()=>handleIssue(s,idx)}><Icon n="dl" s={12}/>{cert?"재출력":"PDF 발급"}</Btn>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      );
+    };
+
+    // ════════════════════════════════════════════════════════════
+    // APP ROOT
+    // ════════════════════════════════════════════════════════════
+    const NAV_ITEMS = [
+      { id:"dash",       label:"대시보드", icon:"dash" },
+      { id:"attendance", label:"출결 관리", icon:"check" },
+      { id:"cert",       label:"증명서 발급", icon:"dl" },
+    ];
 
     function App() {
+      const [currentUser, setCurrentUser] = useState(() => {
+        try { const u = sessionStorage.getItem("gjf_user"); return u ? JSON.parse(u) : null; }
+        catch { return null; }
+      });
       const [page, setPage] = useState("dash");
-      
-      // Data States
-      const [courses, setCourses] = useState(() => Storage.get("courses", SEED_COURSES));
-      const [students, setStudents] = useState(() => Storage.get("students", SEED_STUDENTS));
-      const [instructors, setInstructors] = useState(() => Storage.get("instructors", SEED_INSTRUCTORS));
-      const [rooms, setRooms] = useState(() => Storage.get("rooms", SEED_ROOMS));
-      
-      // Save to Storage
-      useEffect(() => { Storage.set("courses", courses); }, [courses]);
-      useEffect(() => { Storage.set("students", students); }, [students]);
-      useEffect(() => { Storage.set("instructors", instructors); }, [instructors]);
-      useEffect(() => { Storage.set("rooms", rooms); }, [rooms]);
-
-      // Hide Loading Screen
-      useEffect(() => {
-        const loader = document.getElementById("loading");
-        if (loader) {
-          setTimeout(() => {
-            loader.classList.add("fade");
-            setTimeout(() => loader.style.display = "none", 800);
-          }, 500);
-        }
-      }, []);
-
-      const renderPage = () => {
-        switch (page) {
-          case "dash":
-            return <Dashboard students={students} courses={courses} />;
-          case "courses":
-            return <CourseManager courses={courses} setCourses={setCourses} />;
-          case "students":
-            return <StudentManager students={students} setStudents={setStudents} courses={courses} />;
-          case "instructors":
-            return <InstructorManager instructors={instructors} setInstructors={setInstructors} courses={courses} />;
-          case "rooms":
-            return <RoomManager rooms={rooms} setRooms={setRooms} courses={courses} />;
-          case "attendance":
-            return <AttendanceManager students={students} setStudents={setStudents} courses={courses} />;
-          case "completion":
-            return <CompletionManager students={students} setStudents={setStudents} courses={courses} />;
-          case "certificates":
-            return <CertificateManager students={students} courses={courses} />;
-          case "account":
-            return <AccountManager />;
-          default:
-            return null;
-        }
-      };
-
-      const NAV_ITEMS = [
-        { id: "dash", label: "대시보드", icon: "dash" },
-        { id: "courses", label: "과정관리", icon: "book" },
-        { id: "students", label: "훈련생관리", icon: "people" },
-        { id: "instructors", label: "강사관리", icon: "people" },
-        { id: "rooms", label: "강의실관리", icon: "book" },
-        { id: "attendance", label: "출결관리", icon: "check" },
-        { id: "completion", label: "수료관리", icon: "check" },
-        { id: "certificates", label: "증명서발급", icon: "download" },
-        { id: "account", label: "계정관리", icon: "people" },
-      ];
-
-      return (
-        <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-          {/* Sidebar */}
-          <aside style={{
-            width: 280,
-            background: THEME.dark,
-            color: "#fff",
-            display: "flex",
-            flexDirection: "column",
-            boxShadow: "2px 0 12px rgba(0,0,0,0.1)",
-            overflowY: "auto"
-          }}>
-            <div style={{ padding: "24px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-              <div style={{ fontSize: 18, fontWeight: 950, letterSpacing: "-0.5px" }}>NORTHERN ERP</div>
-              <div style={{ fontSize: 11, color: THEME.primaryLight, fontWeight: 700, marginTop: 6, letterSpacing: "0.5px" }}>
-                Gyeonggi Job Foundation
-              </div>
-            </div>
-
-            <nav style={{ flex: 1, padding: "16px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
-              {NAV_ITEMS.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setPage(item.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 16px",
-                    borderRadius: "10px",
-                    border: "none",
-                    background: page === item.id ? `linear-gradient(135deg, ${THEME.primary}, ${THEME.primaryDark})` : "transparent",
-                    color: page === item.id ? "#fff" : "rgba(255,255,255,0.6)",
-                    cursor: "pointer",
-                    fontWeight: page === item.id ? 800 : 600,
-                    fontSize: "13px",
-                    transition: "all 0.2s"
-                  }}
-                >
-                  <Icon n={item.icon} s={18} c={page === item.id ? "#fff" : "rgba(255,255,255,0.6)"} />
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-
-            <div style={{ padding: "16px 20px", background: "rgba(0,0,0,0.2)", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: 500 }}>
-                👤 이상훈 과장
-              </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
-                북부교육팀 · Master
-              </div>
-            </div>
-          </aside>
-
-          {/* Main Content */}
-          <main style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "28px 40px",
-            background: THEME.bgSecond,
-            display: "flex",
-            flexDirection: "column"
-          }}>
-            <div className="animate-up">
-              {renderPage()}
-            </div>
-          </main>
-        </div>
-      );
-    }
-
-    /* ═══════════════════════════════════════════════════════════
-       5️⃣ PAGE COMPONENTS - DASHBOARD
-    ═══════════════════════════════════════════════════════════ */
-
-    function Dashboard({ students, courses }) {
-      const totalTgt = courses.reduce((a, b) => a + b.tgt, 0);
-      const totalCG = courses.reduce((a, b) => a + b.cGoal, 0);
-      const totalEG = courses.reduce((a, b) => a + b.eGoal, 0);
-      const avgRate = students.length ? (students.reduce((a, b) => a + b.rate, 0) / students.length).toFixed(1) : 0;
-      const atRisk = students.filter(s => s.rate < 80 && s.rate > 0);
-
-      return (
-        <div>
-          <SectionHead
-            title="사업 통합 관제 대시보드"
-            sub="2026년 경기북부 13개 과정 실시간 현황"
-          />
-
-          {/* KPI Cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
-            {[
-              { label: "총 훈련생", val: students.length, sub: `정원 ${totalTgt}명`, icon: "people", color: THEME.primary },
-              { label: "평균 출석률", val: `${avgRate}%`, sub: "전체 평균", icon: "check", color: THEME.success },
-              { label: "누적 취업", val: "42명", sub: "과정유관", icon: "download", color: THEME.success },
-              { label: "위험 훈련생", val: atRisk.length, sub: "80% 미만", icon: "alert", color: THEME.danger },
-            ].map((k, i) => (
-              <Card key={i} style={{ padding: 20 }}>
-                <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 10,
-                    background: `${k.color}20`,
-                    color: k.color,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0
-                  }}>
-                    <Icon n={k.icon} s={24} c={k.color} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 28, fontWeight: 900, color: THEME.text }}>
-                      {k.val}
-                    </div>
-                    <div style={{ fontSize: 12, color: THEME.muted, marginTop: 4 }}>
-                      {k.label}
-                    </div>
-                    <div style={{ fontSize: 11, color: k.color, fontWeight: 600, marginTop: 2 }}>
-                      {k.sub}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          {/* Course Status & Risk Students */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 20 }}>
-            {/* Courses */}
-            <Card style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 800, color: THEME.text, marginBottom: 16 }}>
-                📊 과정별 현황 (13개)
-              </h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {courses.slice(0, 6).map(c => (
-                  <div key={c.id}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: THEME.text }}>
-                        {c.name.substring(0, 25)}…
-                      </span>
-                      <span style={{ fontSize: 11, color: THEME.muted }}>
-                        {students.filter(s => s.cid === c.id).length}/{c.tgt}명
-                      </span>
-                    </div>
-                    <ProgressBar
-                      value={students.filter(s => s.cid === c.id).length}
-                      max={c.tgt}
-                      height={6}
-                    />
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {/* Risk Students */}
-            <Card style={{ padding: 24 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 800, color: THEME.text, marginBottom: 16 }}>
-                ⚠️ 위험 훈련생
-              </h3>
-              {atRisk.length === 0 ? (
-                <div style={{ textAlign: "center", color: THEME.muted, padding: "24px 0" }}>
-                  위험 훈련생 없음 🎉
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {atRisk.sort((a, b) => a.rate - b.rate).map(s => {
-                    const c = courses.find(x => x.id === s.cid);
-                    return (
-                      <div key={s.id} style={{
-                        display: "flex",
-                        gap: 8,
-                        padding: "10px 12px",
-                        borderRadius: 8,
-                        background: s.rate < 60 ? "#FEF2F2" : "#FFFBEB",
-                        border: `1px solid ${s.rate < 60 ? "#FECACA" : "#FDE68A"}`
-                      }}>
-                        <div style={{
-                          fontSize: 12,
-                          fontWeight: 900,
-                          color: s.rate < 60 ? THEME.danger : THEME.warning,
-                          background: s.rate < 60 ? "#FEE2E2" : "#FEF3C7",
-                          padding: "0 6px",
-                          borderRadius: 4,
-                          height: 24,
-                          display: "flex",
-                          alignItems: "center",
-                          flexShrink: 0
-                        }}>
-                          {s.rate}%
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: THEME.text }}>
-                            {s.name}
-                          </div>
-                          <div style={{ fontSize: 10, color: THEME.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {c?.name}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-          </div>
-        </div>
-      );
-    }
-
-    /* ═══════════════════════════════════════════════════════════
-       6️⃣ PAGE COMPONENTS - COURSE MANAGER
-    ═══════════════════════════════════════════════════════════ */
-
-    function CourseManager({ courses, setCourses }) {
-      const [editing, setEditing] = useState(null);
-      const [cat, setCat] = useState("전체");
-
-      const cats = ["전체", ...new Set(courses.map(c => c.cat))];
-      const filtered = cat === "전체" ? courses : courses.filter(c => c.cat === cat);
-
-      const handleDelete = id => {
-        if (window.confirm("정말 삭제하시겠습니까?")) {
-          setCourses(courses.filter(c => c.id !== id));
-        }
-      };
-
-      return (
-        <div>
-          <SectionHead
-            title="과정 관리"
-            sub={`총 ${courses.length}개 과정`}
-            right={<Btn onClick={() => setEditing({} )} size="sm"><Icon n="plus" s={14} />과정 추가</Btn>}
-          />
-
-          {/* Filter */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-            {cats.map(c => (
-              <button key={c}
-                onClick={() => setCat(c)}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 20,
-                  border: "none",
-                  background: cat === c ? THEME.primary : THEME.bgTertiary,
-                  color: cat === c ? "#fff" : THEME.muted,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: 11
-                }}>
-                {c}
-              </button>
-            ))}
-          </div>
-
-          {/* Course Grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-            {filtered.map(c => (
-              <Card key={c.id} style={{ padding: 16, borderLeft: `4px solid ${c.cc}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 }}>
-                  <div>
-                    <Chip label={c.cat} bg={`${c.cc}20`} tx={c.cc} size="10px" />
-                    <div style={{ fontSize: 13, fontWeight: 800, color: THEME.text, marginTop: 6 }}>
-                      {c.name}
-                    </div>
-                    <div style={{ fontSize: 10, color: THEME.muted, marginTop: 2 }}>
-                      {c.code} · {c.period}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <button onClick={() => setEditing(c)} style={{
-                      width: 28, height: 28, borderRadius: 6, border: "none",
-                      background: THEME.primaryBg, color: THEME.primary, cursor: "pointer"
-                    }}>
-                      <Icon n="edit" s={14} />
-                    </button>
-                    <button onClick={() => handleDelete(c.id)} style={{
-                      width: 28, height: 28, borderRadius: 6, border: "none",
-                      background: "#FEF2F2", color: THEME.danger, cursor: "pointer"
-                    }}>
-                      <Icon n="x" s={14} />
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 12 }}>
-                  {[{ l: "모집", v: c.tgt }, { l: "수료", v: c.cGoal }, { l: "취업", v: c.eGoal }].map(x => (
-                    <div key={x.l} style={{ textAlign: "center", padding: "8px 4px", background: THEME.bgTertiary, borderRadius: 6 }}>
-                      <div style={{ fontSize: 16, fontWeight: 900, color: THEME.text }}>{x.v}</div>
-                      <div style={{ fontSize: 9, color: THEME.muted, marginTop: 2 }}>{x.l}</div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          {editing && (
-            <CourseModal
-              course={editing.id ? editing : null}
-              courses={courses}
-              setCourses={setCourses}
-              onClose={() => setEditing(null)}
-            />
-          )}
-        </div>
-      );
-    }
-
-    /* ═══════════════════════════════════════════════════════════
-       7️⃣ COURSE MODAL (Edit/Add)
-    ═══════════════════════════════════════════════════════════ */
-
-    function CourseModal({ course, courses, setCourses, onClose }) {
-      const [form, setForm] = useState(course || {
-        cat: "늘봄강사양성",
-        cc: "#EA580C",
-        name: "",
-        code: "",
-        dateFrom: "",
-        dateTo: "",
-        period: "",
-        method: "대면",
-        hours: 0,
-        tgt: 20,
-        cGoal: 18,
-        eGoal: 12,
-        schedDays: "",
-        schedTimeFrom: "09:00",
-        schedTimeTo: "13:00"
+      const [collapsed, setCollapsed] = useState(false);
+      const [students, setStudents] = useState(() => {
+        try { const v = sessionStorage.getItem("gjf_students"); return v ? JSON.parse(v) : SEED_STUDENTS; }
+        catch { return SEED_STUDENTS; }
+      });
+      const [courses, setCourses] = useState(() => {
+        try { const v = sessionStorage.getItem("gjf_courses"); return v ? JSON.parse(v) : COURSES; }
+        catch { return COURSES; }
       });
 
-      const handleSave = () => {
-        if (!form.name || !form.code) {
-          alert("과정명과 코드는 필수입니다.");
-          return;
+      useEffect(() => { try { sessionStorage.setItem("gjf_students", JSON.stringify(students)); } catch{} }, [students]);
+      useEffect(() => { try { sessionStorage.setItem("gjf_courses", JSON.stringify(courses)); } catch{} }, [courses]);
+
+      if (!currentUser) {
+        const accounts = [
+          { id:1, name:"관리자", role:"admin", pw:"admin1234" },
+          { id:2, name:"김담당", role:"staff", pw:"gjf2026" },
+          { id:3, name:"이담당", role:"staff", pw:"gjf2026" },
+        ];
+        return (
+          <>
+            <GStyle/>
+            <LoginScreen accounts={accounts} onLogin={user => {
+              sessionStorage.setItem("gjf_user", JSON.stringify(user));
+              setCurrentUser(user);
+            }}/>
+          </>
+        );
+      }
+
+      const renderPage = () => {
+        switch(page) {
+          case "dash": return <Dashboard students={students} courses={courses}/>;
+          case "attendance": return <AttendanceMgmt students={students} courses={courses}/>;
+          case "cert": return <CertMgmt students={students} courses={courses}/>;
+          default: return null;
         }
-        if (form.id) {
-          setCourses(courses.map(c => c.id === form.id ? form : c));
-        } else {
-          setCourses([...courses, { ...form, id: Date.now() }]);
-        }
-        onClose();
       };
 
       return (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 999
-        }} onClick={e => e.target === e.currentTarget && onClose()}>
-          <div style={{
-            background: THEME.bg,
-            borderRadius: 16,
-            width: "90%",
-            maxWidth: 600,
-            maxHeight: "90vh",
-            overflowY: "auto",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
-          }}>
-            {/* Header */}
-            <div style={{
-              background: `linear-gradient(135deg, ${THEME.dark}, ${THEME.primary})`,
-              color: "#fff",
-              padding: 20,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center"
-            }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 800 }}>
-                  {form.id ? "과정 수정" : "과정 추가"}
-                </div>
-                <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>
-                  {form.code || "새 과정"}
-                </div>
-              </div>
-              <button onClick={onClose} style={{
-                width: 32, height: 32, borderRadius: 8, border: "none",
-                background: "rgba(255,255,255,0.15)", color: "#fff", cursor: "pointer"
-              }}>
-                <Icon n="x" s={18} c="#fff" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: THEME.muted }}>과정명 *</label>
-                <input
-                  value={form.name || ""}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  placeholder="예) 행정회계 사무 OA"
-                  style={{
-                    width: "100%",
-                    padding: 10,
-                    marginTop: 6,
-                    border: `1px solid ${THEME.border}`,
-                    borderRadius: 8,
-                    fontSize: 12,
-                    outline: "none"
-                  }}
-                />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: THEME.muted }}>과정코드 *</label>
-                  <input
-                    value={form.code || ""}
-                    onChange={e => setForm({ ...form, code: e.target.value })}
-                    placeholder="예) SM-01"
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      marginTop: 6,
-                      border: `1px solid ${THEME.border}`,
-                      borderRadius: 8,
-                      fontSize: 12,
-                      outline: "none"
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: THEME.muted }}>교육방식</label>
-                  <select
-                    value={form.method || "대면"}
-                    onChange={e => setForm({ ...form, method: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      marginTop: 6,
-                      border: `1px solid ${THEME.border}`,
-                      borderRadius: 8,
-                      fontSize: 12,
-                      outline: "none",
-                      cursor: "pointer"
-                    }}
-                  >
-                    <option>대면</option>
-                    <option>비대면</option>
-                    <option>블렌디드</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: THEME.muted }}>시작일</label>
-                  <input
-                    type="date"
-                    value={form.dateFrom || ""}
-                    onChange={e => setForm({ ...form, dateFrom: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      marginTop: 6,
-                      border: `1px solid ${THEME.border}`,
-                      borderRadius: 8,
-                      fontSize: 12,
-                      outline: "none",
-                      cursor: "pointer"
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: THEME.muted }}>종료일</label>
-                  <input
-                    type="date"
-                    value={form.dateTo || ""}
-                    onChange={e => setForm({ ...form, dateTo: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      marginTop: 6,
-                      border: `1px solid ${THEME.border}`,
-                      borderRadius: 8,
-                      fontSize: 12,
-                      outline: "none",
-                      cursor: "pointer"
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-                {[{ l: "시수", k: "hours" }, { l: "정원", k: "tgt" }, { l: "수료", k: "cGoal" }, { l: "취업", k: "eGoal" }].map(x => (
-                  <div key={x.k}>
-                    <label style={{ fontSize: 10, fontWeight: 700, color: THEME.muted }}>{x.l}</label>
-                    <input
-                      type="number"
-                      value={form[x.k] || 0}
-                      onChange={e => setForm({ ...form, [x.k]: parseInt(e.target.value) })}
-                      style={{
-                        width: "100%",
-                        padding: "8px 6px",
-                        marginTop: 4,
-                        border: `1px solid ${THEME.border}`,
-                        borderRadius: 6,
-                        fontSize: 11,
-                        outline: "none"
-                      }}
-                    />
+        <>
+          <GStyle/>
+          <div style={{ display:"flex", height:"100vh", background:"linear-gradient(160deg,#FED7AA 0%,#FDBA74 12%,#FFF7ED 45%,#F1F5F9 75%,#FFEDD5 100%)", fontFamily:"'Pretendard',-apple-system,sans-serif", overflow:"hidden" }}>
+            <div style={{ width:collapsed?64:240, flexShrink:0, transition:"width .25s ease", background:`linear-gradient(180deg,${T.sb} 0%,${T.p} 55%,#F97316 100%)`, display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"4px 0 24px rgba(15,118,110,.25)" }}>
+              <div style={{ padding:collapsed?"16px 0":"16px 18px", borderBottom:"1px solid rgba(255,255,255,.1)", display:"flex", alignItems:"center", justifyContent:collapsed?"center":"space-between" }}>
+                {!collapsed && (
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:900, color:"#fff", letterSpacing:"-.3px" }}>경기북부 직업교육</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:3 }}>
+                      <span style={{ background:"rgba(253,186,116,.3)", color:"#FED7AA", padding:"1px 6px", borderRadius:4, fontSize:9, fontWeight:700 }}>2026</span>
+                      <span style={{ fontSize:10, color:"rgba(255,255,255,.45)" }}>학사관리시스템</span>
+                    </div>
                   </div>
-                ))}
+                )}
+                <button onClick={()=>setCollapsed(!collapsed)} style={{ width:28, height:28, borderRadius:6, background:"rgba(255,255,255,.1)", border:"none", color:"rgba(255,255,255,.6)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <Icon n="bars" s={14}/>
+                </button>
               </div>
+
+              <nav style={{ flex:1, padding:"10px 0", overflowY:"auto" }}>
+                {NAV_ITEMS.map(item => {
+                  const active = page===item.id;
+                  return (
+                    <button key={item.id} className="btn-nav" onClick={()=>setPage(item.id)} style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:collapsed?"13px 0":"11px 18px", justifyContent:collapsed?"center":"flex-start", background:active?"rgba(255,255,255,.13)":"transparent", border:"none", cursor:"pointer", borderLeft:active?"3px solid #FED7AA":"3px solid transparent", color:active?"#fff":"rgba(255,255,255,.45)", fontWeight:active?700:400, fontSize:13 }}>
+                      <Icon n={item.icon} s={16}/>
+                      {!collapsed && <span style={{ whiteSpace:"nowrap" }}>{item.label}</span>}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {!collapsed && (
+                <div style={{ padding:"13px 18px", borderTop:"1px solid rgba(255,255,255,.1)" }}>
+                  <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) { sessionStorage.removeItem("gjf_user"); setCurrentUser(null); } }} style={{ width:"100%", padding:"6px 0", borderRadius:7, border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)", color:"rgba(255,255,255,.7)", cursor:"pointer", fontSize:11, fontWeight:600 }}>🚪 로그아웃</button>
+                </div>
+              )}
             </div>
 
-            {/* Footer */}
-            <div style={{
-              borderTop: `1px solid ${THEME.border}`,
-              padding: 16,
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              background: THEME.bgSecond
-            }}>
-              <Btn onClick={onClose} variant="ghost">취소</Btn>
-              <Btn onClick={handleSave}>저장</Btn>
+            <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+              <div style={{ height:52, background:"rgba(255,255,255,.9)", backdropFilter:"blur(12px)", borderBottom:`1px solid ${T.bd}`, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 22px", flexShrink:0 }}>
+                <div style={{ fontSize:12, color:T.mu }}>
+                  <span style={{ color:T.p, fontWeight:700 }}>경기도일자리재단 북부사업본부</span>
+                  <span style={{ margin:"0 6px", color:T.bd }}>·</span>
+                  직업교육 학사관리시스템 v2026
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:7, padding:"5px 10px", background:T.pbg, borderRadius:8 }}>
+                  <div style={{ width:24, height:24, borderRadius:6, background:T.p, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <Icon n="user" s={12}/>
+                  </div>
+                  <span style={{ fontSize:11, fontWeight:700, color:T.p }}>{currentUser.name}</span>
+                  {currentUser.role==="admin" && (<span style={{ fontSize:9, background:T.p, color:"#fff", padding:"1px 5px", borderRadius:3 }}>관리자</span>)}
+                </div>
+              </div>
+
+              <div style={{ flex:1, overflowY:"auto", padding:22 }}>
+                {renderPage()}
+              </div>
             </div>
+          </div>
+        </>
+      );
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // LOGIN SCREEN
+    // ════════════════════════════════════════════════════════════
+    const LoginScreen = ({ accounts, onLogin }) => {
+      const [selId, setSelId] = useState(accounts[0]?.id || 1);
+      const [pw, setPw] = useState("");
+      const [showPw, setShowPw] = useState(false);
+      const [error, setError] = useState("");
+      const [agreed, setAgreed] = useState(false);
+      const [shaking, setShaking] = useState(false);
+
+      const handleLogin = () => {
+        if(!agreed) { setError("개인정보 동의가 필요합니다."); return; }
+        const acc = accounts.find(a => a.id === selId);
+        if(!acc || acc.pw !== pw) {
+          setError("비밀번호가 올바르지 않습니다.");
+          setShaking(true);
+          setTimeout(() => setShaking(false), 500);
+          setPw("");
+          return;
+        }
+        onLogin(acc);
+      };
+
+      const inp = { width:"100%", padding:"11px 14px", border:`1.5px solid ${T.bd}`, borderRadius:10, fontSize:14, outline:"none", color:T.tx, background:"#fff", fontFamily:"inherit", transition:"border-color .15s" };
+
+      return (
+        <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"linear-gradient(135deg,#7C2D12 0%,#EA580C 40%,#F97316 70%,#FED7AA 100%)", backgroundSize:"400% 400%", animation:"loginBg 12s ease infinite", fontFamily:"'Pretendard',-apple-system,sans-serif", padding:20 }}>
+          <div style={{ width:"100%", maxWidth:440, animation:"fadeUp .5s ease" }}>
+            <div style={{ textAlign:"center", marginBottom:28 }}>
+              <div style={{ width:64, height:64, borderRadius:18, background:"rgba(255,255,255,.2)", backdropFilter:"blur(8px)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", boxShadow:"0 8px 32px rgba(0,0,0,.2)" }}>
+                <span style={{ fontSize:28 }}>🎓</span>
+              </div>
+              <div style={{ fontSize:18, fontWeight:900, color:"#fff", letterSpacing:"-.3px" }}>경기북부 직업교육</div>
+              <div style={{ fontSize:12, color:"rgba(255,255,255,.6)", marginTop:4 }}>학사관리시스템 v2026</div>
+            </div>
+
+            <div style={{ background:"rgba(255,255,255,.96)", borderRadius:20, padding:"30px 32px", boxShadow:"0 24px 64px rgba(0,0,0,.25)", animation: shaking ? "shake .4s ease" : "none" }}>
+              <div style={{ fontSize:15, fontWeight:800, color:T.tx, marginBottom:22, textAlign:"center" }}>🔐 담당자 로그인</div>
+
+              <div style={{ marginBottom:14 }}>
+                <label style={{ fontSize:11, fontWeight:700, color:T.mu, display:"block", marginBottom:6 }}>담당자 선택</label>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                  {accounts.map(a => (
+                    <button key={a.id} type="button" onClick={()=>{ setSelId(a.id); setError(""); }} style={{ padding:"8px 16px", borderRadius:10, border:"none", cursor:"pointer", fontSize:12, fontWeight:700, transition:"all .15s", background: selId===a.id ? T.p : T.s3, color: selId===a.id ? "#fff" : T.mu, boxShadow: selId===a.id ? "0 4px 12px rgba(234,88,12,.3)" : "none" }}>
+                      {a.name} {a.role==="admin" && <span style={{ marginLeft:5, fontSize:9, background:"rgba(255,255,255,.2)", padding:"1px 5px", borderRadius:4 }}>관리자</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom:16 }}>
+                <label style={{ fontSize:11, fontWeight:700, color:T.mu, display:"block", marginBottom:6 }}>비밀번호</label>
+                <div style={{ position:"relative" }}>
+                  <input type={showPw ? "text" : "password"} value={pw} onChange={e=>{ setPw(e.target.value); setError(""); }} onKeyDown={e=>{ if(e.key==="Enter") handleLogin(); }} placeholder="비밀번호를 입력하세요" style={{ ...inp, paddingRight:44, borderColor: error ? T.danger : T.bd }}/>
+                  <button type="button" onClick={()=>setShowPw(v=>!v)} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", border:"none", background:"transparent", cursor:"pointer", color:T.mu, fontSize:16, padding:0 }}>{showPw ? "🙈" : "👁️"}</button>
+                </div>
+                {error && (<div style={{ marginTop:6, fontSize:11, color:T.danger, fontWeight:600 }}>⚠️ {error}</div>)}
+              </div>
+
+              <div style={{ marginBottom:20, padding:"12px 14px", borderRadius:10, background:"#FFF7ED", border:`1px solid ${T.pl}50` }}>
+                <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                  <input type="checkbox" id="piAgree" checked={agreed} onChange={e=>setAgreed(e.target.checked)} style={{ marginTop:2, accentColor:T.p, width:15, height:15, cursor:"pointer", flexShrink:0 }}/>
+                  <label htmlFor="piAgree" style={{ fontSize:11, color:T.tx, lineHeight:1.7, cursor:"pointer" }}>
+                    이 시스템은 <b>훈련생 개인정보</b>를 포함하고 있습니다.<br/>
+                    「개인정보보호법」에 따라 업무 목적 외 사용·유출을 금지합니다.<br/>
+                    <span style={{ color:T.p, fontWeight:700 }}>본인은 이를 준수할 것에 동의합니다.</span>
+                  </label>
+                </div>
+              </div>
+
+              <button onClick={handleLogin} style={{ width:"100%", padding:"13px 0", borderRadius:11, border:"none", background: agreed ? `linear-gradient(135deg,${T.sb},${T.p})` : T.s3, color: agreed ? "#fff" : T.mu, fontSize:14, fontWeight:800, cursor: agreed ? "pointer" : "not-allowed", boxShadow: agreed ? "0 6px 20px rgba(234,88,12,.35)" : "none", transition:"all .2s", letterSpacing:"1px" }}>로그인</button>
+
+              <div style={{ marginTop:12, fontSize:10, color:T.mu, textAlign:"center" }}>비밀번호 분실 시 관리자에게 문의하세요 · 초기: <code style={{background:T.s3, padding:"1px 5px", borderRadius:4}}>gjf2026</code></div>
+            </div>
+
+            <div style={{ textAlign:"center", marginTop:16, fontSize:10, color:"rgba(255,255,255,.4)" }}>© 2026 경기도일자리재단 북부사업본부</div>
           </div>
         </div>
       );
-    }
+    };
 
-    /* ═══════════════════════════════════════════════════════════
-       8️⃣ STUDENT MANAGER
-    ═══════════════════════════════════════════════════════════ */
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
 
-    function StudentManager({ students, setStudents, courses }) {
-      const [search, setSearch] = useState("");
-      const [cFilter, setCFilter] = useState(0);
-      const [tab, setTab] = useState("list");
-      const fileRef = useRef();
-
-      const filtered = useMemo(() => students.filter(s => {
-        if (cFilter && s.cid !== cFilter) return false;
-        if (search && !s.name.includes(search) && !s.phone.includes(search)) return false;
-        return true;
-      }), [students, cFilter, search]);
-
-      const handleExcelImport = e => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = evt => {
-          const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-          const newStudents = rows.map((r, i) => ({
-            id: Date.now() + i,
-            cid: courses[0]?.id || 1,
-            name: r["이름"] || "",
-            gender: r["성별"] || "남",
-            birth: r["생년월일"] || "",
-            idBack: r["주민번호뒷자리"] || "",
-            phone: r["연락처"] || "",
-            addrCity: r["거주시"] || "",
-            edu: r["최종학력"] || "",
-            major: r["전공"] || "",
-            career: r["경력"] || "",
-            unemployment: r["실업급여수급"] === "Y",
-            disabled: r["장애여부"] === "Y",
-            veteran: r["보훈여부"] === "Y",
-            itvDate: r["면접일자"] || "",
-            itvScore: parseInt(r["면접점수"]) || 0,
-            itvGrade: r["면접등급"] || "",
-            itvPass: r["합격여부"] === "Y",
-            memo: r["특이사항"] || "",
-            rate: Math.round(60 + Math.random() * 40)
-          }));
-          if (window.confirm(`${newStudents.length}명을 등록하시겠습니까?`)) {
-            setStudents([...students, ...newStudents]);
-            alert("✅ 등록 완료!");
-          }
-        };
-        reader.readAsArrayBuffer(file);
-      };
-
-      const handleExcelExport = () => {
-        const data = filtered.map(s => ({
-          "이름": s.name,
-          "성별": s.gender,
-          "생년월일": s.birth,
-          "연락처": s.phone,
-          "과정": courses.find(c => c.id === s.cid)?.name || "",
-          "출석률(%)": s.rate,
-          "상태": s.rate >= 80 ? "수료" : "진행중"
-        }));
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "훈련생명부");
-        XLSX.writeFile(wb, `훈련생명부_${new Date().toISOString().slice(0, 10)}.xlsx`);
-      };
-
-      return (
-        <div>
-          <SectionHead
-            title="훈련생 관리"
-            sub={`총 ${students.length}명`}
-            right={
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleExcelImport}
-                  style={{ display: "none" }}
-                />
-                <Btn onClick={() => fileRef.current?.click()} variant="ghost" size="sm">
-                  <Icon n="upload" s={14} />엑셀 등록
-                </Btn>
-                <Btn onClick={handleExcelExport} variant="ghost" size="sm">
-                  <Icon n="download" s={14} />다운로드
-                </Btn>
-              </div>
-            }
-          />
-
-          {/* Search & Filter */}
-          <Card style={{ padding: 14, marginBottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{ position: "relative", flex: 1, maxWidth: 300 }}>
-              <Icon n="search" s={14} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }} />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="이름·연락처 검색…"
-                style={{
-                  width: "100%",
-                  paddingLeft: 32,
-                  padding: "8px",
-                  border: `1px solid ${THEME.border}`,
-                  borderRadius: 8,
-                  fontSize: 12,
-                  outline: "none"
-                }}
-              />
-            </div>
-            <select
-              value={cFilter}
-              onChange={e => setCFilter(parseInt(e.target.value))}
-              style={{
-                padding: "8px 10px",
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                fontSize: 12,
-                outline: "none",
-                cursor: "pointer"
-              }}
-            >
-              <option value={0}>전체 과정</option>
-              {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <div style={{ fontSize: 12, fontWeight: 700, color: THEME.muted }}>
-              {filtered.length}명
-            </div>
-          </Card>
-
-          {/* Student Table */}
-          <Card style={{ overflow: "hidden" }}>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 800 }}>
-                <thead>
-                  <tr style={{ background: THEME.bgTertiary, borderBottom: `1px solid ${THEME.border}` }}>
-                    {["이름", "성별", "생년월일", "연락처", "과정", "출석률", "상태"].map(h => (
-                      <th key={h} style={{
-                        padding: 12,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        color: THEME.muted,
-                        textAlign: "left",
-                        whiteSpace: "nowrap"
-                      }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((s, i) => {
-                    const c = courses.find(x => x.id === s.cid);
-                    return (
-                      <tr key={s.id} style={{
-                        borderBottom: `1px solid ${THEME.border}`,
-                        background: i % 2 === 0 ? THEME.bg : THEME.bgSecond
-                      }}>
-                        <td style={{ padding: 12, fontSize: 12, fontWeight: 700, color: THEME.text }}>
-                          {s.name}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 12, color: THEME.muted }}>
-                          {s.gender}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 12, color: THEME.muted }}>
-                          {s.birth}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 12, color: THEME.muted }}>
-                          {s.phone}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 11, fontWeight: 600, color: c?.cc }}>
-                          {c?.code}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 12, fontWeight: 800, color: s.rate >= 80 ? THEME.success : s.rate >= 60 ? THEME.warning : THEME.danger }}>
-                          {s.rate}%
-                        </td>
-                        <td style={{ padding: 12 }}>
-                          <Chip
-                            label={s.rate >= 80 ? "수료" : "진행"}
-                            bg={s.rate >= 80 ? THEME.primaryBg : THEME.bgTertiary}
-                            tx={s.rate >= 80 ? THEME.primary : THEME.muted}
-                            size="10px"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-      );
-    }
-
-    /* ═══════════════════════════════════════════════════════════
-       9️⃣ REMAINING MODULES (Stub)
-    ═══════════════════════════════════════════════════════════ */
-
-    function InstructorManager() {
-      return (
-        <div>
-          <SectionHead title="강사 관리" sub="개발 중입니다" />
-          <Card style={{ padding: 40, textAlign: "center", color: THEME.muted }}>
-            강사관리 모듈 - 개발 진행 중
-          </Card>
-        </div>
-      );
-    }
-
-    function RoomManager() {
-      return (
-        <div>
-          <SectionHead title="강의실 관리" sub="개발 중입니다" />
-          <Card style={{ padding: 40, textAlign: "center", color: THEME.muted }}>
-            강의실관리 모듈 - 개발 진행 중
-          </Card>
-        </div>
-      );
-    }
-
-    function AttendanceManager() {
-      return (
-        <div>
-          <SectionHead title="출결 관리" sub="QR 코드 및 수동 입력" />
-          <Card style={{ padding: 40, textAlign: "center", color: THEME.muted }}>
-            출결관리 모듈 - QR 코드 시스템 개발 진행 중
-          </Card>
-        </div>
-      );
-    }
-
-    function CompletionManager() {
-      return (
-        <div>
-          <SectionHead title="수료 관리" sub="자동 판정 및 통계" />
-          <Card style={{ padding: 40, textAlign: "center", color: THEME.muted }}>
-            수료관리 모듈 - 개발 진행 중
-          </Card>
-        </div>
-      );
-    }
-
-    function CertificateManager() {
-      return (
-        <div>
-          <SectionHead title="증명서 발급" sub="수료증 및 수강증명서" />
-          <Card style={{ padding: 40, textAlign: "center", color: THEME.muted }}>
-            증명서발급 모듈 - A4 인쇄 시스템 개발 진행 중
-          </Card>
-        </div>
-      );
-    }
-
-    function AccountManager() {
-      return (
-        <div>
-          <SectionHead title="계정 관리" sub="권한 및 감사로그" />
-          <Card style={{ padding: 40, textAlign: "center", color: THEME.muted }}>
-            계정관리 모듈 - 개발 진행 중
-          </Card>
-        </div>
-      );
-    }
-
-    // Render App
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    (function hideSplash() {
+      let attempts = 0;
+      const timer = setInterval(function() {
+        attempts++;
+        const root = document.getElementById('root');
+        if ((root && root.children.length > 0) || attempts > 60) {
+          clearInterval(timer);
+          const l = document.getElementById('loading');
+          if (l) { l.style.opacity = '0'; setTimeout(function(){ if(l.parentNode) l.parentNode.removeChild(l); }, 400); }
+        }
+      }, 200);
+    })();
   </script>
 </body>
 </html>

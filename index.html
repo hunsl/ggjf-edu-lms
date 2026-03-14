@@ -4245,7 +4245,6 @@ function App() {
     return () => clearInterval(poll);
   }, [currentUser, dbReady]);
 
-  // ── 훈련생 CRUD ──
  // ── 훈련생 CRUD ──
   const addStudents = useCallback(async (newOnes) => {
     // ① 로컬 즉시 반영 (임시 음수 ID로 충돌 방지)
@@ -4278,7 +4277,22 @@ function App() {
       setStudents(prev => prev.filter(s => !withTempId.find(t => t.id === s.id)));
     }
   }, []);
-
+    const updateStudent = useCallback(async (updated) => {
+    setStudents(prev => prev.map(s => s.id===updated.id ? updated : s)); // 즉시 반영
+    try {
+      const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
+      if (error) console.warn("DB 수정 실패 (로컬 유지):", error.message);
+    } catch(e) { console.warn("DB 수정 오류:", e.message); }
+  }, []);
+  const deleteStudent = useCallback(async (id) => {
+    if (!window.confirm("이 훈련생을 삭제하시겠습니까?")) return;
+    setStudents(prev => prev.filter(s => s.id!==id)); // 즉시 반영
+    if (dbReady) {
+      const { error } = await sbDelete("students", `id=eq.${id}`);
+      if (error) console.warn("DB 삭제 실패:", error);
+    }
+  }, [dbReady]);
+  
   // ── 과정 CRUD ──
   const addCourse = useCallback(async (c) => {
     const tempId = -(Date.now());

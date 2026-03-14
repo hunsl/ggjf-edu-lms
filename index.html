@@ -4318,7 +4318,7 @@ if (!currentUser) {
       case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
       case "instructors": return <InstructorMgmt courses={courses} instructors={instructors} setInstructors={setInstructors}/>;
       case "rooms":       return <RoomMgmt courses={courses} rooms={rooms} setRooms={setRooms} bookings={bookings} setBookings={setBookings}/>;
-      case "attendance":  return <AttendanceMgmt students={students} courses={courses}/>;
+      case "attendance":  return <AttendanceMgmtV2 students={students} courses={courses}/>;
       case "completion":  return <CompletionMgmt students={students} courses={courses}/>;
       case "cert":        return <CertMgmt students={students} courses={courses}/>;
       default:            return null;

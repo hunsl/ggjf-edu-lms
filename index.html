@@ -4349,8 +4349,8 @@ if (!currentUser) {
           onClose={()=>setShowDataMgr(false)}
         />
       )}
-      // ✅ 이렇게 변경
-{showAccMgr && currentUser.role==="admin" && (
+{/* ✅ 이렇게 변경 */}
+      {showAccMgr && currentUser.role==="admin" && (
   <AccountMgmtDB
     currentUser={currentUser}
     onClose={()=>setShowAccMgr(false)}

@@ -24,10 +24,14 @@ const { useState, useMemo, useEffect, useRef, useCallback } = React;
 
 
 /* ==========================================================
-   Supabase REST API — fetch 직접 호출 (라이브러리 불필요)
+   ★★★ Supabase 연결 설정 ★★★
+   처음 설치 시 아래 두 줄만 본인 Supabase 정보로 교체하세요.
+   Supabase 프로젝트 → Settings → API 에서 확인할 수 있습니다.
+   ▶ Project URL  : https://xxxx.supabase.co
+   ▶ anon public  : eyJhbGci... 로 시작하는 긴 키
 ========================================================== */
-const SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";
+const SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";  // ← 여기에 Project URL
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";  // ← 여기에 anon public key
 const API   = `${SB_URL}/rest/v1`;
 const H     = {
   "apikey":        SB_KEY,

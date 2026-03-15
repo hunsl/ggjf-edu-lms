@@ -141,6 +141,65 @@ const fromAccount = a => ({
   pw: a.pw||"",
 });
 
+const toInstructor = r => r ? ({
+  id: r.id,
+  name: r.name||"",
+  type: r.type||"주강사",
+  subject: r.subject||"",
+  phone: r.phone||"",
+  email: r.email||"",
+  career: r.career||"",
+  cert: r.cert||"",
+  cids: r.cids||[],
+  note: r.note||"",
+}) : null;
+
+const fromInstructor = i => ({
+  name: i.name||"",
+  type: i.type||"주강사",
+  subject: i.subject||"",
+  phone: i.phone||"",
+  email: i.email||"",
+  career: i.career||"",
+  cert: i.cert||"",
+  cids: i.cids||[],
+  note: i.note||"",
+});
+
+const toRoom = r => r ? ({
+  id: r.id,
+  name: r.name||"",
+  addr: r.addr||"",
+  capacity: r.capacity||20,
+  equip: r.equip||"",
+}) : null;
+
+const fromRoom = r => ({
+  name: r.name||"",
+  addr: r.addr||"",
+  capacity: r.capacity||20,
+  equip: r.equip||"",
+});
+
+const toBooking = r => r ? ({
+  id: r.id,
+  roomId: r.room_id,
+  courseId: r.course_id,
+  label: r.label||"",
+  start: r.start_date||"",
+  end: r.end_date||"",
+  color: r.color||"#EA580C",
+}) : null;
+
+const fromBooking = b => ({
+  room_id: b.roomId,
+  course_id: b.courseId,
+  label: b.label||"",
+  start_date: b.start||"",
+  end_date: b.end||"",
+  color: b.color||"#EA580C",
+});
+
 /* ===========================================================
    GLOBAL STYLES
 =========================================================== */
@@ -1553,7 +1612,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 /* ===========================================================
    QR ATTENDANCE  ★ QR 출석 체크
 =========================================================== */
-const AttendanceMgmt = ({ students, courses }) => {
+const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
   const initCourse = courses[3] || courses[0];
   const initDates  = buildCourseDates(initCourse);
   const [course, setCourse]   = useState(initCourse);
@@ -1969,7 +2028,7 @@ const AttendanceMgmt = ({ students, courses }) => {
             try {
               const now = new Date();
               const toInsert = absentStudents.map(s => ({
-                student_id: s.id, date, type: "absent",
+                student_id: s.id, date, type: "in",
                 time: "00:00", status: "A", created_at: now.toISOString()
               }));
               const { error } = await sbInsert("attendance", toInsert);
@@ -1981,6 +2040,7 @@ const AttendanceMgmt = ({ students, courses }) => {
                 return next;
               });
               alert(`✅ ${absentStudents.length}명 결석 일괄 처리 완료`);
+              if (onRatesUpdated) onRatesUpdated(course.id);
             } catch(err) {
               alert("마감 오류: " + (err.message || JSON.stringify(err)));
             }
@@ -2222,6 +2282,8 @@ const AttendanceMgmt = ({ students, courses }) => {
 
                 alert(`✅ ${records.length}명 출결 저장 완료`);
                 setManualAtt({});
+                // DB 트리거가 없는 환경을 위한 클라이언트 폴백: 해당 과정 rate 재조회
+                if (onRatesUpdated) onRatesUpdated(course.id);
               } catch(err) {
                 alert("저장 오류: " + (err.message || JSON.stringify(err)));
               }
@@ -3100,19 +3162,54 @@ const InstructorMgmt = ({ courses }) => {
   const [search, setSearch]    = useState("");
   const [typeFilter, setTF]    = useState("전체");
 
+  // ── Supabase 초기 로드 ──
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data, error } = await sbGet("instructors", "select=*&order=id");
+        if (error) throw error;
+        if (data && data.length > 0) setInst(data.map(toInstructor));
+      } catch (err) {
+        console.warn("강사 목록 로드 실패 (시드 데이터 사용):", err.message || err);
+      }
+    };
+    load();
+  }, []);
+
   const filtered = instructors.filter(i => {
     if(typeFilter!=="전체" && i.type!==typeFilter) return false;
     if(search && !i.name.includes(search) && !i.subject.includes(search)) return false;
     return true;
   });
 
-  const handleSave = inst => {
-    if(isNew) setInst(p=>[...p, inst]);
-    else      setInst(p=>p.map(x=>x.id===inst.id?inst:x));
+  const handleSave = async inst => {
+    try {
+      if (isNew) {
+        const { data, error } = await sbInsert("instructors", fromInstructor(inst));
+        if (error) throw error;
+        const saved = (data && data[0]) ? toInstructor(data[0]) : { ...inst, id: Date.now() };
+        setInst(p => [...p, saved]);
+      } else {
+        const { error } = await sbUpdate("instructors", `id=eq.${inst.id}`, fromInstructor(inst));
+        if (error) throw error;
+        setInst(p => p.map(x => x.id===inst.id ? inst : x));
+      }
+    } catch (err) {
+      alert("저장 오류: " + (err.message || JSON.stringify(err)));
+      // 로컬 state 폴백
+      if (isNew) setInst(p => [...p, inst]);
+      else       setInst(p => p.map(x => x.id===inst.id ? inst : x));
+    }
   };
-  const handleDel = id => {
-    if(!window.confirm("강사를 삭제하시겠습니까?")) return;
-    setInst(p=>p.filter(x=>x.id!==id));
+  const handleDel = async id => {
+    if (!window.confirm("강사를 삭제하시겠습니까?")) return;
+    try {
+      const { error } = await sbDelete("instructors", `id=eq.${id}`);
+      if (error) throw error;
+    } catch (err) {
+      console.warn("강사 삭제 오류:", err.message || err);
+    }
+    setInst(p => p.filter(x => x.id !== id));
   };
 
   const typeColors = {"주강사":T.p,"보조강사":T.ok,"외래강사":"#7C3AED","운영요원":T.warn};
@@ -3243,7 +3340,7 @@ const SEED_ROOMS = [
   { id:3, name:"컴퓨터실",     addr:"양주시 남면로 20",  capacity:20, equip:"PC 20대·프린터" },
 ];
 /* ── BookModal: 강의 일정 추가/수정 (독립 컴포넌트) ── */
-const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => {
+const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSave, onDelete }) => {
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
   const empty = { roomId:rooms[0]?.id||1, courseId:courses[0]?.id||1,
@@ -3358,17 +3455,25 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => 
         <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"space-between", alignItems:"center", background:T.s2 }}>
           {isEdit
-            ? <Btn variant="danger" size="sm" onClick={()=>{ setBookings(p=>p.filter(b=>b.id!==init.id)); onClose(); }}>삭제</Btn>
+            ? <Btn variant="danger" size="sm" onClick={async ()=>{ if(onDelete) await onDelete(init.id); else setBookings(p=>p.filter(b=>b.id!==init.id)); onClose(); }}>삭제</Btn>
             : <div/>}
           <div style={{ display:"flex", gap:8 }}>
             <Btn variant="ghost" onClick={onClose}>취소</Btn>
-            <Btn variant={hasConflict?"danger":"primary"} onClick={()=>{
+            <Btn variant={hasConflict?"danger":"primary"} onClick={async ()=>{
               if(!form.label||!form.start||!form.end) return alert("이름·시작일·종료일은 필수입니다.");
               if(form.start>form.end) return alert("시작일이 종료일보다 늦습니다.");
               if(hasConflict && !window.confirm(`⚠️ 중복 예약됩니다.\n\n${conflicts.map(b=>`• ${b.label} (${b.start}~${b.end})`).join("\n")}\n\n그래도 저장하시겠습니까?`)) return;
-              if(isEdit) setBookings(p=>p.map(b=>b.id===init.id?{...form}:b));
-              else       setBookings(p=>[...p,{...form,id:Date.now()}]);
-              onClose();
+              try {
+                if(onSave) {
+                  await onSave(isEdit ? { ...form } : { ...form, id: undefined });
+                } else {
+                  if(isEdit) setBookings(p=>p.map(b=>b.id===init.id?{...form}:b));
+                  else       setBookings(p=>[...p,{...form,id:Date.now()}]);
+                }
+                onClose();
+              } catch (err) {
+                alert("저장 오류: " + (err.message || JSON.stringify(err)));
+              }
             }}>
               <Icon n="check" s={13}/>
               {hasConflict ? "⚠️ 강행 저장" : isEdit?"저장":"추가"}
@@ -3381,7 +3486,7 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => 
 };
 
 /* ── RoomModal: 강의실 추가/수정 (독립 컴포넌트) ── */
-const RoomModal = ({ room, onClose, setRooms }) => {
+const RoomModal = ({ room, onClose, setRooms, onSave }) => {
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
   const empty = { name:"", addr:"", capacity:20, equip:"" };
@@ -3414,15 +3519,22 @@ const RoomModal = ({ room, onClose, setRooms }) => {
         <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"space-between", background:T.s2 }}>
           {isEdit
-            ? <Btn variant="danger" size="sm" onClick={()=>{ setRooms(p=>p.filter(r=>r.id!==room.id)); onClose(); }}>삭제</Btn>
+            ? <Btn variant="danger" size="sm" onClick={async ()=>{ try { await sbDelete("rooms",`id=eq.${room.id}`); } catch(e){ console.error("강의실 삭제 오류:",e.message||e); } if(setRooms) setRooms(p=>p.filter(r=>r.id!==room.id)); onClose(); }}>삭제</Btn>
             : <div/>}
           <div style={{ display:"flex", gap:8 }}>
             <Btn variant="ghost" onClick={onClose}>취소</Btn>
-            <Btn onClick={()=>{
+            <Btn onClick={async ()=>{
               if(!form.name) return alert("강의실 이름은 필수입니다.");
-              if(isEdit) setRooms(p=>p.map(r=>r.id===room.id?{...form}:r));
-              else       setRooms(p=>[...p,{...form,id:Date.now()}]);
-              onClose();
+              try {
+                if(onSave) await onSave(form);
+                else {
+                  if(isEdit) setRooms(p=>p.map(r=>r.id===room.id?{...form}:r));
+                  else       setRooms(p=>[...p,{...form,id:Date.now()}]);
+                }
+                onClose();
+              } catch(err) {
+                alert("저장 오류: " + (err.message || JSON.stringify(err)));
+              }
             }}><Icon n="check" s={13}/>{isEdit?"저장":"추가"}</Btn>
           </div>
         </div>
@@ -3539,17 +3651,74 @@ const RoomMgmt = ({ courses }) => {
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-based
   const [rooms,    setRooms]    = useState(SEED_ROOMS);
-  const [bookings, setBookings] = useState([
-    { id:1, roomId:1, courseId:1, label:"초등 피지컬 코딩",   start:"2026-06-01", end:"2026-07-15", color:BOOKING_COLORS[0] },
-    { id:2, roomId:1, courseId:7, label:"행정회계 사무 OA",   start:"2026-03-02", end:"2026-05-28", color:BOOKING_COLORS[1] },
-    { id:3, roomId:3, courseId:4, label:"ERP·지게차",         start:"2026-03-04", end:"2026-05-30", color:BOOKING_COLORS[3] },
-  ]);
+  const [bookings, setBookings] = useState([]);
   const [showRoomModal, setShowRM] = useState(false);
   const [showBookModal, setShowBM] = useState(null); // null | { roomId, date }
   const [editRoom,  setEditRoom]  = useState(null);
   const [editBook,  setEditBook]  = useState(null);
   const [selRoom,   setSelRoom]   = useState(0); // 0 = 전체
   const [viewMode,  setViewMode]  = useState("calendar"); // "calendar" | "gantt"
+
+  // ── Supabase 초기 로드 ──
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [rRes, bRes] = await Promise.all([
+          sbGet("rooms", "select=*&order=id"),
+          sbGet("room_bookings", "select=*&order=id"),
+        ]);
+        if (!rRes.error && rRes.data && rRes.data.length > 0) setRooms(rRes.data.map(toRoom));
+        if (!bRes.error && bRes.data) setBookings(bRes.data.map(toBooking));
+      } catch (err) {
+        console.warn("강의실 데이터 로드 실패 (시드 데이터 사용):", err.message || err);
+      }
+    };
+    load();
+  }, []);
+
+  // ── 강의실 저장/삭제 핸들러 (BookModal, RoomModal에서 호출) ──
+  const handleRoomSave = async (room) => {
+    try {
+      if (room.id) {
+        await sbUpdate("rooms", `id=eq.${room.id}`, fromRoom(room));
+        setRooms(p => p.map(r => r.id===room.id ? room : r));
+      } else {
+        const { data, error } = await sbInsert("rooms", fromRoom(room));
+        if (error) throw error;
+        const saved = (data && data[0]) ? toRoom(data[0]) : { ...room, id: Date.now() };
+        setRooms(p => [...p, saved]);
+      }
+    } catch (err) {
+      alert("강의실 저장 오류: " + (err.message || JSON.stringify(err)));
+      setRooms(p => room.id ? p.map(r=>r.id===room.id?room:r) : [...p, {...room, id:Date.now()}]);
+    }
+  };
+
+  const handleBookSave = async (book) => {
+    try {
+      if (book.id) {
+        await sbUpdate("room_bookings", `id=eq.${book.id}`, fromBooking(book));
+        setBookings(p => p.map(b => b.id===book.id ? book : b));
+      } else {
+        const { data, error } = await sbInsert("room_bookings", fromBooking(book));
+        if (error) throw error;
+        const saved = (data && data[0]) ? toBooking(data[0]) : { ...book, id: Date.now() };
+        setBookings(p => [...p, saved]);
+      }
+    } catch (err) {
+      alert("일정 저장 오류: " + (err.message || JSON.stringify(err)));
+      setBookings(p => book.id ? p.map(b=>b.id===book.id?book:b) : [...p, {...book, id:Date.now()}]);
+    }
+  };
+
+  const handleBookDelete = async (id) => {
+    try {
+      await sbDelete("room_bookings", `id=eq.${id}`);
+    } catch (err) {
+      console.warn("예약 삭제 오류:", err.message || err);
+    }
+    setBookings(p => p.filter(b => b.id !== id));
+  };
 
   // 달력 날짜 생성
   const firstDay = new Date(year, month, 1).getDay();
@@ -3619,8 +3788,8 @@ const RoomMgmt = ({ courses }) => {
 
   return (
     <div className="page">
-      {editBook!==null && <BookModal init={editBook.id?editBook:null} onClose={()=>setEditBook(null)} rooms={rooms} bookings={bookings} courses={courses} setBookings={setBookings}/>}
-      {showRoomModal && <RoomModal room={editRoom} onClose={()=>{setShowRM(false);setEditRoom(null);}} setRooms={setRooms}/>}
+      {editBook!==null && <BookModal init={editBook.id?editBook:null} onClose={()=>setEditBook(null)} rooms={rooms} bookings={bookings} courses={courses} setBookings={setBookings} onSave={handleBookSave} onDelete={handleBookDelete}/>}
+      {showRoomModal && <RoomModal room={editRoom} onClose={()=>{setShowRM(false);setEditRoom(null);}} setRooms={setRooms} onSave={handleRoomSave}/>}
 
       <SectionHead
         title="강의실 관리"
@@ -5488,6 +5657,22 @@ function App() {
     setCourses(prev => prev.filter(c => c.id!==id));
   }, [courses, addAudit, currentUser]);
 
+  // ── 출결 저장 후 해당 과정 훈련생 rate 재조회 (DB 트리거가 없을 경우 클라이언트 폴백) ──
+  const refreshStudentRates = useCallback(async (courseId) => {
+    try {
+      const { data, error } = await sbGet("students", `select=id,rate&cid=eq.${courseId}`);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setStudents(prev => prev.map(s => {
+          const updated = data.find(d => d.id === s.id);
+          return updated ? { ...s, rate: updated.rate } : s;
+        }));
+      }
+    } catch (err) {
+      console.warn("출석률 재조회 실패:", err.message || err);
+    }
+  }, []);
+
   // ── 스마트 라우팅: ?mode=checkin → 모바일 출석 페이지 (로그인 불필요) ──
   const urlMode = new URLSearchParams(window.location.search).get("mode");
   if (urlMode === "checkin") {
@@ -5548,7 +5733,7 @@ function App() {
       case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
       case "instructors": return <InstructorMgmt courses={courses}/>;
       case "rooms":       return <RoomMgmt courses={courses}/>;
-      case "attendance":  return <AttendanceMgmt students={students} courses={courses}/>;
+      case "attendance":  return <AttendanceMgmt students={students} courses={courses} onRatesUpdated={refreshStudentRates}/>;
       case "completion":  return <CompletionMgmt students={students} courses={courses}/>;
       case "cert":        return <CertMgmt students={students} courses={courses}/>;
       default:            return null;

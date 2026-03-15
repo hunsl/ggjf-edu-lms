@@ -3006,9 +3006,9 @@ const CertMgmt = ({ students, courses }) => {
   const [customDate, setCustomDate] = useState("");
 
   // 수료증: 출석률 80% 이상
-  // 수강증명서: 해당 과정 수강자 전체 (출석 1% 이상)
+  // 수강증명서: 해당 과정 수강자 전체 (출석률 무관 — 등록 자체가 기준)
   const certEligible   = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>=80);
-  const attendEligible = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>0);
+  const attendEligible = students.filter(s => Number(s.cid)===Number(course.id));
   const eligible = docType==="cert" ? certEligible : attendEligible;
 
   const getCertNo = (s, idx) => {

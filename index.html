@@ -3200,6 +3200,28 @@ const InstructorMgmt = ({ courses }) => {
     load();
   }, []);
 
+  // ── 강사 실시간 구독 ──
+  useEffect(() => {
+    realtimeManager.subscribe("instructors", {
+      onInsert: (newRecord) => {
+        setInst(prev => {
+          if (prev.find(x => x.id === newRecord.id)) return prev;
+          console.log("🆕 강사 추가 (실시간):", newRecord.name);
+          return [...prev, toInstructor(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setInst(prev => prev.map(x => x.id === newRecord.id ? toInstructor(newRecord) : x));
+        console.log("✏️ 강사 수정 (실시간):", newRecord.name);
+      },
+      onDelete: (oldRecord) => {
+        setInst(prev => prev.filter(x => x.id !== oldRecord.id));
+        console.log("🗑️ 강사 삭제 (실시간):", oldRecord.name);
+      }
+    });
+    return () => realtimeManager.unsubscribe("instructors");
+  }, []);
+
   const filtered = instructors.filter(i => {
     if(typeFilter!=="전체" && i.type!==typeFilter) return false;
     if(search && !i.name.includes(search) && !i.subject.includes(search)) return false;
@@ -3712,6 +3734,48 @@ const RoomMgmt = ({ courses }) => {
       }
     };
     load();
+  }, []);
+
+  // ── 강의실 실시간 구독 ──
+  useEffect(() => {
+    realtimeManager.subscribe("rooms", {
+      onInsert: (newRecord) => {
+        setRooms(prev => {
+          if (prev.find(r => r.id === newRecord.id)) return prev;
+          console.log("🆕 강의실 추가 (실시간):", newRecord.name);
+          return [...prev, toRoom(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setRooms(prev => prev.map(r => r.id === newRecord.id ? toRoom(newRecord) : r));
+        console.log("✏️ 강의실 수정 (실시간):", newRecord.name);
+      },
+      onDelete: (oldRecord) => {
+        setRooms(prev => prev.filter(r => r.id !== oldRecord.id));
+        console.log("🗑️ 강의실 삭제 (실시간):", oldRecord.name);
+      }
+    });
+    realtimeManager.subscribe("room_bookings", {
+      onInsert: (newRecord) => {
+        setBookings(prev => {
+          if (prev.find(b => b.id === newRecord.id)) return prev;
+          console.log("🆕 강의실 예약 추가 (실시간):", newRecord.id);
+          return [...prev, toBooking(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setBookings(prev => prev.map(b => b.id === newRecord.id ? toBooking(newRecord) : b));
+        console.log("✏️ 강의실 예약 수정 (실시간):", newRecord.id);
+      },
+      onDelete: (oldRecord) => {
+        setBookings(prev => prev.filter(b => b.id !== oldRecord.id));
+        console.log("🗑️ 강의실 예약 삭제 (실시간):", oldRecord.id);
+      }
+    });
+    return () => {
+      realtimeManager.unsubscribe("rooms");
+      realtimeManager.unsubscribe("room_bookings");
+    };
   }, []);
 
   // ── 강의실 저장/삭제 핸들러 (BookModal, RoomModal에서 호출) ──
@@ -5463,6 +5527,16 @@ class RealtimeManager {
     connect();
   }
 
+  unsubscribe(table) {
+    const state = this.subscriptions.get(table);
+    if (!state) return;
+    state.intentionallyClosed = true;
+    clearInterval(state.heartbeatId);
+    state.heartbeatId = null;
+    state.ws?.close();
+    this.subscriptions.delete(table);
+  }
+
   unsubscribeAll() {
     this.subscriptions.forEach(state => {
       state.intentionallyClosed = true;
@@ -5629,6 +5703,25 @@ function App() {
       }
     });
 
+    // 계정 실시간 구독
+    realtimeManager.subscribe("accounts", {
+      onInsert: (newRecord) => {
+        setAccounts(prev => {
+          if (prev.find(a => a.id === newRecord.id)) return prev;
+          console.log("🆕 계정 추가 (실시간):", newRecord.name);
+          return [...prev, toAccount(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setAccounts(prev => prev.map(a => a.id === newRecord.id ? toAccount(newRecord) : a));
+        console.log("✏️ 계정 수정 (실시간):", newRecord.name);
+      },
+      onDelete: (oldRecord) => {
+        setAccounts(prev => prev.filter(a => a.id !== oldRecord.id));
+        console.log("🗑️ 계정 삭제 (실시간):", oldRecord.name);
+      }
+    });
+
     return () => realtimeManager.unsubscribeAll();
   }, [currentUser]);
 
@@ -5640,11 +5733,12 @@ function App() {
   };
 
   const addStudents = useCallback(async (newOnes) => {
-    let { data, error } = await sbInsert("students", newOnes.map(fromStudent));
+    const bodies = newOnes.map(fromStudent);
+    let { data, error } = await sbInsert("students", bodies);
     // cid 컬럼 스키마 캐시 오류 → cid 제외 후 재시도
     if (error && isStudentSchemaErr(error)) {
       console.warn("⚠️ students.cid 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload");
-      const fallback = newOnes.map(s => { const { cid, ...rest } = fromStudent(s); return rest; });
+      const fallback = bodies.map(({ cid, ...rest }) => rest);
       ({ data, error } = await sbInsert("students", fallback));
     }
     if (error) { 

@@ -157,9 +157,9 @@ BEGIN
 END
 $$;
 
--- 핵심 테이블만 실시간 구독 대상으로 등록
+-- 전체 테이블 실시간 구독 대상으로 등록
 ALTER PUBLICATION supabase_realtime
-  ADD TABLE courses, students, attendance;
+  ADD TABLE courses, students, attendance, instructors, rooms, room_bookings, accounts;
 
 -- ==========================================
 -- 6. PDF Storage 버킷 생성 및 공개 접근 허용

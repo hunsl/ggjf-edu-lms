@@ -5390,10 +5390,17 @@ const MobileCheckin = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        // 과정 정보 로드 (cidNum으로 숫자 비교)
+        // 과정 정보 로드 (cidNum으로 숫자 비교) — Supabase 없으면 로컬 COURSES 상수 폴백
         const { data: cData, error: cErr } = await sbGet("courses", `select=*&id=eq.${cidNum}`);
-        if (cErr || !cData || cData.length === 0) { setStatus("error"); setErrMsg("과정을 찾을 수 없습니다."); return; }
-        const c = toCourse(cData[0]);
+        let c;
+        if (!cErr && cData && cData.length > 0) {
+          c = toCourse(cData[0]);
+        } else {
+          // Supabase 테이블이 비어있거나 오류일 때 로컬 상수에서 찾기
+          const local = COURSES.find(x => Number(x.id) === cidNum);
+          if (!local) { setStatus("error"); setErrMsg("과정을 찾을 수 없습니다."); return; }
+          c = local;
+        }
 
         // 토큰 검증 — 인코딩/공백 차이에 유연하게 대응, 불일치 시 경고만 출력
         const expectedToken = `${c.code}-${date}-${type.toUpperCase()}-${QR_TOKEN_SUFFIX}`;
@@ -5410,7 +5417,7 @@ const MobileCheckin = () => {
 
         setCourse(c);
 
-        // 해당 과정 학생 목록 로드
+        // 해당 과정 학생 목록 로드 — Supabase 없으면 SEED_STUDENTS 폴백
         const { data: sData, error: sErr } = await sbGet("students", `select=*&cid=eq.${c.id}&order=name`);
         if (sErr) {
           // cid 컬럼 스키마 캐시 오류 — 더 구체적인 안내 제공
@@ -5418,9 +5425,17 @@ const MobileCheckin = () => {
           if (msg.includes("schema cache") && msg.includes("cid")) {
             throw new Error("DB 설정 오류: Supabase 대시보드 → Settings → API → Schema Cache → Reload 버튼을 클릭한 후 다시 시도하세요.");
           }
-          throw sErr;
+          // 기타 오류: SEED_STUDENTS 폴백
+          console.warn("학생 목록 로드 오류 (SEED 폴백):", sErr?.message || sErr);
+          const fallback = SEED_STUDENTS.filter(s => Number(s.cid) === Number(c.id));
+          setStudents(fallback.map(toStudent));
+        } else {
+          // Supabase 데이터가 없으면 SEED_STUDENTS 폴백
+          const list = (sData && sData.length > 0)
+            ? sData.map(toStudent)
+            : SEED_STUDENTS.filter(s => Number(s.cid) === Number(c.id)).map(toStudent);
+          setStudents(list);
         }
-        setStudents((sData || []).map(toStudent));
         setStatus("ready");
       } catch (e) {
         setStatus("error"); setErrMsg(e.message || "오류가 발생했습니다.");

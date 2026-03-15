@@ -3186,6 +3186,11 @@ const InstructorMgmt = ({ courses }) => {
   const [search, setSearch]    = useState("");
   const [typeFilter, setTF]    = useState("전체");
 
+  // ── DB 연동 상태 ──
+  const [dbStatus, setDbStatus] = useState("loading"); // loading | ok | error
+  const [rtStatus, setRtStatus] = useState("pending"); // pending | connected | disconnected | error
+  const [lastOp,   setLastOp]   = useState(null);      // {type, status, msg}
+
   // ── Supabase 초기 로드 ──
   useEffect(() => {
     const load = async () => {
@@ -3193,11 +3198,38 @@ const InstructorMgmt = ({ courses }) => {
         const { data, error } = await sbGet("instructors", "select=*&order=id");
         if (error) throw error;
         if (data && data.length > 0) setInst(data.map(toInstructor));
+        setDbStatus("ok");
       } catch (err) {
         console.warn("강사 목록 로드 실패 (시드 데이터 사용):", err.message || err);
+        setDbStatus("error");
       }
     };
     load();
+  }, []);
+
+  // ── 강사 실시간 구독 ──
+  useEffect(() => {
+    realtimeManager.subscribe("instructors", {
+      onInsert: (newRecord) => {
+        setInst(prev => {
+          // 이미 있으면 DB 정규 데이터로 갱신, 없으면 추가
+          if (prev.find(x => x.id === newRecord.id))
+            return prev.map(x => x.id === newRecord.id ? toInstructor(newRecord) : x);
+          console.log("🆕 강사 추가 (실시간):", newRecord.name);
+          return [...prev, toInstructor(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setInst(prev => prev.map(x => x.id === newRecord.id ? toInstructor(newRecord) : x));
+        console.log("✏️ 강사 수정 (실시간):", newRecord.name);
+      },
+      onDelete: (oldRecord) => {
+        setInst(prev => prev.filter(x => x.id !== oldRecord.id));
+        console.log("🗑️ 강사 삭제 (실시간):", oldRecord.name);
+      },
+      onStatus: (s) => setRtStatus(s),
+    });
+    return () => realtimeManager.unsubscribe("instructors");
   }, []);
 
   const filtered = instructors.filter(i => {
@@ -3234,7 +3266,9 @@ const InstructorMgmt = ({ courses }) => {
       } else {
         setInst(p => p.map(x => x.id===inst.id ? inst : x));
       }
+      setLastOp({ type: isNew ? "add" : "edit", status: "ok" });
     } catch (err) {
+      setLastOp({ type: isNew ? "add" : "edit", status: "error", msg: err.message || String(err) });
       alert("저장 오류: " + (err.message || String(err)));
       throw err;
     }
@@ -3244,10 +3278,13 @@ const InstructorMgmt = ({ courses }) => {
     try {
       const { error } = await sbDelete("instructors", `id=eq.${id}`);
       if (error) throw error;
+      setInst(p => p.filter(x => x.id !== id));
+      setLastOp({ type: "delete", status: "ok" });
     } catch (err) {
       console.warn("강사 삭제 오류:", err.message || err);
+      setLastOp({ type: "delete", status: "error", msg: err.message || String(err) });
+      alert("삭제 오류: " + (err.message || String(err)));
     }
-    setInst(p => p.filter(x => x.id !== id));
   };
 
   const typeColors = {"주강사":T.p,"보조강사":T.ok,"외래강사":"#7C3AED","운영요원":T.warn};
@@ -3266,6 +3303,9 @@ const InstructorMgmt = ({ courses }) => {
           <Icon n="plus" s={13}/> 강사 추가
         </Btn>}
       />
+
+      {/* DB 연동 상태 체크리스트 */}
+      <SyncPanel dbStatus={dbStatus} rtStatus={rtStatus} lastOp={lastOp} count={instructors.length}/>
 
       {/* 필터 바 */}
       <Card style={{ padding:"12px 16px", marginBottom:14, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
@@ -3557,7 +3597,16 @@ const RoomModal = ({ room, onClose, setRooms, onSave }) => {
         <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"space-between", background:T.s2 }}>
           {isEdit
-            ? <Btn variant="danger" size="sm" onClick={async ()=>{ try { await sbDelete("rooms",`id=eq.${room.id}`); } catch(e){ console.error("강의실 삭제 오류:",e.message||e); } if(setRooms) setRooms(p=>p.filter(r=>r.id!==room.id)); onClose(); }}>삭제</Btn>
+            ? <Btn variant="danger" size="sm" onClick={async ()=>{
+                try {
+                  const { error } = await sbDelete("rooms", `id=eq.${room.id}`);
+                  if (error) throw error;
+                  if(setRooms) setRooms(p=>p.filter(r=>r.id!==room.id));
+                  onClose();
+                } catch(e) {
+                  alert("강의실 삭제 오류: " + (e.message || String(e)));
+                }
+              }}>삭제</Btn>
             : <div/>}
           <div style={{ display:"flex", gap:8 }}>
             <Btn variant="ghost" onClick={onClose}>취소</Btn>
@@ -3697,6 +3746,11 @@ const RoomMgmt = ({ courses }) => {
   const [selRoom,   setSelRoom]   = useState(0); // 0 = 전체
   const [viewMode,  setViewMode]  = useState("calendar"); // "calendar" | "gantt"
 
+  // ── DB 연동 상태 ──
+  const [dbStatus, setDbStatus] = useState("loading");
+  const [rtStatus, setRtStatus] = useState("pending");
+  const [lastOp,   setLastOp]   = useState(null);
+
   // ── Supabase 초기 로드 ──
   useEffect(() => {
     const load = async () => {
@@ -3705,13 +3759,64 @@ const RoomMgmt = ({ courses }) => {
           sbGet("rooms", "select=*&order=id"),
           sbGet("room_bookings", "select=*&order=id"),
         ]);
+        if (rRes.error) throw rRes.error;
         if (!rRes.error && rRes.data && rRes.data.length > 0) setRooms(rRes.data.map(toRoom));
         if (!bRes.error && bRes.data) setBookings(bRes.data.map(toBooking));
+        setDbStatus("ok");
       } catch (err) {
         console.warn("강의실 데이터 로드 실패 (시드 데이터 사용):", err.message || err);
+        setDbStatus("error");
       }
     };
     load();
+  }, []);
+
+  // ── 강의실 실시간 구독 ──
+  useEffect(() => {
+    realtimeManager.subscribe("rooms", {
+      onInsert: (newRecord) => {
+        setRooms(prev => {
+          // 이미 있으면 DB 정규 데이터로 갱신, 없으면 추가
+          if (prev.find(r => r.id === newRecord.id))
+            return prev.map(r => r.id === newRecord.id ? toRoom(newRecord) : r);
+          console.log("🆕 강의실 추가 (실시간):", newRecord.name);
+          return [...prev, toRoom(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setRooms(prev => prev.map(r => r.id === newRecord.id ? toRoom(newRecord) : r));
+        console.log("✏️ 강의실 수정 (실시간):", newRecord.name);
+      },
+      onDelete: (oldRecord) => {
+        setRooms(prev => prev.filter(r => r.id !== oldRecord.id));
+        console.log("🗑️ 강의실 삭제 (실시간):", oldRecord.name);
+      },
+      onStatus: (s) => setRtStatus(s),
+    });
+    realtimeManager.subscribe("room_bookings", {
+      onInsert: (newRecord) => {
+        setBookings(prev => {
+          // 이미 있으면 DB 정규 데이터로 갱신, 없으면 추가
+          if (prev.find(b => b.id === newRecord.id))
+            return prev.map(b => b.id === newRecord.id ? toBooking(newRecord) : b);
+          console.log("🆕 강의실 예약 추가 (실시간):", newRecord.id);
+          return [...prev, toBooking(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setBookings(prev => prev.map(b => b.id === newRecord.id ? toBooking(newRecord) : b));
+        console.log("✏️ 강의실 예약 수정 (실시간):", newRecord.id);
+      },
+      onDelete: (oldRecord) => {
+        setBookings(prev => prev.filter(b => b.id !== oldRecord.id));
+        console.log("🗑️ 강의실 예약 삭제 (실시간):", oldRecord.id);
+      },
+      onStatus: (s) => setRtStatus(s),
+    });
+    return () => {
+      realtimeManager.unsubscribe("rooms");
+      realtimeManager.unsubscribe("room_bookings");
+    };
   }, []);
 
   // ── 강의실 저장/삭제 핸들러 (BookModal, RoomModal에서 호출) ──
@@ -3726,7 +3831,8 @@ const RoomMgmt = ({ courses }) => {
   const handleRoomSave = async (room) => {
     try {
       if (room.id) {
-        await sbUpdate("rooms", `id=eq.${room.id}`, fromRoom(room));
+        const { error } = await sbUpdate("rooms", `id=eq.${room.id}`, fromRoom(room));
+        if (error) throw error;
         setRooms(p => p.map(r => r.id===room.id ? room : r));
       } else {
         const { data, error } = await sbInsert("rooms", fromRoom(room));
@@ -3734,7 +3840,9 @@ const RoomMgmt = ({ courses }) => {
         const saved = (data && data[0]) ? toRoom(data[0]) : { ...room, id: Date.now() };
         setRooms(p => [...p, saved]);
       }
+      setLastOp({ type: room.id ? "edit" : "add", status: "ok" });
     } catch (err) {
+      setLastOp({ type: room.id ? "edit" : "add", status: "error", msg: err.message || String(err) });
       alert(_roomErrMsg(err, "강의실 저장 오류"));
       throw err;
     }
@@ -3743,7 +3851,8 @@ const RoomMgmt = ({ courses }) => {
   const handleBookSave = async (book) => {
     try {
       if (book.id) {
-        await sbUpdate("room_bookings", `id=eq.${book.id}`, fromBooking(book));
+        const { error } = await sbUpdate("room_bookings", `id=eq.${book.id}`, fromBooking(book));
+        if (error) throw error;
         setBookings(p => p.map(b => b.id===book.id ? book : b));
       } else {
         const { data, error } = await sbInsert("room_bookings", fromBooking(book));
@@ -3754,6 +3863,7 @@ const RoomMgmt = ({ courses }) => {
             console.warn("⚠️ room_bookings 테이블 없음 — 로컬 저장 (DB 미반영). Supabase SQL Editor에서 supabase-setup.sql을 실행하세요.");
             alert("강의실 예약 테이블이 없어 이번 세션에만 임시 저장됩니다.\nSupabase SQL Editor에서 supabase-setup.sql 전체를 실행하면 영구 저장됩니다.");
             setBookings(p => [...p, { ...book, id: Date.now() }]);
+            setLastOp({ type: "add", status: "error", msg: "room_bookings 테이블 없음" });
             return;
           }
           throw error;
@@ -3761,7 +3871,9 @@ const RoomMgmt = ({ courses }) => {
         const saved = (data && data[0]) ? toBooking(data[0]) : { ...book, id: Date.now() };
         setBookings(p => [...p, saved]);
       }
+      setLastOp({ type: book.id ? "edit" : "add", status: "ok" });
     } catch (err) {
+      setLastOp({ type: book.id ? "edit" : "add", status: "error", msg: err.message || String(err) });
       alert(_roomErrMsg(err, "일정 저장 오류"));
       throw err;
     }
@@ -3769,11 +3881,15 @@ const RoomMgmt = ({ courses }) => {
 
   const handleBookDelete = async (id) => {
     try {
-      await sbDelete("room_bookings", `id=eq.${id}`);
+      const { error } = await sbDelete("room_bookings", `id=eq.${id}`);
+      if (error) throw error;
+      setBookings(p => p.filter(b => b.id !== id));
+      setLastOp({ type: "delete", status: "ok" });
     } catch (err) {
       console.warn("예약 삭제 오류:", err.message || err);
+      setLastOp({ type: "delete", status: "error", msg: err.message || String(err) });
+      alert("예약 삭제 오류: " + (err.message || String(err)));
     }
-    setBookings(p => p.filter(b => b.id !== id));
   };
 
   // 달력 날짜 생성
@@ -3873,6 +3989,9 @@ const RoomMgmt = ({ courses }) => {
           </div>
         }
       />
+
+      {/* DB 연동 상태 체크리스트 */}
+      <SyncPanel dbStatus={dbStatus} rtStatus={rtStatus} lastOp={lastOp} count={rooms.length}/>
 
       {/* 강의실 목록 */}
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
@@ -5362,7 +5481,7 @@ class RealtimeManager {
   subscribe(table, callbacks = {}) {
     if (this.subscriptions.has(table)) return;
 
-    const { onInsert, onUpdate, onDelete } = callbacks;
+    const { onInsert, onUpdate, onDelete, onStatus } = callbacks;
     const channel = `realtime:public:${table}`;
     const joinRef  = this._nextRef();
     const state = {
@@ -5391,6 +5510,7 @@ class RealtimeManager {
       ws.onopen = () => {
         state.retryDelay = 2000; // 성공 시 backoff 리셋
         console.log(`✅ [Realtime] ${table} 연결됨`);
+        onStatus?.("connected");
 
         // phx_join
         send({
@@ -5425,6 +5545,7 @@ class RealtimeManager {
               console.log(`🔔 [Realtime] ${table} 구독 확인 IDs:`, state.subIds);
             } else {
               console.error(`❌ [Realtime] ${table} 구독 실패:`, msg.payload?.response);
+              onStatus?.("error");
             }
             return;
           }
@@ -5447,13 +5568,17 @@ class RealtimeManager {
         }
       };
 
-      ws.onerror = () => console.warn(`⚠️ [Realtime] ${table} 소켓 오류`);
+      ws.onerror = () => {
+        console.warn(`⚠️ [Realtime] ${table} 소켓 오류`);
+        onStatus?.("error");
+      };
 
       ws.onclose = (ev) => {
         clearInterval(state.heartbeatId);
         state.heartbeatId = null;
         if (!state.intentionallyClosed) {
           console.warn(`🔌 [Realtime] ${table} 연결 끊김 (code:${ev.code}) — ${state.retryDelay/1000}초 후 재연결`);
+          onStatus?.("disconnected");
           setTimeout(connect, state.retryDelay);
           state.retryDelay = Math.min(state.retryDelay * 2, 30000); // 최대 30초
         }
@@ -5461,6 +5586,16 @@ class RealtimeManager {
     };
 
     connect();
+  }
+
+  unsubscribe(table) {
+    const state = this.subscriptions.get(table);
+    if (!state) return;
+    state.intentionallyClosed = true;
+    clearInterval(state.heartbeatId);
+    state.heartbeatId = null;
+    state.ws?.close();
+    this.subscriptions.delete(table);
   }
 
   unsubscribeAll() {
@@ -5475,6 +5610,65 @@ class RealtimeManager {
 }
 
 const realtimeManager = new RealtimeManager();
+
+/* ===========================================================
+   🔗 SYNC PANEL — 탭별 DB 연동 상태 체크리스트
+=========================================================== */
+/**
+ * SyncPanel: 각 탭의 DB 연동 상태를 한눈에 보여주는 체크리스트 UI
+ *
+ * Props:
+ *   dbStatus  : 'loading' | 'ok' | 'error'   — 초기 로드 결과
+ *   rtStatus  : 'pending' | 'connected' | 'disconnected' | 'error'  — 실시간 구독 상태
+ *   lastOp    : null | { type:'add'|'edit'|'delete', status:'ok'|'error', msg?:string }
+ *   count     : number  — 현재 표시 중인 항목 수
+ */
+const SyncPanel = ({ dbStatus = "loading", rtStatus = "pending", lastOp = null, count = 0 }) => {
+  const row = (icon, label, ok, pending, msg) => {
+    const color = ok ? "#16A34A" : pending ? "#F59E0B" : "#DC2626";
+    const bg    = ok ? "#F0FDF4" : pending ? "#FFFBEB"  : "#FEF2F2";
+    const bd    = ok ? "#BBF7D0" : pending ? "#FDE68A"  : "#FECACA";
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:6,
+        padding:"4px 8px", borderRadius:6, background:bg, border:`1px solid ${bd}`,
+        fontSize:11, color }}>
+        <span style={{ fontSize:13 }}>{icon}</span>
+        <span style={{ fontWeight:600 }}>{label}</span>
+        {msg && <span style={{ color:"#6B7280", fontWeight:400, fontSize:10 }}>{msg}</span>}
+      </div>
+    );
+  };
+
+  const dbOk      = dbStatus === "ok";
+  const dbPending = dbStatus === "loading";
+  const rtOk      = rtStatus === "connected";
+  const rtPending = rtStatus === "pending";
+
+  const opIcon  = !lastOp ? null : lastOp.status === "ok" ? "✅" : "❌";
+  const opLabel = !lastOp ? null
+    : { add:"추가", edit:"수정", delete:"삭제" }[lastOp.type] || lastOp.type;
+
+  return (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10, alignItems:"center" }}>
+      {row(
+        dbPending ? "⏳" : dbOk ? "✅" : "❌",
+        dbPending ? "DB 로딩중…" : dbOk ? `DB 로드 완료 (${count}건)` : "DB 로드 실패",
+        dbOk, dbPending
+      )}
+      {row(
+        rtPending ? "🔄" : rtOk ? "🔗" : "⚠️",
+        rtPending ? "실시간 연결중…" : rtOk ? "실시간 연결됨" : "실시간 끊김",
+        rtOk, rtPending
+      )}
+      {lastOp && row(
+        opIcon,
+        `마지막 ${opLabel}: ${lastOp.status === "ok" ? "성공" : "실패"}`,
+        lastOp.status === "ok", false,
+        lastOp.msg ? `(${lastOp.msg})` : ""
+      )}
+    </div>
+  );
+};
 
 /* ===========================================================
    APP ROOT
@@ -5620,7 +5814,7 @@ function App() {
         });
       },
       onUpdate: (newRecord) => {
-        setCourses(prev => prev.map(c => c.id===newRecord.id ? toCourse(newRecord) : c));
+        setCourses(prev => prev.map(c => c.id === newRecord.id ? toCourse(newRecord) : c));
         console.log("✏️ 과정 수정 (실시간):", newRecord.name);
       },
       onDelete: (oldRecord) => {
@@ -5629,12 +5823,45 @@ function App() {
       }
     });
 
+    // 계정 실시간 구독
+    realtimeManager.subscribe("accounts", {
+      onInsert: (newRecord) => {
+        setAccounts(prev => {
+          if (prev.find(a => a.id === newRecord.id))
+            return prev.map(a => a.id === newRecord.id ? toAccount(newRecord) : a);
+          console.log("🆕 계정 추가 (실시간):", newRecord.name);
+          return [...prev, toAccount(newRecord)];
+        });
+      },
+      onUpdate: (newRecord) => {
+        setAccounts(prev => prev.map(a => a.id === newRecord.id ? toAccount(newRecord) : a));
+        console.log("✏️ 계정 수정 (실시간):", newRecord.name);
+      },
+      onDelete: (oldRecord) => {
+        setAccounts(prev => prev.filter(a => a.id !== oldRecord.id));
+        console.log("🗑️ 계정 삭제 (실시간):", oldRecord.name);
+      }
+    });
+
     return () => realtimeManager.unsubscribeAll();
   }, [currentUser]);
 
   // ── 훈련생 CRUD ──
+  // 학생 스키마 캐시 오류 감지 헬퍼
+  const isStudentSchemaErr = (e) => {
+    const m = e?.message || e?.hint || JSON.stringify(e);
+    return m.includes("schema cache") && m.includes("cid");
+  };
+
   const addStudents = useCallback(async (newOnes) => {
-    const { data, error } = await sbInsert("students", newOnes.map(fromStudent));
+    const bodies = newOnes.map(fromStudent);
+    let { data, error } = await sbInsert("students", bodies);
+    // cid 컬럼 스키마 캐시 오류 → cid 제외 후 재시도
+    if (error && isStudentSchemaErr(error)) {
+      console.warn("⚠️ students.cid 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload");
+      const fallback = bodies.map(({ cid, ...rest }) => rest);
+      ({ data, error } = await sbInsert("students", fallback));
+    }
     if (error) { 
       alert("저장 오류: " + (error.message||JSON.stringify(error))); 
       console.error("❌ 학생 저장 실패:", error);
@@ -5661,7 +5888,14 @@ function App() {
   }, [addAudit, currentUser]);
 
   const updateStudent = useCallback(async (updated) => {
-    const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
+    let body = fromStudent(updated);
+    let { error } = await sbUpdate("students", `id=eq.${updated.id}`, body);
+    // cid 컬럼 스키마 캐시 오류 → cid 제외 후 재시도
+    if (error && isStudentSchemaErr(error)) {
+      console.warn("⚠️ students.cid 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload");
+      const { cid, ...fallback } = body;
+      ({ error } = await sbUpdate("students", `id=eq.${updated.id}`, fallback));
+    }
     if (error) { alert("수정 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.map(s => s.id===updated.id ? updated : s));
     addAudit("훈련생 수정", `${updated.name} 정보 수정`, currentUser?.name);

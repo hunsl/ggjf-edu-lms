@@ -11,6 +11,8 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- XLSX (Excel 처리) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <!-- QR Code (로컬 생성 — Tracking Prevention 회피) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -154,7 +156,56 @@ const GStyle = () => (
 );
 
 /* ═══════════════════════════════════════════════════════════
-   THEME
+   QR CODE (로컬 생성 — api.qrserver.com 대신 qrcode-generator CDN 사용)
+   Tracking Prevention 오류를 방지하기 위해 canvas에 직접 렌더링
+═══════════════════════════════════════════════════════════ */
+const QRCanvas = ({ data, size = 200, color = "#000000", bgColor = "#ffffff", style = {} }) => {
+  const canvasRef = useRef(null);
+  const [libMissing, setLibMissing] = useState(false);
+  useEffect(() => {
+    if (!canvasRef.current || !data) return;
+    if (typeof window.qrcode !== "function") {
+      console.warn("QRCanvas: qrcode-generator 라이브러리를 로드할 수 없습니다. CDN을 확인하세요.");
+      setLibMissing(true);
+      return;
+    }
+    try {
+      const qr = window.qrcode(0, "M");
+      qr.addData(data);
+      qr.make();
+      const cells = qr.getModuleCount();
+      const canvas = canvasRef.current;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width  = size * dpr;
+      canvas.height = size * dpr;
+      canvas.style.width  = size + "px";
+      canvas.style.height = size + "px";
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+      const cellSize = size / cells;
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = color;
+      for (let r = 0; r < cells; r++) {
+        for (let c = 0; c < cells; c++) {
+          if (qr.isDark(r, c)) ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+        }
+      }
+    } catch (e) {
+      console.error("QR 생성 오류:", e);
+      setLibMissing(true);
+    }
+  }, [data, size, color, bgColor]);
+  if (libMissing) return (
+    <div style={{ width:size, height:size, display:"flex", flexDirection:"column",
+      alignItems:"center", justifyContent:"center", background:"#F1F5F9",
+      borderRadius:8, fontSize:11, color:"#64748B", textAlign:"center", padding:8, ...style }}>
+      <div style={{ fontSize:28, marginBottom:4 }}>⚠️</div>
+      QR 라이브러리 로드 실패<br/>페이지를 새로고침 하세요
+    </div>
+  );
+  return <canvas ref={canvasRef} style={{ display:"block", borderRadius:8, ...style }} />;
+};
 ═══════════════════════════════════════════════════════════ */
 const T = {
   p: "#EA580C", pm: "#F97316", pl: "#FB923C", pbg: "#FFF7ED",
@@ -1376,8 +1427,8 @@ const AttendanceMgmt = ({ students, courses }) => {
   const qrToken   = `${course.code}-${date}-${qrType.toUpperCase()}-2026GJF`;
   const pageBase  = window.location.origin + window.location.pathname;
   const qrData    = `${pageBase}?mode=checkin&cid=${course.id}&date=${date}&type=${qrType}&t=${encodeURIComponent(qrToken)}`;
-  const qrColor   = qrType === "in" ? "2563EB" : "9A3412";
-  const qrUrl     = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}&bgcolor=ffffff&color=${qrColor}&margin=12`;
+  const qrColor   = qrType === "in" ? "#2563EB" : "#9A3412";
+  // qrUrl 제거 — QRCanvas 컴포넌트로 로컬 생성 (Tracking Prevention 대응)
 
   // ── 출결 기록 (입실/퇴실 분리) ──
   const [records, setRecords] = useState({}); // { studentId: { in:{time,status}, out:{time} } }
@@ -1447,7 +1498,8 @@ const AttendanceMgmt = ({ students, courses }) => {
                 table: "attendance",
                 filter: `date=eq.${date}`
               }]
-            }
+            },
+            access_token: SB_KEY
           },
           ref: Date.now().toString()
         }));
@@ -1471,7 +1523,8 @@ const AttendanceMgmt = ({ students, courses }) => {
         try {
           const msg = JSON.parse(event.data);
           if (msg.event === "postgres_changes") {
-            const { eventType, new: newRecord } = msg.payload.data;
+            // Supabase Realtime v2: type/record/old_record
+            const { type: eventType, record: newRecord } = msg.payload.data;
             if (eventType === "INSERT" || eventType === "UPDATE") {
               const [h, m] = newRecord.time.split(":").map(Number);
               const mins = h * 60 + m;
@@ -1729,11 +1782,11 @@ const AttendanceMgmt = ({ students, courses }) => {
               ))}
             </div>
 
-            {/* QR 이미지 */}
+            {/* QR 이미지 — 로컬 canvas 렌더링 (Tracking Prevention 대응) */}
             <div style={{ position:"relative", display:"inline-block", marginBottom:12 }}>
-              <img src={qrUrl} alt="QR" style={{ width:200, height:200, display:"block",
-                border:`2px solid ${qrType==="in"?"#2563EB":T.pl}`, borderRadius:10 }}
-                onError={e=>{ e.target.style.display="none"; }}/>
+              <div style={{ border:`2px solid ${qrType==="in"?"#2563EB":T.pl}`, borderRadius:10, overflow:"hidden", lineHeight:0 }}>
+                <QRCanvas data={qrData} size={200} color={qrColor} bgColor="#ffffff" />
+              </div>
               <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, pointerEvents:"none",
                 overflow:"hidden", borderRadius:10 }}>
                 <div style={{ position:"absolute", left:0, right:0, height:2,
@@ -4220,9 +4273,23 @@ const MobileCheckin = () => {
 
   const [course,   setCourse]   = useState(null);
   const [students, setStudents] = useState([]);
-  const [status,   setStatus]   = useState("loading"); // loading | ready | success | error | expired
+  const [status,   setStatus]   = useState("loading"); // loading | ready | success | error | expired | duplicate
   const [checkedId, setCheckedId] = useState(null);
+  const [checkedTime, setCheckedTime] = useState("");
   const [errMsg,   setErrMsg]   = useState("");
+  const [nowStr,   setNowStr]   = useState("");
+  const [searchQ,  setSearchQ]  = useState("");
+
+  // 현재 시각 표시 (매초 갱신)
+  useEffect(() => {
+    const tick = () => {
+      const n = new Date();
+      setNowStr(`${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}:${String(n.getSeconds()).padStart(2,"0")}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -4256,6 +4323,17 @@ const MobileCheckin = () => {
   const handleCheckin = async (student) => {
     setStatus("loading");
     try {
+      // 중복 체크: 이미 해당 타입으로 출결 기록이 있는지 확인
+      const { data: existing } = await sbGet(
+        "attendance",
+        `select=id,time&student_id=eq.${student.id}&date=eq.${date}&type=eq.${type}&limit=1`
+      );
+      if (existing && existing.length > 0) {
+        setCheckedId(student.id);
+        setCheckedTime(existing[0].time);
+        setStatus("duplicate");
+        return;
+      }
       const now  = new Date();
       const time = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
       const { error } = await sbInsert("attendance", [{
@@ -4267,6 +4345,7 @@ const MobileCheckin = () => {
       }]);
       if (error) throw error;
       setCheckedId(student.id);
+      setCheckedTime(time);
       setStatus("success");
     } catch (e) {
       setStatus("error"); setErrMsg(e.message || "저장 오류");
@@ -4279,114 +4358,183 @@ const MobileCheckin = () => {
 
   const containerStyle = {
     minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center",
-    background:`linear-gradient(160deg,${typeColor}22 0%,#FFF7ED 60%)`,
-    fontFamily:"'Pretendard',-apple-system,sans-serif", padding:"24px 20px",
+    background:`linear-gradient(160deg,${typeColor}18 0%,#F8FAFC 50%,#FFF7ED 100%)`,
+    fontFamily:"'Pretendard',-apple-system,sans-serif", padding:"20px 16px",
   };
 
   if (status === "loading") return (
     <div style={containerStyle}>
-      <div style={{ marginTop:80, fontSize:40 }}>⏳</div>
-      <div style={{ marginTop:16, fontSize:14, color:"#64748B" }}>잠시만 기다려 주세요…</div>
+      <div style={{ marginTop:100, textAlign:"center" }}>
+        <div style={{ fontSize:48, animation:"fadeIn .5s ease" }}>⏳</div>
+        <div style={{ marginTop:16, fontSize:14, color:"#64748B", fontWeight:600 }}>잠시만 기다려 주세요…</div>
+        <div style={{ marginTop:8, fontSize:11, color:"#94A3B8" }}>Supabase와 연결 중입니다</div>
+      </div>
     </div>
   );
 
   if (status === "expired") return (
     <div style={containerStyle}>
-      <div style={{ marginTop:60, textAlign:"center" }}>
-        <div style={{ fontSize:56 }}>⏰</div>
-        <div style={{ fontSize:18, fontWeight:800, color:"#1E293B", marginTop:14 }}>QR 코드가 만료되었습니다</div>
-        <div style={{ fontSize:13, color:"#64748B", marginTop:8 }}>담당자에게 새 QR 코드를 요청하세요.</div>
+      <div style={{ marginTop:80, textAlign:"center", maxWidth:320 }}>
+        <div style={{ fontSize:64 }}>⏰</div>
+        <div style={{ fontSize:20, fontWeight:900, color:"#1E293B", marginTop:16 }}>QR 코드가 만료되었습니다</div>
+        <div style={{ fontSize:13, color:"#64748B", marginTop:10, lineHeight:1.6 }}>
+          담당자에게 새 QR 코드를 요청하세요.
+        </div>
       </div>
     </div>
   );
 
   if (status === "error") return (
     <div style={containerStyle}>
-      <div style={{ marginTop:60, textAlign:"center" }}>
-        <div style={{ fontSize:56 }}>❌</div>
-        <div style={{ fontSize:18, fontWeight:800, color:"#1E293B", marginTop:14 }}>오류가 발생했습니다</div>
-        <div style={{ fontSize:13, color:"#64748B", marginTop:8 }}>{errMsg}</div>
+      <div style={{ marginTop:80, textAlign:"center", maxWidth:320 }}>
+        <div style={{ fontSize:64 }}>❌</div>
+        <div style={{ fontSize:20, fontWeight:900, color:"#1E293B", marginTop:16 }}>오류가 발생했습니다</div>
+        <div style={{ fontSize:13, color:"#64748B", marginTop:10 }}>{errMsg}</div>
+        <button onClick={()=>window.location.reload()}
+          style={{ marginTop:20, padding:"12px 24px", borderRadius:12, border:"none",
+            background:typeColor, color:"#fff", fontWeight:700, fontSize:14, cursor:"pointer" }}>
+          다시 시도
+        </button>
       </div>
     </div>
   );
 
-  if (status === "success") {
+  if (status === "success" || status === "duplicate") {
     const s = students.find(x => x.id === checkedId);
+    const isDup = status === "duplicate";
     return (
       <div style={containerStyle}>
-        <div style={{ width:"100%", maxWidth:380, marginTop:40, textAlign:"center",
-          background:"#fff", borderRadius:20, padding:"32px 28px",
-          boxShadow:"0 8px 40px rgba(0,0,0,.12)" }}>
-          <div style={{ fontSize:56 }}>✅</div>
-          <div style={{ fontSize:22, fontWeight:900, color:"#1E293B", marginTop:12 }}>
-            {typeLabel} 완료!
+        {/* 상단 기관 로고 영역 */}
+        <div style={{ width:"100%", maxWidth:400, textAlign:"center", marginBottom:20, marginTop:20 }}>
+          <div style={{ fontSize:11, color:"#94A3B8", letterSpacing:1 }}>경기도일자리재단 북부사업본부</div>
+        </div>
+        <div style={{ width:"100%", maxWidth:400, textAlign:"center",
+          background:"#fff", borderRadius:24, padding:"36px 28px",
+          boxShadow:"0 12px 48px rgba(0,0,0,.10)", border:`1px solid ${typeColor}20` }}>
+          <div style={{ fontSize:64, marginBottom:8 }}>{isDup ? "🔔" : "✅"}</div>
+          <div style={{ fontSize:24, fontWeight:900, color:"#1E293B" }}>
+            {isDup ? "이미 체크되었습니다" : `${typeLabel} 완료!`}
           </div>
-          <div style={{ fontSize:15, fontWeight:700, color:typeColor, marginTop:6 }}>
+          <div style={{ fontSize:18, fontWeight:800, color:typeColor, marginTop:10 }}>
             {s?.name}
           </div>
-          <div style={{ fontSize:12, color:"#64748B", marginTop:8 }}>
+          <div style={{ fontSize:13, color:"#64748B", marginTop:8, lineHeight:1.8 }}>
             {course?.name}<br/>
-            {fmtDate(date)} · {typeLabel} 기록 완료
+            {fmtDate(date)} · {typeLabel}
           </div>
-          <div style={{ marginTop:18, padding:"10px 14px", borderRadius:10,
-            background:`${typeColor}12`, border:`1px solid ${typeColor}30`,
-            fontSize:11, color:typeColor, fontWeight:700 }}>
-            📡 담당자 화면에 실시간 반영됩니다
+          <div style={{ marginTop:6, fontSize:22, fontWeight:900, color:typeColor, letterSpacing:2 }}>
+            {checkedTime}
           </div>
+          <div style={{ marginTop:16, padding:"10px 16px", borderRadius:12,
+            background: isDup ? "#FFF7ED" : `${typeColor}12`,
+            border:`1px solid ${isDup ? "#FED7AA" : typeColor+"30"}`,
+            fontSize:12, color: isDup ? "#9A3412" : typeColor, fontWeight:700, lineHeight:1.6 }}>
+            {isDup
+              ? <span>⚠️ {checkedTime}에 이미 {typeLabel} 처리되었습니다.<br/>중복 기록은 생성되지 않습니다.</span>
+              : "📡 담당자 화면에 실시간 반영됩니다"}
+          </div>
+          {isDup && (
+            <button onClick={()=>setStatus("ready")}
+              style={{ marginTop:16, padding:"10px 22px", borderRadius:10, border:"none",
+                background:"#F1F5F9", color:"#64748B", fontWeight:600, fontSize:13, cursor:"pointer" }}>
+              ← 목록으로 돌아가기
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
   // status === "ready"
+  const filtered = searchQ
+    ? students.filter(s => s.name.includes(searchQ) || (s.phone||"").includes(searchQ))
+    : students;
+
   return (
     <div style={containerStyle}>
-      {/* 헤더 */}
-      <div style={{ width:"100%", maxWidth:420, marginBottom:20 }}>
-        <div style={{ fontSize:11, color:"#64748B", marginBottom:4 }}>경기도일자리재단 북부사업본부</div>
-        <div style={{ fontSize:18, fontWeight:900, color:"#1E293B", display:"flex", alignItems:"center", gap:8 }}>
-          {type === "in" ? "📥" : "📤"}
+      {/* 상단 헤더 */}
+      <div style={{ width:"100%", maxWidth:440, marginBottom:16 }}>
+        {/* 기관명 */}
+        <div style={{ fontSize:11, color:"#94A3B8", letterSpacing:1, marginBottom:4 }}>
+          경기도일자리재단 북부사업본부
+        </div>
+        {/* 타이틀 */}
+        <div style={{ fontSize:22, fontWeight:900, color:"#1E293B",
+          display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:28 }}>{type === "in" ? "📥" : "📤"}</span>
           {typeLabel} 출석 체크
         </div>
-        <div style={{ fontSize:12, color:"#64748B", marginTop:3 }}>
-          {course?.name} · {fmtDate(date)}
+        {/* 과정명 + 날짜 */}
+        <div style={{ fontSize:13, color:"#64748B", marginTop:4, fontWeight:500 }}>
+          {course?.name}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:4 }}>
+          <div style={{ fontSize:12, color:"#94A3B8" }}>{fmtDate(date)}</div>
+          {/* 현재 시각 */}
+          <div style={{ fontSize:15, fontWeight:900, color:typeColor, letterSpacing:2,
+            background:`${typeColor}10`, padding:"3px 10px", borderRadius:8 }}>
+            🕐 {nowStr}
+          </div>
         </div>
       </div>
 
-      {/* 안내 */}
-      <div style={{ width:"100%", maxWidth:420, padding:"11px 14px", borderRadius:10,
-        background:`${typeColor}10`, border:`1px solid ${typeColor}30`,
-        fontSize:12, color:typeColor, fontWeight:600, marginBottom:18 }}>
-        👇 아래 목록에서 본인 이름을 터치하세요
+      {/* 안내 배너 */}
+      <div style={{ width:"100%", maxWidth:440, padding:"12px 16px", borderRadius:12,
+        background:`${typeColor}12`, border:`1px solid ${typeColor}30`,
+        fontSize:13, color:typeColor, fontWeight:700, marginBottom:14,
+        display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ fontSize:18 }}>👇</span>
+        <span>아래 목록에서 본인 이름을 터치하세요</span>
       </div>
 
-      {/* 학생 목록 */}
-      <div style={{ width:"100%", maxWidth:420, display:"flex", flexDirection:"column", gap:8 }}>
-        {students.length === 0 ? (
+      {/* 검색 입력 */}
+      {students.length > 5 && (
+        <div style={{ width:"100%", maxWidth:440, marginBottom:12 }}>
+          <input
+            value={searchQ}
+            onChange={e=>setSearchQ(e.target.value)}
+            placeholder="🔍  이름 또는 전화번호 검색"
+            style={{ width:"100%", padding:"12px 16px", borderRadius:12,
+              border:`1.5px solid ${typeColor}30`, fontSize:14, outline:"none",
+              background:"#fff", boxSizing:"border-box",
+              fontFamily:"inherit", color:"#1E293B" }}
+          />
+        </div>
+      )}
+
+      {/* 학생 카드 목록 */}
+      <div style={{ width:"100%", maxWidth:440, display:"flex", flexDirection:"column", gap:10 }}>
+        {filtered.length === 0 ? (
           <div style={{ textAlign:"center", color:"#94A3B8", padding:"40px 0", fontSize:14 }}>
-            등록된 훈련생이 없습니다
+            {searchQ ? "검색 결과가 없습니다" : "등록된 훈련생이 없습니다"}
           </div>
-        ) : students.map(s => (
+        ) : filtered.map(s => (
           <button key={s.id} onClick={()=>handleCheckin(s)}
-            style={{ padding:"16px 20px", borderRadius:14, border:`1.5px solid ${typeColor}30`,
+            style={{ padding:"18px 20px", borderRadius:16, border:`1.5px solid ${typeColor}25`,
               background:"#fff", cursor:"pointer", textAlign:"left",
-              boxShadow:"0 2px 8px rgba(0,0,0,.06)", transition:"all .15s",
-              display:"flex", alignItems:"center", gap:14 }}>
-            <div style={{ width:42, height:42, borderRadius:12, flexShrink:0,
-              background:`${typeColor}15`, display:"flex", alignItems:"center",
-              justifyContent:"center", fontSize:18, fontWeight:900, color:typeColor }}>
+              boxShadow:"0 2px 12px rgba(0,0,0,.06)", transition:"all .15s",
+              display:"flex", alignItems:"center", gap:14, WebkitTapHighlightColor:"transparent" }}>
+            {/* 아바타 */}
+            <div style={{ width:48, height:48, borderRadius:14, flexShrink:0,
+              background:`${typeColor}18`, display:"flex", alignItems:"center",
+              justifyContent:"center", fontSize:20, fontWeight:900, color:typeColor }}>
               {s.name[0]}
             </div>
-            <div>
-              <div style={{ fontSize:16, fontWeight:800, color:"#1E293B" }}>{s.name}</div>
-              <div style={{ fontSize:11, color:"#94A3B8", marginTop:2 }}>{s.phone || "연락처 없음"}</div>
+            {/* 이름 / 연락처 */}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:17, fontWeight:800, color:"#1E293B" }}>{s.name}</div>
+              <div style={{ fontSize:12, color:"#94A3B8", marginTop:2 }}>
+                {s.phone ? s.phone.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3") : "연락처 없음"}
+              </div>
             </div>
-            <div style={{ marginLeft:"auto", fontSize:22, color:`${typeColor}80` }}>›</div>
+            {/* 화살표 */}
+            <div style={{ fontSize:24, color:`${typeColor}60`, fontWeight:900 }}>›</div>
           </button>
         ))}
       </div>
 
-      <div style={{ marginTop:24, fontSize:10, color:"#CBD5E1", textAlign:"center" }}>
+      <div style={{ marginTop:28, fontSize:10, color:"#CBD5E1", textAlign:"center", lineHeight:1.8 }}>
+        총 {students.length}명 등록 · {filtered.length}명 표시<br/>
         © 2026 경기도일자리재단 북부사업본부 · 학사관리시스템
       </div>
     </div>
@@ -4426,7 +4574,8 @@ class RealtimeManager {
                 schema: "public",
                 table: table
               }]
-            }
+            },
+            access_token: SB_KEY
           },
           ref: Date.now().toString()
         }));
@@ -4450,7 +4599,8 @@ class RealtimeManager {
         try {
           const msg = JSON.parse(event.data);
           if (msg.event === "postgres_changes") {
-            const { eventType, new: newRecord, old: oldRecord } = msg.payload.data;
+            // Supabase Realtime v2: type/record/old_record
+            const { type: eventType, record: newRecord, old_record: oldRecord } = msg.payload.data;
             switch(eventType) {
               case "INSERT": onInsert?.(newRecord); break;
               case "UPDATE": onUpdate?.(newRecord, oldRecord); break;

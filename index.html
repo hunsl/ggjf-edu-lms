@@ -6270,16 +6270,19 @@ function App() {
       console.error("❌ 과정 저장 실패:", error);
       return; 
     }
-    // 로컬 state 즉시 반영
-    if (data && data.length > 0) {
+    // sbInsert는 단일 객체(row)를 반환함 — data.id로 확인
+    if (data && data.id) {
       setCourses(prev => {
-        const newId = data[0].id;
-        const filtered = prev.filter(x => x.id !== newId);
-        return [...filtered, toCourse(data[0])];
+        const filtered = prev.filter(x => x.id !== data.id);
+        return [...filtered, toCourse(data)];
       });
+    } else {
+      // Prefer 헤더가 무시된 경우(드물지만) DB에서 최신 목록 재조회
+      const { data: fresh } = await sbGet("courses", "select=*&order=id");
+      if (fresh && fresh.length > 0) setCourses(fresh.map(toCourse));
     }
     addAudit("과정 등록", `${c.name} (${c.code}) 추가`, currentUser?.name);
-    console.log("✅ 과정 저장 완료:", data?.[0]?.name);
+    console.log("✅ 과정 저장 완료:", data?.name);
   }, [addAudit, currentUser]);
 
   const updateCourse = useCallback(async (c) => {

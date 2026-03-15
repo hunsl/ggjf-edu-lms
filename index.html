@@ -5633,8 +5633,20 @@ function App() {
   }, [currentUser]);
 
   // ── 훈련생 CRUD ──
+  // 학생 스키마 캐시 오류 감지 헬퍼
+  const isStudentSchemaErr = (e) => {
+    const m = e?.message || e?.hint || JSON.stringify(e);
+    return m.includes("schema cache") && m.includes("cid");
+  };
+
   const addStudents = useCallback(async (newOnes) => {
-    const { data, error } = await sbInsert("students", newOnes.map(fromStudent));
+    let { data, error } = await sbInsert("students", newOnes.map(fromStudent));
+    // cid 컬럼 스키마 캐시 오류 → cid 제외 후 재시도
+    if (error && isStudentSchemaErr(error)) {
+      console.warn("⚠️ students.cid 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload");
+      const fallback = newOnes.map(s => { const { cid, ...rest } = fromStudent(s); return rest; });
+      ({ data, error } = await sbInsert("students", fallback));
+    }
     if (error) { 
       alert("저장 오류: " + (error.message||JSON.stringify(error))); 
       console.error("❌ 학생 저장 실패:", error);
@@ -5661,7 +5673,14 @@ function App() {
   }, [addAudit, currentUser]);
 
   const updateStudent = useCallback(async (updated) => {
-    const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
+    let body = fromStudent(updated);
+    let { error } = await sbUpdate("students", `id=eq.${updated.id}`, body);
+    // cid 컬럼 스키마 캐시 오류 → cid 제외 후 재시도
+    if (error && isStudentSchemaErr(error)) {
+      console.warn("⚠️ students.cid 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload");
+      const { cid, ...fallback } = body;
+      ({ error } = await sbUpdate("students", `id=eq.${updated.id}`, fallback));
+    }
     if (error) { alert("수정 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.map(s => s.id===updated.id ? updated : s));
     addAudit("훈련생 수정", `${updated.name} 정보 수정`, currentUser?.name);

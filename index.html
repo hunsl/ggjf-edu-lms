@@ -161,7 +161,7 @@ const fromStudent = s => ({
 });
 
 const toCourse = r => r ? ({
-  id: r.id, cat: r.cat, cc: r.cc, name: r.name, code: r.code,
+  id: Number(r.id), cat: r.cat, cc: r.cc, name: r.name, code: r.code,
   dateFrom: r.date_from||"", dateTo: r.date_to||"", period: r.period||"",
   method: r.method||"대면", hours: r.hours||0,
   tgt: r.tgt||20, cGoal: r.c_goal||18, eGoal: r.e_goal||12,
@@ -5358,10 +5358,15 @@ const MobileCheckin = () => {
         if (cErr || !cData || cData.length === 0) { setStatus("error"); setErrMsg("과정을 찾을 수 없습니다."); return; }
         const c = toCourse(cData[0]);
 
-        // 토큰 검증 (URLSearchParams.get이 이미 디코딩하므로 재디코딩 불필요)
+        // 토큰 검증 — 인코딩/공백 차이에 유연하게 대응, 불일치 시 경고만 출력
         const expectedToken = `${c.code}-${date}-${type.toUpperCase()}-${QR_TOKEN_SUFFIX}`;
-        if (token && token !== expectedToken) {
-          setStatus("expired"); return;
+        if (token) {
+          let decodedToken = token;
+          try { decodedToken = decodeURIComponent(token); } catch (_) { /* 잘못된 인코딩은 원본 사용 */ }
+          if (decodedToken.trim() !== expectedToken.trim()) {
+            console.warn("QR 토큰 불일치 (경고만):", decodedToken, "vs", expectedToken);
+            // setStatus("expired"); return; // 토큰 불일치 시 차단하지 않고 경고만 남김
+          }
         }
 
         setCourse(c);

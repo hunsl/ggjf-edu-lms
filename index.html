@@ -4828,7 +4828,7 @@ const MobileCheckin = () => {
     setCountdown(3);
     const iv = setInterval(() => {
       setCountdown(prev => {
-        if (prev <= 1) { clearInterval(iv); setStatus("ready"); return 0; }
+        if (prev <= 1) { setStatus("ready"); return 0; }
         return prev - 1;
       });
     }, 1000);
@@ -4917,7 +4917,7 @@ const MobileCheckin = () => {
               background: isDup ? "#F1F5F9" : typeColor, color: isDup ? "#64748B" : "#fff",
               fontWeight:700, fontSize:14, cursor:"pointer", width:"100%",
               display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-            {isDup ? "← 목록으로 돌아가기" : `← 목록으로 돌아가기 ${countdown > 0 ? `(${countdown})` : ""}`}
+            {`← 목록으로 돌아가기${!isDup && countdown > 0 ? ` (${countdown})` : ""}`}
           </button>
         </div>
       </div>

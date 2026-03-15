@@ -538,14 +538,25 @@ const buildCourseDates = (course) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const start = new Date(course.dateFrom);
-  // 과정이 아직 시작 전이면 오늘 날짜만 반환
+  // 과정이 아직 시작 전이면 시작일만 반환
   if (start > today) return [course.dateFrom];
   const end = course.dateTo
     ? new Date(Math.min(new Date(course.dateTo).getTime(), today.getTime()))
     : today;
+
+  // schedDays 파싱: "월, 화, 목" → Set<요일번호> (0=일,1=월,...,6=토)
+  const DAY_MAP = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
+  const allowedDows = course.schedDays
+    ? new Set(course.schedDays.split(",").map(s => DAY_MAP[s.trim()]).filter(d => d !== undefined))
+    : null; // null이면 평일 전체 (schedDays 미지정 과정 하위 호환)
+
   const dates = [];
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    dates.push(new Date(d).toISOString().slice(0, 10));
+    const dow = d.getDay();
+    const include = allowedDows
+      ? allowedDows.has(dow)
+      : (dow !== 0 && dow !== 6); // schedDays 없으면 주말 제외
+    if (include) dates.push(new Date(d).toISOString().slice(0, 10));
   }
   return dates.length ? dates : [today.toISOString().slice(0, 10)];
 };
@@ -1878,6 +1889,22 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
     }
   };
 
+  // ── courses prop 변경 시 현재 선택 과정 갱신 (과정 수정 후 날짜/요일 즉시 반영) ──
+  // course를 ref로 추적해 stale closure 방지 (courses 의존성만으로 충분)
+  const courseRef = React.useRef(course);
+  useEffect(() => { courseRef.current = course; });
+  useEffect(() => {
+    const cur = courseRef.current;
+    const updated = courses.find(c => c.id === cur.id);
+    if (updated && (
+      updated.dateFrom  !== cur.dateFrom  ||
+      updated.dateTo    !== cur.dateTo    ||
+      updated.schedDays !== cur.schedDays
+    )) {
+      handleCourseChange(updated);
+    }
+  }, [courses]); // courses 변경 시에만 실행; handleCourseChange는 항상 최신 closure 참조
+
   const startTotal = startH * 60 + startM;  // 총 분
   const lateTotal  = lateH  * 60 + lateM;
   const endTotal   = endH   * 60 + endM;
@@ -2499,6 +2526,17 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     const { error } = await sbInsert("attendance", rows);
                     if (error) throw error;
                     setManualAtt(p => ({ ...p, [s.id]: { ...(p[s.id]||{}), saved: true } }));
+                    // records 상태 동기화 → QR 모드와 수동 모드 연동
+                    setRecords(prev => {
+                      const next = { ...prev };
+                      if (curIn || curStatus) {
+                        const inTime = curIn || defaultTime;
+                        const [h, m] = inTime.split(":").map(Number);
+                        next[s.id] = { ...(next[s.id]||{}), in: { time: inTime, mins: h*60+m, status: curStatus||"O" } };
+                      }
+                      if (curOut) next[s.id] = { ...(next[s.id]||{}), out: { time: curOut } };
+                      return next;
+                    });
                     if (onRatesUpdated) onRatesUpdated(course.id);
                   } catch(err) {
                     alert("저장 오류: " + (err.message || JSON.stringify(err)));
@@ -2578,24 +2616,38 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
               try {
                 const now = new Date();
                 const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-                const records = [];
+                const attRows = [];
                 unsaved.forEach(s => {
                   const row = manualAtt[s.id]||{};
                   if (row.inTime || row.status) {
-                    records.push({ student_id:s.id, date, type:"in",
+                    attRows.push({ student_id:s.id, date, type:"in",
                       time: row.inTime || defaultTime, status: row.status||"O",
                       created_at: now.toISOString() });
                   }
                   if (row.outTime) {
-                    records.push({ student_id:s.id, date, type:"out",
+                    attRows.push({ student_id:s.id, date, type:"out",
                       time: row.outTime, created_at: now.toISOString() });
                   }
                 });
-                const { error } = await sbInsert("attendance", records);
+                const { error } = await sbInsert("attendance", attRows);
                 if (error) throw error;
                 setManualAtt(p => {
                   const next = {...p};
                   unsaved.forEach(s => { next[s.id] = {...(next[s.id]||{}), saved:true}; });
+                  return next;
+                });
+                // records 상태 동기화 → QR 모드와 수동 모드 연동
+                setRecords(prev => {
+                  const next = { ...prev };
+                  unsaved.forEach(s => {
+                    const row = manualAtt[s.id]||{};
+                    const inTime = row.inTime || defaultTime;
+                    if (row.inTime || row.status) {
+                      const [h, m] = inTime.split(":").map(Number);
+                      next[s.id] = { ...(next[s.id]||{}), in: { time: inTime, mins: h*60+m, status: row.status||"O" } };
+                    }
+                    if (row.outTime) next[s.id] = { ...(next[s.id]||{}), out: { time: row.outTime } };
+                  });
                   return next;
                 });
                 alert(`✅ ${unsaved.length}명 출결 일괄 저장 완료`);
@@ -2961,8 +3013,9 @@ const CertMgmt = ({ students, courses }) => {
 
   const getCertNo = (s, idx) => {
     if (issued[s.id+docType]?.no) return issued[s.id+docType].no;
-    const suffix = docType === "cert" ? "수료" : "수강";
-    return `제 2026-북부-${suffix}-${String(idx+1).padStart(3,"0")}호`;
+    // 순번 숫자만 반환 — 전체 번호는 템플릿에서 조합
+    // 수료증: "2026-북부교육팀-{no}호" / 수강증명서: "제 2026-북부-수강-{no} 호"
+    return String(idx+1).padStart(3, "0");
   };
 
   const handleIssue = (s, idx) => {

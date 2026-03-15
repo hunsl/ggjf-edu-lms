@@ -266,6 +266,9 @@ ALTER TABLE courses  ADD COLUMN IF NOT EXISTS notes      TEXT;
 ALTER TABLE courses  ADD COLUMN IF NOT EXISTS c_goal     INTEGER DEFAULT 0;
 ALTER TABLE courses  ADD COLUMN IF NOT EXISTS e_goal     INTEGER DEFAULT 0;
 
+ALTER TABLE instructors ADD COLUMN IF NOT EXISTS cids JSONB DEFAULT '[]'::JSONB;
+ALTER TABLE instructors ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
+
 -- ==========================================
 -- ✅ 완료! 이제 index.html을 새로고침하세요
 -- ==========================================

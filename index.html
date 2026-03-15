@@ -1053,9 +1053,9 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
 
         <div style={{ padding:"13px 22px", borderTop:`1px solid ${T.bd}`, display:"flex", justifyContent:"flex-end", gap:8, background:T.s2 }}>
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
-          <Btn onClick={()=>{
+          <Btn onClick={async ()=>{
             if(!form.name||!form.code) return alert("과정명과 과정코드는 필수입니다.");
-            onSave({ ...form, id: form.id || Date.now() });
+            await onSave({ ...form, id: form.id ? form.id : undefined });
             onClose();
           }}><Icon n="check" s={13}/> {isNew?"추가":"저장"}</Btn>
         </div>
@@ -3148,10 +3148,15 @@ const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
         <div style={{ padding:"13px 22px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"flex-end", gap:8, background:T.s2 }}>
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
-          <Btn onClick={()=>{
+          <Btn onClick={async ()=>{
             if(!form.name) return alert("이름은 필수입니다.");
-            onSave({...form, id:form.id||Date.now()});
-            onClose();
+            try {
+              await onSave({...form, id: form.id ? form.id : undefined});
+              onClose();
+            } catch(err) {
+              console.error("강사 저장 실패:", err);
+              /* 오류 alert는 handleSave에서 이미 처리 */
+            }
           }}><Icon n="check" s={13}/>{isNew?"추가":"저장"}</Btn>
         </div>
       </div>
@@ -3200,9 +3205,7 @@ const InstructorMgmt = ({ courses }) => {
       }
     } catch (err) {
       alert("저장 오류: " + (err.message || JSON.stringify(err)));
-      // 로컬 state 폴백
-      if (isNew) setInst(p => [...p, inst]);
-      else       setInst(p => p.map(x => x.id===inst.id ? inst : x));
+      throw err;
     }
   };
   const handleDel = async id => {
@@ -3694,7 +3697,7 @@ const RoomMgmt = ({ courses }) => {
       }
     } catch (err) {
       alert("강의실 저장 오류: " + (err.message || JSON.stringify(err)));
-      setRooms(p => room.id ? p.map(r=>r.id===room.id?room:r) : [...p, {...room, id:Date.now()}]);
+      throw err;
     }
   };
 
@@ -3711,7 +3714,7 @@ const RoomMgmt = ({ courses }) => {
       }
     } catch (err) {
       alert("일정 저장 오류: " + (err.message || JSON.stringify(err)));
-      setBookings(p => book.id ? p.map(b=>b.id===book.id?book:b) : [...p, {...book, id:Date.now()}]);
+      throw err;
     }
   };
 

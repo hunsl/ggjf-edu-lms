@@ -69,20 +69,38 @@ const sbDelete = async (table, filter) => {
   return { error: null };
 };
 
+/* ── Supabase Storage — PDF 업로드 (Base64 대신 URL 저장) ── */
+const sbStorageUpload = async (bucket, path, file) => {
+  const res = await fetch(`${SB_URL}/storage/v1/object/${bucket}/${path}`, {
+    method: "POST",
+    headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` },
+    body: file,
+  });
+  if (!res.ok) { const e = await res.json(); return { url: null, error: e }; }
+  const publicUrl = `${SB_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return { url: publicUrl, error: null };
+};
+
 /* ── DB 컬럼(snake_case) ↔ 앱(camelCase) 변환 ── */
 const toStudent = r => r ? ({
   id: r.id, cid: r.cid, name: r.name, gender: r.gender||"",
   birth: r.birth||"", idBack: r.id_back||"", phone: r.phone||"",
-  addrCity: r.addr_city||"", itvDate: r.itv_date||"",
-  itvScore: r.itv_score||"", itvGrade: r.itv_grade||"",
+  phone2: r.phone2||"", addrCity: r.addr_city||"", addrDetail: r.addr_detail||"",
+  edu: r.edu||"", major: r.major||"", career: r.career||"", cert: r.cert||"",
+  status: r.status||"미취업", unemp: r.unemp||false,
+  disabled: r.disabled||false, veteran: r.veteran||false,
+  itvDate: r.itv_date||"", itvScore: r.itv_score||"", itvGrade: r.itv_grade||"",
   itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
 }) : null;
 
 const fromStudent = s => ({
   cid: s.cid, name: s.name, gender: s.gender||"",
   birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
-  addr_city: s.addrCity||"", itv_date: s.itvDate||null,
-  itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
+  phone2: s.phone2||"", addr_city: s.addrCity||"", addr_detail: s.addrDetail||"",
+  edu: s.edu||"", major: s.major||"", career: s.career||"", cert: s.cert||"",
+  status: s.status||"미취업", unemp: s.unemp||false,
+  disabled: s.disabled||false, veteran: s.veteran||false,
+  itv_date: s.itvDate||null, itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
   itv_pass: s.itvPass||false, memo: s.memo||"", rate: s.rate||0,
 });
 
@@ -297,8 +315,23 @@ const SEED_STUDENTS = [
     memo:"HACCP 실무 경험 있음. 결석 주의.", rate:55 },
 ];
 
-const DATES = ["2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06",
-               "2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13"];
+// 과정 날짜 범위 내 날짜 배열 생성 (주말 포함, dateFrom~min(dateTo, 오늘))
+const buildCourseDates = (course) => {
+  if (!course?.dateFrom) return [new Date().toISOString().slice(0, 10)];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(course.dateFrom);
+  // 과정이 아직 시작 전이면 오늘 날짜만 반환
+  if (start > today) return [course.dateFrom];
+  const end = course.dateTo
+    ? new Date(Math.min(new Date(course.dateTo).getTime(), today.getTime()))
+    : today;
+  const dates = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    dates.push(new Date(d).toISOString().slice(0, 10));
+  }
+  return dates.length ? dates : [today.toISOString().slice(0, 10)];
+};
 
 /* ═══════════════════════════════════════════════════════════
    TINY COMPONENTS
@@ -589,14 +622,30 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
   const updLink   = (i,k,v) => set("links", form.links.map((l,idx)=>idx===i?{...l,[k]:v}:l));
   const delLink   = i => set("links", form.links.filter((_,idx)=>idx!==i));
 
-  // PDF 업로드
-  const onPdfUpload = e => {
+  // PDF 업로드 — Supabase Storage에 파일 저장 후 URL만 form에 저장
+  const PDF_MAX_BYTES = 10 * 1024 * 1024; // 10MB
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const onPdfUpload = async e => {
     const f = e.target.files[0];
     if(!f) return;
-    if(f.size > 5*1024*1024) { alert("PDF 용량이 5MB를 초과합니다."); return; }
-    const r = new FileReader();
-    r.onload = ev => { set("pdfData", ev.target.result); set("pdfName", f.name); };
-    r.readAsDataURL(f);
+    if(f.size > PDF_MAX_BYTES) { alert("PDF 용량이 10MB를 초과합니다."); return; }
+    setPdfUploading(true);
+    // 랜덤 UUID 기반 경로로 path traversal 방지
+    const ext = f.name.split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
+    const uid = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString(36);
+    const path = `syllabi/${uid}.${ext}`;
+    const { url, error } = await sbStorageUpload("course-pdfs", path, f);
+    setPdfUploading(false);
+    if (error) {
+      // Storage 업로드 실패 시 Base64 폴백 (로컬 미리보기용)
+      console.warn("Storage 업로드 실패 — Base64 폴백:", error);
+      const r = new FileReader();
+      r.onload = ev => { set("pdfData", ev.target.result); set("pdfName", f.name); };
+      r.readAsDataURL(f);
+      return;
+    }
+    set("pdfData", url);
+    set("pdfName", f.name);
   };
 
   return (
@@ -808,11 +857,11 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
                   display:"flex",alignItems:"center",justifyContent:"center"}}><Icon n="x" s={12}/></button>
               </div>
             ) : (
-              <button type="button" onClick={()=>pdfRef.current.click()} style={{
+              <button type="button" onClick={()=>!pdfUploading && pdfRef.current.click()} style={{
                 width:"100%", padding:"14px", borderRadius:8, border:`2px dashed ${T.bd}`,
-                background:T.s2, cursor:"pointer", fontSize:12, color:T.mu,
+                background:T.s2, cursor: pdfUploading ? "not-allowed" : "pointer", fontSize:12, color:T.mu,
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                <Icon n="upload" s={16}/> PDF 파일 선택 (강의계획서 / 수업일정표)
+                <Icon n="upload" s={16}/> {pdfUploading ? "업로드 중…" : "PDF 파일 선택 (강의계획서 / 수업일정표)"}
               </button>
             )}
           </div>
@@ -1014,22 +1063,42 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 
   const confirmImport = () => {
     if(!preview) return;
+    const yn = v => String(v||"").trim().toUpperCase() === "Y";
     const toAdd = [];
     const toUpdate = [];
     preview.forEach((r,i) => {
       const code = r["과정코드"] || "";
       const c = courses.find(x=>x.code===code) || courses[0];
-      const phone = String(r["연락처"] || "").trim();
+      const phone = String(r["연락처"] || "").replace(/[^0-9]/g, ""); // 숫자만 정규화
       const base = {
-        cid:c.id, name:r["이름"]||"", birth:r["생년월일"]||"",
-        phone, status:r["취업여부"]||"미취업",
+        cid:        c.id,
+        name:       r["이름"]              || "",
+        gender:     r["성별"]              || "",
+        birth:      r["생년월일"]           || "",
+        idBack:     String(r["주민번호뒷자리"]||""),
+        phone,
+        phone2:     String(r["비상연락처"]  ||""),
+        addrCity:   r["거주시"]            || "",
+        addrDetail: r["상세주소"]           || "",
+        edu:        r["최종학력"]           || "",
+        major:      r["전공"]              || "",
+        career:     r["경력"]              || "",
+        cert:       r["자격증"]            || "",
+        status:     r["취업형태"]           || "미취업",
+        unemp:      yn(r["실업급여수급"]),
+        disabled:   yn(r["장애여부"]),
+        veteran:    yn(r["보훈여부"]),
+        itvDate:    r["면접일자"]           || "",
+        itvScore:   r["면접점수"]           || "",
+        itvGrade:   r["면접등급"]           || "",
+        itvPass:    yn(r["합격여부"]),
+        memo:       r["특이사항"]           || "",
       };
-      // ── Upsert: 연락처 일치 시 기존 훈련생 정보 업데이트 ──
       const existing = phone ? students.find(s => s.phone && s.phone === phone) : null;
       if (existing) {
         toUpdate.push({ ...existing, ...base });
       } else {
-        toAdd.push({ id: Date.now()+i, ...base, rate: Math.round(60+Math.random()*40) });
+        toAdd.push({ id: Date.now()+i, ...base, rate: 0 });
       }
     });
     if (toAdd.length > 0) onAdd(toAdd);
@@ -1371,8 +1440,10 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
    QR ATTENDANCE  ★ QR 출석 체크
 ═══════════════════════════════════════════════════════════ */
 const AttendanceMgmt = ({ students, courses }) => {
-  const [course, setCourse]   = useState(courses[3] || courses[0]);
-  const [date, setDate]       = useState(DATES[DATES.length-1]);
+  const initCourse = courses[3] || courses[0];
+  const initDates  = buildCourseDates(initCourse);
+  const [course, setCourse]   = useState(initCourse);
+  const [date, setDate]       = useState(initDates[initDates.length-1] || new Date().toISOString().slice(0,10));
   const [mode, setMode]       = useState("qr");
   const [qrType, setQrType]   = useState("in");
   const [simRunning, setSimRunning] = useState(false);
@@ -1408,6 +1479,8 @@ const AttendanceMgmt = ({ students, courses }) => {
   const handleCourseChange = (c) => {
     setCourse(c);
     setRecords({});
+    const newDates = buildCourseDates(c);
+    setDate(newDates[newDates.length-1] || new Date().toISOString().slice(0,10));
     if(!timeCustomized) {
       const t = initTimes(c);
       setStartH(t.sh); setStartM(t.sm);
@@ -1522,11 +1595,11 @@ const AttendanceMgmt = ({ students, courses }) => {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.event === "postgres_changes") {
+          if (msg.event === "postgres_changes" && msg.payload?.data) {
             // Supabase Realtime v2: type/record/old_record
             const { type: eventType, record: newRecord } = msg.payload.data;
             if (eventType === "INSERT" || eventType === "UPDATE") {
-              const [h, m] = newRecord.time.split(":").map(Number);
+              const [h, m] = (newRecord?.time || "00:00").split(":").map(Number);
               const mins = h * 60 + m;
               setRecords(prev => ({
                 ...prev,
@@ -1738,7 +1811,7 @@ const AttendanceMgmt = ({ students, courses }) => {
           <select value={date} onChange={e=>setDate(e.target.value)}
             style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
               fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {DATES.map(d=><option key={d} value={d}>{d}</option>)}
+            {buildCourseDates(course).map(d=><option key={d} value={d}>{d}</option>)}
           </select>
         </div>
         <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
@@ -1754,6 +1827,35 @@ const AttendanceMgmt = ({ students, courses }) => {
             </div>
           ))}
           <div style={{ fontSize:13, color:T.mu }}>/ {courseStudents.length}명</div>
+          {/* 결석 일괄 마감 버튼 */}
+          <button onClick={async () => {
+            const absentStudents = courseStudents.filter(s => !records[s.id]?.in);
+            if (absentStudents.length === 0) { alert("미확인 인원이 없습니다."); return; }
+            if (!window.confirm(`미확인 ${absentStudents.length}명을 결석으로 일괄 처리하시겠습니까?`)) return;
+            try {
+              const now = new Date();
+              const toInsert = absentStudents.map(s => ({
+                student_id: s.id, date, type: "absent",
+                time: "00:00", status: "A", created_at: now.toISOString()
+              }));
+              const { error } = await sbInsert("attendance", toInsert);
+              if (error) throw error;
+              // 로컬 records 업데이트
+              setRecords(prev => {
+                const next = { ...prev };
+                absentStudents.forEach(s => { next[s.id] = { ...(next[s.id]||{}), in: { time:"결석", mins:null, status:"A" } }; });
+                return next;
+              });
+              alert(`✅ ${absentStudents.length}명 결석 일괄 처리 완료`);
+            } catch(err) {
+              alert("마감 오류: " + (err.message || JSON.stringify(err)));
+            }
+          }} style={{ padding:"8px 12px", borderRadius:9, border:`1.5px solid ${T.danger}`,
+            background:"#FEF2F2", color:T.danger, cursor:"pointer",
+            fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:5,
+            whiteSpace:"nowrap" }}>
+            🚩 결석 일괄 마감
+          </button>
         </div>
       </Card>
 
@@ -3011,13 +3113,36 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const isEdit = !!(init?.id);
 
+  // ── 요일 겹침 검사 헬퍼 ──
+  const daysOverlap = (daysA, daysB) => {
+    if (!daysA || !daysB) return true; // 정보 없으면 겹친다고 가정
+    const setA = new Set(daysA.split(/[,\s]+/).map(d=>d.trim()).filter(Boolean));
+    return daysB.split(/[,\s]+/).map(d=>d.trim()).filter(Boolean).some(d => setA.has(d));
+  };
+  // ── 시간대 겹침 검사 헬퍼 ──
+  const timesOverlap = (fromA, toA, fromB, toB) => {
+    if (!fromA || !toA || !fromB || !toB) return true;
+    const toMins = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+    return toMins(fromA) < toMins(toB) && toMins(toA) > toMins(fromB);
+  };
+
+  const getCourseSchedule = (courseId) => courses.find(c=>c.id===courseId) || {};
+
   const conflicts = (form.start && form.end && form.roomId)
-    ? bookings.filter(b =>
-        b.roomId === form.roomId &&
-        b.id !== init?.id &&
-        b.start <= form.end &&
-        b.end   >= form.start
-      )
+    ? bookings.filter(b => {
+        if (b.roomId !== form.roomId) return false;
+        if (b.id === init?.id) return false;
+        // 1단계: 날짜 범위 겹침
+        if (b.start > form.end || b.end < form.start) return false;
+        // 2단계: 수업 요일 겹침
+        const bCourse   = getCourseSchedule(b.courseId);
+        const fCourse   = getCourseSchedule(form.courseId);
+        if (!daysOverlap(bCourse.schedDays, fCourse.schedDays)) return false;
+        // 3단계: 시간대 겹침
+        if (!timesOverlap(bCourse.schedTimeFrom, bCourse.schedTimeTo,
+                          fCourse.schedTimeFrom, fCourse.schedTimeTo)) return false;
+        return true;
+      })
     : [];
   const hasConflict = conflicts.length > 0;
 
@@ -3207,14 +3332,37 @@ const RoomMgmt = ({ courses }) => {
     );
   };
 
-  // 특정 날 특정 강의실에서 중복 있는지 검사 (같은 강의실에 2개 이상 일정)
+  // 특정 날 특정 강의실에서 중복 있는지 검사 (요일/시간 3단계)
   const hasConflictOnDay = d => {
     if(!d) return false;
     const ds = dateStr(d);
+    const dayOfWeek = ["일","월","화","수","목","금","토"][new Date(ds).getDay()];
+    const daysOverlapLocal = (daysA, daysB) => {
+      if (!daysA || !daysB) return true;
+      const setA = new Set(daysA.split(/[,\s]+/).map(x=>x.trim()).filter(Boolean));
+      return daysB.split(/[,\s]+/).map(x=>x.trim()).filter(Boolean).some(x => setA.has(x));
+    };
+    const timesOverlapLocal = (fA, tA, fB, tB) => {
+      if (!fA || !tA || !fB || !tB) return true;
+      const m = t => { const [h,mn] = t.split(":").map(Number); return h*60+mn; };
+      return m(fA) < m(tB) && m(tA) > m(fB);
+    };
     const roomIds = [...new Set(bookings.map(b=>b.roomId))];
     return roomIds.some(rid => {
-      const cnt = bookings.filter(b => b.roomId===rid && b.start<=ds && b.end>=ds).length;
-      return cnt >= 2;
+      const dayBkgs = bookings.filter(b => b.roomId===rid && b.start<=ds && b.end>=ds);
+      if (dayBkgs.length < 2) return false;
+      // 같은 강의실 예약 중 요일+시간이 겹치는 쌍이 있는지
+      for (let i = 0; i < dayBkgs.length; i++) {
+        for (let j = i+1; j < dayBkgs.length; j++) {
+          const cA = courses.find(c=>c.id===dayBkgs[i].courseId)||{};
+          const cB = courses.find(c=>c.id===dayBkgs[j].courseId)||{};
+          if (daysOverlapLocal(cA.schedDays, cB.schedDays) &&
+              (daysOverlapLocal(dayOfWeek, cA.schedDays) || !cA.schedDays) &&
+              timesOverlapLocal(cA.schedTimeFrom, cA.schedTimeTo,
+                                cB.schedTimeFrom, cB.schedTimeTo)) return true;
+        }
+      }
+      return false;
     });
   };
 
@@ -4328,7 +4476,7 @@ const MobileCheckin = () => {
         "attendance",
         `select=id,time&student_id=eq.${student.id}&date=eq.${date}&type=eq.${type}&limit=1`
       );
-      if (existing && existing.length > 0) {
+      if (existing?.[0]) {
         setCheckedId(student.id);
         setCheckedTime(existing[0].time);
         setStatus("duplicate");
@@ -4598,7 +4746,7 @@ class RealtimeManager {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.event === "postgres_changes") {
+          if (msg.event === "postgres_changes" && msg.payload?.data) {
             // Supabase Realtime v2: type/record/old_record
             const { type: eventType, record: newRecord, old_record: oldRecord } = msg.payload.data;
             switch(eventType) {
@@ -4645,7 +4793,9 @@ const realtimeManager = new RealtimeManager();
 function App() {
   // ══ 모든 훅은 조건문 전에 선언 (Rules of Hooks) ══
   const [accounts,    setAccounts]   = useState(INIT_ACCOUNTS);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("gjf_user") || "null"); } catch (e) { console.warn("세션 복원 실패:", e); return null; }
+  });
   const [showAccMgr,  setShowAccMgr] = useState(false);
   const [piDismissed, setPiDismissed] = useState(false);
 
@@ -4785,8 +4935,16 @@ function App() {
       console.error("❌ 학생 저장 실패:", error);
       return; 
     }
+    // Realtime이 응답하기 전에 로컬 state에 즉시 반영 (중복 방지는 onInsert 핸들러에서)
+    if (data && data.length > 0) {
+      setStudents(prev => {
+        const newIds = new Set(data.map(r => r.id));
+        const filtered = prev.filter(s => !newIds.has(s.id));
+        return [...filtered, ...data.map(toStudent)];
+      });
+    }
     addAudit("훈련생 등록", `${newOnes.length}명 등록 (${newOnes.map(s=>s.name).join(", ")})`, currentUser?.name);
-    console.log("✅ 학생 저장 완료:", (data||[]).length, "명 - 실시간 구독이 자동 반영");
+    console.log("✅ 학생 저장 완료:", (data||[]).length, "명");
   }, [addAudit, currentUser]);
 
   const updateStudent = useCallback(async (updated) => {
@@ -4827,8 +4985,16 @@ function App() {
       console.error("❌ 과정 저장 실패:", error);
       return; 
     }
+    // 로컬 state 즉시 반영
+    if (data && data.length > 0) {
+      setCourses(prev => {
+        const newId = data[0].id;
+        const filtered = prev.filter(x => x.id !== newId);
+        return [...filtered, toCourse(data[0])];
+      });
+    }
     addAudit("과정 등록", `${c.name} (${c.code}) 추가`, currentUser?.name);
-    console.log("✅ 과정 저장 완료:", data?.name, "- 실시간 구독이 자동 반영");
+    console.log("✅ 과정 저장 완료:", data?.[0]?.name);
   }, [addAudit, currentUser]);
 
   const updateCourse = useCallback(async (c) => {
@@ -4867,7 +5033,10 @@ function App() {
     return (
       <>
         <GStyle/>
-        <LoginScreen accounts={accounts} onLogin={user => { setCurrentUser(user); setPiDismissed(false); addAudit("로그인", `${user.name} 로그인`, user.name); }}/>
+        <LoginScreen accounts={accounts} onLogin={user => {
+          try { sessionStorage.setItem("gjf_user", JSON.stringify(user)); } catch {}
+          setCurrentUser(user); setPiDismissed(false); addAudit("로그인", `${user.name} 로그인`, user.name);
+        }}/>
       </>
     );
   }
@@ -5070,7 +5239,7 @@ function App() {
                     👤 계정 관리
                   </button>
                 )}
-                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) setCurrentUser(null); }}
+                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) { try { sessionStorage.removeItem("gjf_user"); } catch {} addAudit("로그아웃", `${currentUser.name} 로그아웃`, currentUser.name); setCurrentUser(null); } }}
                   style={{ width:"100%", padding:"6px 0", borderRadius:7,
                     border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)",
                     color:"rgba(255,255,255,.7)", cursor:"pointer", fontSize:11, fontWeight:600 }}>

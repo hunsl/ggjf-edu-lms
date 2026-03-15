@@ -141,6 +141,65 @@ const fromAccount = a => ({
   pw: a.pw||"",
 });
 
+const toInstructor = r => r ? ({
+  id: r.id,
+  name: r.name||"",
+  type: r.type||"주강사",
+  subject: r.subject||"",
+  phone: r.phone||"",
+  email: r.email||"",
+  career: r.career||"",
+  cert: r.cert||"",
+  cids: r.cids||[],
+  note: r.note||"",
+}) : null;
+
+const fromInstructor = i => ({
+  name: i.name||"",
+  type: i.type||"주강사",
+  subject: i.subject||"",
+  phone: i.phone||"",
+  email: i.email||"",
+  career: i.career||"",
+  cert: i.cert||"",
+  cids: i.cids||[],
+  note: i.note||"",
+});
+
+const toRoom = r => r ? ({
+  id: r.id,
+  name: r.name||"",
+  addr: r.addr||"",
+  capacity: r.capacity||20,
+  equip: r.equip||"",
+}) : null;
+
+const fromRoom = r => ({
+  name: r.name||"",
+  addr: r.addr||"",
+  capacity: r.capacity||20,
+  equip: r.equip||"",
+});
+
+const toBooking = r => r ? ({
+  id: r.id,
+  roomId: r.room_id,
+  courseId: r.course_id,
+  label: r.label||"",
+  start: r.start_date||"",
+  end: r.end_date||"",
+  color: r.color||"#EA580C",
+}) : null;
+
+const fromBooking = b => ({
+  room_id: b.roomId,
+  course_id: b.courseId,
+  label: b.label||"",
+  start_date: b.start||"",
+  end_date: b.end||"",
+  color: b.color||"#EA580C",
+});
+
 /* ===========================================================
    GLOBAL STYLES
 =========================================================== */
@@ -151,7 +210,8 @@ const GStyle = () => (
     body, #root { font-family:'Pretendard',-apple-system,sans-serif; }
     ::-webkit-scrollbar { width:5px; height:5px; }
     ::-webkit-scrollbar-track { background:#f1f5f9; }
-    ::-webkit-scrollbar-thumb { background:#94a3b8; border-radius:3px; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
     input,select,button,textarea { font-family:inherit; }
     @keyframes fadeUp   { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
     @keyframes fadeIn   { from{opacity:0} to{opacity:1} }
@@ -165,7 +225,7 @@ const GStyle = () => (
     .page { animation: fadeUp .3s ease both; }
     .row-hover:hover { background:#fff7ed !important; }
     .btn-nav { transition: all .15s; }
-    .btn-nav:hover { background: rgba(255,255,255,.12) !important; }
+    .btn-nav:hover { background: rgba(255,255,255,.15) !important; }
     .drop-zone { transition: all .2s; }
     .drop-zone.drag-over { border-color:#EA580C !important; background:#fff7ed !important; transform:scale(1.01); }
     .course-card { transition: all .2s; }
@@ -174,6 +234,98 @@ const GStyle = () => (
     .tab-pill { transition: color .2s cubic-bezier(.4,0,.2,1), background .2s cubic-bezier(.4,0,.2,1), box-shadow .2s cubic-bezier(.4,0,.2,1); position:relative; }
     .tab-pill:hover:not(.tab-pill-active) { color:#EA580C !important; background:rgba(234,88,12,.07) !important; }
     .tab-pill-active { animation: tabSlide .2s ease both; }
+    /* ── 모바일 사이드바 오버레이 ── */
+    .sidebar-overlay {
+      display:none;
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.45);
+      z-index:199;
+      backdrop-filter:blur(2px);
+    }
+    .sidebar-overlay.active { display:block; animation: fadeIn .2s ease; }
+    .app-sidebar {
+      transition: transform .25s cubic-bezier(.4,0,.2,1), width .25s ease;
+    }
+    /* ── 반응형 레이아웃 ── */
+    @media (max-width: 768px) {
+      .app-sidebar {
+        position: fixed !important;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 200;
+        transform: translateX(-100%);
+        width: 240px !important;
+        box-shadow: 4px 0 32px rgba(0,0,0,.3) !important;
+      }
+      .app-sidebar.mobile-open {
+        transform: translateX(0);
+      }
+      .app-main {
+        width: 100% !important;
+      }
+      .section-head-wrap {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 10px !important;
+      }
+      .section-head-right {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+      .modal-sheet {
+        width: 100% !important;
+        max-width: 100vw !important;
+        max-height: 95dvh !important;
+        border-radius: 20px 20px 0 0 !important;
+        align-self: flex-end !important;
+        margin: auto 0 0 0 !important;
+      }
+      .modal-backdrop {
+        align-items: flex-end !important;
+      }
+      .resp-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .resp-grid-2 { grid-template-columns: 1fr !important; }
+      .resp-grid-3 { grid-template-columns: 1fr !important; }
+      .header-title-full { display: none; }
+      .header-title-short { display: block !important; }
+      .pi-banner-text { display: none; }
+      .pi-banner-icon { display: inline !important; }
+    }
+    @media (min-width: 769px) {
+      .header-title-short { display: none; }
+      .mobile-menu-btn { display: none !important; }
+    }
+    /* ── 개선된 테이블 스타일 ── */
+    .data-table { border-collapse: collapse; width: 100%; }
+    .data-table th {
+      background: #F8FAFC;
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #E2E8F0;
+      white-space: nowrap;
+    }
+    .data-table td {
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #1E293B;
+      border-bottom: 1px solid #F1F5F9;
+      vertical-align: middle;
+    }
+    .data-table tbody tr:hover td { background: #FFF7ED; }
+    /* ── 입력 필드 포커스 개선 ── */
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #EA580C !important;
+      box-shadow: 0 0 0 3px rgba(234,88,12,.1) !important;
+    }
+    /* ── 버튼 호버 ── */
+    button:active { transform: scale(.97); }
   `}</style>
 );
 
@@ -373,21 +525,22 @@ const RBar = ({ r, h=5 }) => (
 );
 
 const Card = ({ children, style={} }) => (
-  <div style={{ background:T.s, borderRadius:12, border:`1px solid ${T.bd}`,
-    boxShadow:"0 1px 4px rgba(15,118,110,.06),0 4px 12px rgba(0,0,0,.03)", ...style }}>
+  <div style={{ background:T.s, borderRadius:14, border:`1px solid ${T.bd}`,
+    boxShadow:"0 1px 3px rgba(0,0,0,.04),0 4px 16px rgba(15,118,110,.05)", ...style }}>
     {children}
   </div>
 );
 
 const Btn = ({ children, onClick, variant="primary", size="md", style={} }) => {
-  const base = { border:"none", borderRadius:8, cursor:"pointer", fontWeight:700,
-    display:"inline-flex", alignItems:"center", gap:6, transition:"all .15s", ...style };
+  const base = { border:"none", borderRadius:9, cursor:"pointer", fontWeight:700,
+    display:"inline-flex", alignItems:"center", gap:6, transition:"all .15s",
+    whiteSpace:"nowrap", ...style };
   const sizes = { sm:{padding:"5px 12px",fontSize:11}, md:{padding:"8px 16px",fontSize:12}, lg:{padding:"10px 20px",fontSize:13} };
   const vars = {
-    primary:  { background:T.p, color:"#fff" },
-    ghost:    { background:T.s2, color:T.mu },
-    danger:   { background:"#FEF2F2", color:T.danger },
-    outline:  { background:"transparent", color:T.p, border:`1px solid ${T.p}` },
+    primary:  { background:`linear-gradient(135deg,${T.pm},${T.p})`, color:"#fff", boxShadow:"0 2px 8px rgba(234,88,12,.25)" },
+    ghost:    { background:T.s2, color:T.mu, border:`1px solid ${T.bd}` },
+    danger:   { background:"#FEF2F2", color:T.danger, border:"1px solid #FECACA" },
+    outline:  { background:"transparent", color:T.p, border:`1.5px solid ${T.p}` },
   };
   return <button onClick={onClick} style={{...base,...sizes[size],...vars[variant]}}>{children}</button>;
 };
@@ -427,12 +580,12 @@ const Icon = ({ n, s=16 }) => {
 };
 
 const SectionHead = ({ title, sub, right }) => (
-  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:20 }}>
+  <div className="section-head-wrap" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:20 }}>
     <div>
       <h2 style={{ fontSize:20, fontWeight:800, color:T.tx, letterSpacing:"-.3px" }}>{title}</h2>
       {sub && <p style={{ fontSize:12, color:T.mu, marginTop:3 }}>{sub}</p>}
     </div>
-    {right}
+    {right && <div className="section-head-right" style={{ display:"flex", gap:8 }}>{right}</div>}
   </div>
 );
 
@@ -521,7 +674,7 @@ const Dashboard = ({ students, courses }) => {
         ))}
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:14, marginBottom:14 }}>
         {/* 분야별 현황 */}
         <Card style={{ padding:22 }}>
           <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:16, display:"flex", gap:8 }}>
@@ -1459,7 +1612,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 /* ===========================================================
    QR ATTENDANCE  ★ QR 출석 체크
 =========================================================== */
-const AttendanceMgmt = ({ students, courses }) => {
+const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
   const initCourse = courses[3] || courses[0];
   const initDates  = buildCourseDates(initCourse);
   const [course, setCourse]   = useState(initCourse);
@@ -1875,7 +2028,7 @@ const AttendanceMgmt = ({ students, courses }) => {
             try {
               const now = new Date();
               const toInsert = absentStudents.map(s => ({
-                student_id: s.id, date, type: "absent",
+                student_id: s.id, date, type: "in",
                 time: "00:00", status: "A", created_at: now.toISOString()
               }));
               const { error } = await sbInsert("attendance", toInsert);
@@ -1887,6 +2040,7 @@ const AttendanceMgmt = ({ students, courses }) => {
                 return next;
               });
               alert(`✅ ${absentStudents.length}명 결석 일괄 처리 완료`);
+              if (onRatesUpdated) onRatesUpdated(course.id);
             } catch(err) {
               alert("마감 오류: " + (err.message || JSON.stringify(err)));
             }
@@ -2128,6 +2282,8 @@ const AttendanceMgmt = ({ students, courses }) => {
 
                 alert(`✅ ${records.length}명 출결 저장 완료`);
                 setManualAtt({});
+                // DB 트리거가 없는 환경을 위한 클라이언트 폴백: 해당 과정 rate 재조회
+                if (onRatesUpdated) onRatesUpdated(course.id);
               } catch(err) {
                 alert("저장 오류: " + (err.message || JSON.stringify(err)));
               }
@@ -2747,10 +2903,10 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
   );
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:999,
+    <div className="modal-backdrop" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ background:T.s, borderRadius:16, width:500, maxWidth:"96vw",
+      <div className="modal-sheet" style={{ background:T.s, borderRadius:16, width:520, maxWidth:"96vw",
         maxHeight:"92vh", display:"flex", flexDirection:"column",
         boxShadow:"0 24px 64px rgba(0,0,0,.28)", overflow:"hidden", animation:"fadeUp .2s ease" }}>
 
@@ -2776,7 +2932,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
         <div style={{ flex:1, overflowY:"auto", padding:"20px 22px", display:"flex", flexDirection:"column", gap:12 }}>
 
           {divider("기본 신원")}
-          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:10 }}>
             <FLD label="이름" required>
               <input value={form.name||""} onChange={e=>set("name",e.target.value)} placeholder="홍길동" style={inpStyle}/>
             </FLD>
@@ -2799,7 +2955,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
             </FLD>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10 }}>
             <FLD label="생년월일" required>
               <input type="date" value={form.birth||""} onChange={e=>set("birth",e.target.value)} style={inpStyle}/>
             </FLD>
@@ -2814,7 +2970,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
             </FLD>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:10 }}>
             <FLD label="연락처">
               <input value={form.phone||""} onChange={e=>set("phone",e.target.value)} placeholder="010-0000-0000" style={inpStyle}/>
             </FLD>
@@ -2828,7 +2984,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
           </div>
 
           {divider("면접 결과")}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10 }}>
             <FLD label="면접일자">
               <input type="date" value={form.itvDate||""} onChange={e=>set("itvDate",e.target.value)} style={inpStyle}/>
             </FLD>
@@ -2887,7 +3043,12 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
         <div style={{ padding:"13px 22px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"flex-end", gap:8, background:T.s2, flexShrink:0 }}>
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
-          <Btn onClick={()=>{ onSave({ ...form, id: form.id||Date.now() }); onClose(); }}>
+          <Btn onClick={async ()=>{
+            if(!form.name||!form.name.trim()) return alert("이름은 필수 입력 항목입니다.");
+            if(!form.birth) return alert("생년월일은 필수 입력 항목입니다.");
+            await onSave({ ...form, id: form.id||undefined });
+            onClose();
+          }}>
             <Icon n="check" s={13}/> {isNew ? "등록" : "저장"}
           </Btn>
         </div>
@@ -3001,19 +3162,54 @@ const InstructorMgmt = ({ courses }) => {
   const [search, setSearch]    = useState("");
   const [typeFilter, setTF]    = useState("전체");
 
+  // ── Supabase 초기 로드 ──
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data, error } = await sbGet("instructors", "select=*&order=id");
+        if (error) throw error;
+        if (data && data.length > 0) setInst(data.map(toInstructor));
+      } catch (err) {
+        console.warn("강사 목록 로드 실패 (시드 데이터 사용):", err.message || err);
+      }
+    };
+    load();
+  }, []);
+
   const filtered = instructors.filter(i => {
     if(typeFilter!=="전체" && i.type!==typeFilter) return false;
     if(search && !i.name.includes(search) && !i.subject.includes(search)) return false;
     return true;
   });
 
-  const handleSave = inst => {
-    if(isNew) setInst(p=>[...p, inst]);
-    else      setInst(p=>p.map(x=>x.id===inst.id?inst:x));
+  const handleSave = async inst => {
+    try {
+      if (isNew) {
+        const { data, error } = await sbInsert("instructors", fromInstructor(inst));
+        if (error) throw error;
+        const saved = (data && data[0]) ? toInstructor(data[0]) : { ...inst, id: Date.now() };
+        setInst(p => [...p, saved]);
+      } else {
+        const { error } = await sbUpdate("instructors", `id=eq.${inst.id}`, fromInstructor(inst));
+        if (error) throw error;
+        setInst(p => p.map(x => x.id===inst.id ? inst : x));
+      }
+    } catch (err) {
+      alert("저장 오류: " + (err.message || JSON.stringify(err)));
+      // 로컬 state 폴백
+      if (isNew) setInst(p => [...p, inst]);
+      else       setInst(p => p.map(x => x.id===inst.id ? inst : x));
+    }
   };
-  const handleDel = id => {
-    if(!window.confirm("강사를 삭제하시겠습니까?")) return;
-    setInst(p=>p.filter(x=>x.id!==id));
+  const handleDel = async id => {
+    if (!window.confirm("강사를 삭제하시겠습니까?")) return;
+    try {
+      const { error } = await sbDelete("instructors", `id=eq.${id}`);
+      if (error) throw error;
+    } catch (err) {
+      console.warn("강사 삭제 오류:", err.message || err);
+    }
+    setInst(p => p.filter(x => x.id !== id));
   };
 
   const typeColors = {"주강사":T.p,"보조강사":T.ok,"외래강사":"#7C3AED","운영요원":T.warn};
@@ -3144,7 +3340,7 @@ const SEED_ROOMS = [
   { id:3, name:"컴퓨터실",     addr:"양주시 남면로 20",  capacity:20, equip:"PC 20대·프린터" },
 ];
 /* ── BookModal: 강의 일정 추가/수정 (독립 컴포넌트) ── */
-const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => {
+const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSave, onDelete }) => {
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
   const empty = { roomId:rooms[0]?.id||1, courseId:courses[0]?.id||1,
@@ -3259,17 +3455,25 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => 
         <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"space-between", alignItems:"center", background:T.s2 }}>
           {isEdit
-            ? <Btn variant="danger" size="sm" onClick={()=>{ setBookings(p=>p.filter(b=>b.id!==init.id)); onClose(); }}>삭제</Btn>
+            ? <Btn variant="danger" size="sm" onClick={async ()=>{ if(onDelete) await onDelete(init.id); else setBookings(p=>p.filter(b=>b.id!==init.id)); onClose(); }}>삭제</Btn>
             : <div/>}
           <div style={{ display:"flex", gap:8 }}>
             <Btn variant="ghost" onClick={onClose}>취소</Btn>
-            <Btn variant={hasConflict?"danger":"primary"} onClick={()=>{
+            <Btn variant={hasConflict?"danger":"primary"} onClick={async ()=>{
               if(!form.label||!form.start||!form.end) return alert("이름·시작일·종료일은 필수입니다.");
               if(form.start>form.end) return alert("시작일이 종료일보다 늦습니다.");
               if(hasConflict && !window.confirm(`⚠️ 중복 예약됩니다.\n\n${conflicts.map(b=>`• ${b.label} (${b.start}~${b.end})`).join("\n")}\n\n그래도 저장하시겠습니까?`)) return;
-              if(isEdit) setBookings(p=>p.map(b=>b.id===init.id?{...form}:b));
-              else       setBookings(p=>[...p,{...form,id:Date.now()}]);
-              onClose();
+              try {
+                if(onSave) {
+                  await onSave(isEdit ? { ...form } : { ...form, id: undefined });
+                } else {
+                  if(isEdit) setBookings(p=>p.map(b=>b.id===init.id?{...form}:b));
+                  else       setBookings(p=>[...p,{...form,id:Date.now()}]);
+                }
+                onClose();
+              } catch (err) {
+                alert("저장 오류: " + (err.message || JSON.stringify(err)));
+              }
             }}>
               <Icon n="check" s={13}/>
               {hasConflict ? "⚠️ 강행 저장" : isEdit?"저장":"추가"}
@@ -3282,7 +3486,7 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => 
 };
 
 /* ── RoomModal: 강의실 추가/수정 (독립 컴포넌트) ── */
-const RoomModal = ({ room, onClose, setRooms }) => {
+const RoomModal = ({ room, onClose, setRooms, onSave }) => {
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
   const empty = { name:"", addr:"", capacity:20, equip:"" };
@@ -3315,15 +3519,22 @@ const RoomModal = ({ room, onClose, setRooms }) => {
         <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"space-between", background:T.s2 }}>
           {isEdit
-            ? <Btn variant="danger" size="sm" onClick={()=>{ setRooms(p=>p.filter(r=>r.id!==room.id)); onClose(); }}>삭제</Btn>
+            ? <Btn variant="danger" size="sm" onClick={async ()=>{ try { await sbDelete("rooms",`id=eq.${room.id}`); } catch(e){ console.error("강의실 삭제 오류:",e.message||e); } if(setRooms) setRooms(p=>p.filter(r=>r.id!==room.id)); onClose(); }}>삭제</Btn>
             : <div/>}
           <div style={{ display:"flex", gap:8 }}>
             <Btn variant="ghost" onClick={onClose}>취소</Btn>
-            <Btn onClick={()=>{
+            <Btn onClick={async ()=>{
               if(!form.name) return alert("강의실 이름은 필수입니다.");
-              if(isEdit) setRooms(p=>p.map(r=>r.id===room.id?{...form}:r));
-              else       setRooms(p=>[...p,{...form,id:Date.now()}]);
-              onClose();
+              try {
+                if(onSave) await onSave(form);
+                else {
+                  if(isEdit) setRooms(p=>p.map(r=>r.id===room.id?{...form}:r));
+                  else       setRooms(p=>[...p,{...form,id:Date.now()}]);
+                }
+                onClose();
+              } catch(err) {
+                alert("저장 오류: " + (err.message || JSON.stringify(err)));
+              }
             }}><Icon n="check" s={13}/>{isEdit?"저장":"추가"}</Btn>
           </div>
         </div>
@@ -3440,17 +3651,74 @@ const RoomMgmt = ({ courses }) => {
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-based
   const [rooms,    setRooms]    = useState(SEED_ROOMS);
-  const [bookings, setBookings] = useState([
-    { id:1, roomId:1, courseId:1, label:"초등 피지컬 코딩",   start:"2026-06-01", end:"2026-07-15", color:BOOKING_COLORS[0] },
-    { id:2, roomId:1, courseId:7, label:"행정회계 사무 OA",   start:"2026-03-02", end:"2026-05-28", color:BOOKING_COLORS[1] },
-    { id:3, roomId:3, courseId:4, label:"ERP·지게차",         start:"2026-03-04", end:"2026-05-30", color:BOOKING_COLORS[3] },
-  ]);
+  const [bookings, setBookings] = useState([]);
   const [showRoomModal, setShowRM] = useState(false);
   const [showBookModal, setShowBM] = useState(null); // null | { roomId, date }
   const [editRoom,  setEditRoom]  = useState(null);
   const [editBook,  setEditBook]  = useState(null);
   const [selRoom,   setSelRoom]   = useState(0); // 0 = 전체
   const [viewMode,  setViewMode]  = useState("calendar"); // "calendar" | "gantt"
+
+  // ── Supabase 초기 로드 ──
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [rRes, bRes] = await Promise.all([
+          sbGet("rooms", "select=*&order=id"),
+          sbGet("room_bookings", "select=*&order=id"),
+        ]);
+        if (!rRes.error && rRes.data && rRes.data.length > 0) setRooms(rRes.data.map(toRoom));
+        if (!bRes.error && bRes.data) setBookings(bRes.data.map(toBooking));
+      } catch (err) {
+        console.warn("강의실 데이터 로드 실패 (시드 데이터 사용):", err.message || err);
+      }
+    };
+    load();
+  }, []);
+
+  // ── 강의실 저장/삭제 핸들러 (BookModal, RoomModal에서 호출) ──
+  const handleRoomSave = async (room) => {
+    try {
+      if (room.id) {
+        await sbUpdate("rooms", `id=eq.${room.id}`, fromRoom(room));
+        setRooms(p => p.map(r => r.id===room.id ? room : r));
+      } else {
+        const { data, error } = await sbInsert("rooms", fromRoom(room));
+        if (error) throw error;
+        const saved = (data && data[0]) ? toRoom(data[0]) : { ...room, id: Date.now() };
+        setRooms(p => [...p, saved]);
+      }
+    } catch (err) {
+      alert("강의실 저장 오류: " + (err.message || JSON.stringify(err)));
+      setRooms(p => room.id ? p.map(r=>r.id===room.id?room:r) : [...p, {...room, id:Date.now()}]);
+    }
+  };
+
+  const handleBookSave = async (book) => {
+    try {
+      if (book.id) {
+        await sbUpdate("room_bookings", `id=eq.${book.id}`, fromBooking(book));
+        setBookings(p => p.map(b => b.id===book.id ? book : b));
+      } else {
+        const { data, error } = await sbInsert("room_bookings", fromBooking(book));
+        if (error) throw error;
+        const saved = (data && data[0]) ? toBooking(data[0]) : { ...book, id: Date.now() };
+        setBookings(p => [...p, saved]);
+      }
+    } catch (err) {
+      alert("일정 저장 오류: " + (err.message || JSON.stringify(err)));
+      setBookings(p => book.id ? p.map(b=>b.id===book.id?book:b) : [...p, {...book, id:Date.now()}]);
+    }
+  };
+
+  const handleBookDelete = async (id) => {
+    try {
+      await sbDelete("room_bookings", `id=eq.${id}`);
+    } catch (err) {
+      console.warn("예약 삭제 오류:", err.message || err);
+    }
+    setBookings(p => p.filter(b => b.id !== id));
+  };
 
   // 달력 날짜 생성
   const firstDay = new Date(year, month, 1).getDay();
@@ -3520,8 +3788,8 @@ const RoomMgmt = ({ courses }) => {
 
   return (
     <div className="page">
-      {editBook!==null && <BookModal init={editBook.id?editBook:null} onClose={()=>setEditBook(null)} rooms={rooms} bookings={bookings} courses={courses} setBookings={setBookings}/>}
-      {showRoomModal && <RoomModal room={editRoom} onClose={()=>{setShowRM(false);setEditRoom(null);}} setRooms={setRooms}/>}
+      {editBook!==null && <BookModal init={editBook.id?editBook:null} onClose={()=>setEditBook(null)} rooms={rooms} bookings={bookings} courses={courses} setBookings={setBookings} onSave={handleBookSave} onDelete={handleBookDelete}/>}
+      {showRoomModal && <RoomModal room={editRoom} onClose={()=>{setShowRM(false);setEditRoom(null);}} setRooms={setRooms} onSave={handleRoomSave}/>}
 
       <SectionHead
         title="강의실 관리"
@@ -4744,6 +5012,7 @@ const MobileCheckin = () => {
   const [errMsg,   setErrMsg]   = useState("");
   const [nowStr,   setNowStr]   = useState("");
   const [searchQ,  setSearchQ]  = useState("");
+  const [countdown, setCountdown] = useState(0);
 
   // 현재 시각 표시 (매초 갱신)
   useEffect(() => {
@@ -4820,6 +5089,19 @@ const MobileCheckin = () => {
   const typeLabel = type === "in" ? "입실" : "퇴실";
   const typeColor = type === "in" ? "#2563EB" : "#9A3412";
   const fmtDate   = d => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${y}년 ${m}월 ${dd}일`; };
+
+  // 성공 후 3초 카운트다운 → 자동으로 목록 복귀
+  useEffect(() => {
+    if (status !== "success") return;
+    setCountdown(3);
+    const iv = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { setStatus("ready"); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [status]);
 
   const containerStyle = {
     minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center",
@@ -4898,13 +5180,13 @@ const MobileCheckin = () => {
               ? <span>⚠️ {checkedTime}에 이미 {typeLabel} 처리되었습니다.<br/>중복 기록은 생성되지 않습니다.</span>
               : "📡 담당자 화면에 실시간 반영됩니다"}
           </div>
-          {isDup && (
-            <button onClick={()=>setStatus("ready")}
-              style={{ marginTop:16, padding:"10px 22px", borderRadius:10, border:"none",
-                background:"#F1F5F9", color:"#64748B", fontWeight:600, fontSize:13, cursor:"pointer" }}>
-              ← 목록으로 돌아가기
-            </button>
-          )}
+          <button onClick={()=>setStatus("ready")}
+            style={{ marginTop:16, padding:"13px 28px", borderRadius:12, border:"none",
+              background: isDup ? "#F1F5F9" : typeColor, color: isDup ? "#64748B" : "#fff",
+              fontWeight:700, fontSize:14, cursor:"pointer", width:"100%",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+            {`← 목록으로 돌아가기${!isDup && countdown > 0 ? ` (${countdown})` : ""}`}
+          </button>
         </div>
       </div>
     );
@@ -4953,19 +5235,18 @@ const MobileCheckin = () => {
       </div>
 
       {/* 검색 입력 */}
-      {students.length > 5 && (
-        <div style={{ width:"100%", maxWidth:440, marginBottom:12 }}>
-          <input
-            value={searchQ}
-            onChange={e=>setSearchQ(e.target.value)}
-            placeholder="🔍  이름 또는 전화번호 검색"
-            style={{ width:"100%", padding:"12px 16px", borderRadius:12,
-              border:`1.5px solid ${typeColor}30`, fontSize:14, outline:"none",
-              background:"#fff", boxSizing:"border-box",
-              fontFamily:"inherit", color:"#1E293B" }}
-          />
-        </div>
-      )}
+      <div style={{ width:"100%", maxWidth:440, marginBottom:12 }}>
+        <input
+          value={searchQ}
+          onChange={e=>setSearchQ(e.target.value)}
+          placeholder="🔍  이름 또는 전화번호 검색"
+          autoComplete="off"
+          style={{ width:"100%", padding:"14px 16px", borderRadius:12,
+            border:`1.5px solid ${typeColor}40`, fontSize:15, outline:"none",
+            background:"#fff", boxSizing:"border-box",
+            fontFamily:"inherit", color:"#1E293B" }}
+        />
+      </div>
 
       {/* 학생 카드 목록 */}
       <div style={{ width:"100%", maxWidth:440, display:"flex", flexDirection:"column", gap:10 }}>
@@ -4975,25 +5256,26 @@ const MobileCheckin = () => {
           </div>
         ) : filtered.map(s => (
           <button key={s.id} onClick={()=>handleCheckin(s)}
-            style={{ padding:"18px 20px", borderRadius:16, border:`1.5px solid ${typeColor}25`,
+            style={{ padding:"20px 20px", borderRadius:16, border:`1.5px solid ${typeColor}30`,
               background:"#fff", cursor:"pointer", textAlign:"left",
               boxShadow:"0 2px 12px rgba(0,0,0,.06)", transition:"all .15s",
-              display:"flex", alignItems:"center", gap:14, WebkitTapHighlightColor:"transparent" }}>
+              display:"flex", alignItems:"center", gap:14, WebkitTapHighlightColor:"transparent",
+              WebkitUserSelect:"none", userSelect:"none" }}>
             {/* 아바타 */}
-            <div style={{ width:48, height:48, borderRadius:14, flexShrink:0,
+            <div style={{ width:52, height:52, borderRadius:14, flexShrink:0,
               background:`${typeColor}18`, display:"flex", alignItems:"center",
-              justifyContent:"center", fontSize:20, fontWeight:900, color:typeColor }}>
+              justifyContent:"center", fontSize:22, fontWeight:900, color:typeColor }}>
               {s.name[0]}
             </div>
             {/* 이름 / 연락처 */}
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:17, fontWeight:800, color:"#1E293B" }}>{s.name}</div>
-              <div style={{ fontSize:12, color:"#94A3B8", marginTop:2 }}>
+              <div style={{ fontSize:18, fontWeight:800, color:"#1E293B" }}>{s.name}</div>
+              <div style={{ fontSize:12, color:"#94A3B8", marginTop:3 }}>
                 {s.phone ? s.phone.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3") : "연락처 없음"}
               </div>
             </div>
             {/* 화살표 */}
-            <div style={{ fontSize:24, color:`${typeColor}60`, fontWeight:900 }}>›</div>
+            <div style={{ fontSize:26, color:`${typeColor}70`, fontWeight:900 }}>›</div>
           </button>
         ))}
       </div>
@@ -5143,8 +5425,9 @@ function App() {
   const [showAccMgr,  setShowAccMgr] = useState(false);
   const [piDismissed, setPiDismissed] = useState(false);
 
-  const [page,       setPage]       = useState("dash");
-  const [collapsed,  setCollapsed]  = useState(false);
+  const [page,           setPage]           = useState("dash");
+  const [collapsed,      setCollapsed]      = useState(false);
+  const [mobileSidebar,  setMobileSidebar]  = useState(false);
   const [students,   setStudents]   = useState([]);
   const [courses,    setCourses]    = useState(COURSES); // 로딩 전 시드로 표시
   const [editTarget, setEditTarget] = useState(null);
@@ -5279,13 +5562,21 @@ function App() {
       console.error("❌ 학생 저장 실패:", error);
       return; 
     }
-    // Realtime이 응답하기 전에 로컬 state에 즉시 반영 (중복 방지는 onInsert 핸들러에서)
     if (data && data.length > 0) {
+      // Supabase가 저장된 레코드를 반환한 경우 로컬 state 즉시 반영
       setStudents(prev => {
         const newIds = new Set(data.map(r => r.id));
         const filtered = prev.filter(s => !newIds.has(s.id));
         return [...filtered, ...data.map(toStudent)];
       });
+    } else {
+      // 응답 데이터가 없으면 DB에서 전체 다시 로드 (Realtime 미연결 환경 대응)
+      const { data: fresh, error: fetchErr } = await sbGet("students", "select=*&order=id");
+      if (fetchErr) {
+        console.error("❌ 학생 목록 재조회 실패:", fetchErr);
+      } else if (fresh) {
+        setStudents(fresh.map(toStudent));
+      }
     }
     addAudit("훈련생 등록", `${newOnes.length}명 등록 (${newOnes.map(s=>s.name).join(", ")})`, currentUser?.name);
     console.log("✅ 학생 저장 완료:", (data||[]).length, "명");
@@ -5366,6 +5657,22 @@ function App() {
     setCourses(prev => prev.filter(c => c.id!==id));
   }, [courses, addAudit, currentUser]);
 
+  // ── 출결 저장 후 해당 과정 훈련생 rate 재조회 (DB 트리거가 없을 경우 클라이언트 폴백) ──
+  const refreshStudentRates = useCallback(async (courseId) => {
+    try {
+      const { data, error } = await sbGet("students", `select=id,rate&cid=eq.${courseId}`);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setStudents(prev => prev.map(s => {
+          const updated = data.find(d => d.id === s.id);
+          return updated ? { ...s, rate: updated.rate } : s;
+        }));
+      }
+    } catch (err) {
+      console.warn("출석률 재조회 실패:", err.message || err);
+    }
+  }, []);
+
   // ── 스마트 라우팅: ?mode=checkin → 모바일 출석 페이지 (로그인 불필요) ──
   const urlMode = new URLSearchParams(window.location.search).get("mode");
   if (urlMode === "checkin") {
@@ -5426,7 +5733,7 @@ function App() {
       case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
       case "instructors": return <InstructorMgmt courses={courses}/>;
       case "rooms":       return <RoomMgmt courses={courses}/>;
-      case "attendance":  return <AttendanceMgmt students={students} courses={courses}/>;
+      case "attendance":  return <AttendanceMgmt students={students} courses={courses} onRatesUpdated={refreshStudentRates}/>;
       case "completion":  return <CompletionMgmt students={students} courses={courses}/>;
       case "cert":        return <CertMgmt students={students} courses={courses}/>;
       default:            return null;
@@ -5439,7 +5746,7 @@ function App() {
       {/* ── 모달들 ── */}
       {showNew && (
         <EditModal student={null} isNew={true} courses={courses}
-          onSave={s => setStudents(prev=>[...prev, s])} onClose={()=>setShowNew(false)}/>
+          onSave={s => addStudents([s])} onClose={()=>setShowNew(false)}/>
       )}
       {editTarget && (
         <EditModal student={editTarget} courses={courses}
@@ -5483,7 +5790,7 @@ function App() {
       )}
 
       <div style={{ display:"flex", height:"100vh",
-        background:"linear-gradient(160deg,#FED7AA 0%,#FDBA74 12%,#FFF7ED 45%,#F1F5F9 75%,#FFEDD5 100%)",
+        background:"linear-gradient(160deg,#FED7AA 0%,#FDBA74 10%,#FFF7ED 40%,#F8FAFC 70%,#FFEDD5 100%)",
         fontFamily:"'Pretendard',-apple-system,sans-serif", overflow:"hidden",
         flexDirection:"column" }}>
 
@@ -5493,10 +5800,11 @@ function App() {
             padding:"7px 22px", display:"flex", alignItems:"center", gap:10,
             fontSize:11, color:"#fff", flexShrink:0 }}>
             <span style={{ fontSize:13 }}>🔒</span>
-            <span>
+            <span className="pi-banner-text">
               <b>개인정보 주의:</b> 이 시스템은 훈련생 개인정보를 포함합니다.
               업무 목적 외 사용·유출·캡처를 엄금합니다. 위반 시 「개인정보보호법」에 따라 처벌받을 수 있습니다.
             </span>
+            <span className="pi-banner-icon" style={{ display:"none", fontSize:11 }}>개인정보 주의 — 외부 유출 금지</span>
             <button onClick={()=>setPiDismissed(true)}
               style={{ marginLeft:"auto", background:"rgba(255,255,255,.15)", border:"none",
                 color:"#fff", borderRadius:5, padding:"2px 10px", cursor:"pointer", fontSize:11, flexShrink:0 }}>
@@ -5505,12 +5813,17 @@ function App() {
           </div>
         )}
 
-        <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
+        {/* ── 모바일 사이드바 오버레이 ── */}
+        <div className={`sidebar-overlay${mobileSidebar?" active":""}`}
+          onClick={()=>setMobileSidebar(false)}/>
+
+        <div style={{ flex:1, display:"flex", overflow:"hidden", position:"relative" }}>
           {/* SIDEBAR */}
-          <div style={{ width:collapsed?64:240, flexShrink:0, transition:"width .25s ease",
-            background:`linear-gradient(180deg,${T.sb} 0%,${T.p} 55%,#F97316 100%)`,
-            display:"flex", flexDirection:"column", overflow:"hidden",
-            boxShadow:"4px 0 24px rgba(15,118,110,.25)" }}>
+          <div className={`app-sidebar${mobileSidebar?" mobile-open":""}`}
+            style={{ width:collapsed?64:240, flexShrink:0,
+              background:`linear-gradient(175deg,${T.sb} 0%,#9A3412 40%,${T.p} 75%,#F97316 100%)`,
+              display:"flex", flexDirection:"column", overflow:"hidden",
+              boxShadow:"4px 0 32px rgba(124,45,18,.3)" }}>
 
             {/* Logo */}
             <div style={{ padding:collapsed?"16px 0":"16px 18px",
@@ -5528,7 +5841,7 @@ function App() {
                 </div>
               )}
               <button onClick={()=>setCollapsed(!collapsed)} style={{ width:28, height:28, borderRadius:6,
-                background:"rgba(255,255,255,.1)", border:"none", color:"rgba(255,255,255,.6)",
+                background:"rgba(255,255,255,.12)", border:"none", color:"rgba(255,255,255,.7)",
                 cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 <Icon n="bars" s={14}/>
               </button>
@@ -5539,20 +5852,20 @@ function App() {
               {NAV_ITEMS.map(item => {
                 const active = page===item.id;
                 return (
-                  <button key={item.id} className="btn-nav" onClick={()=>setPage(item.id)} style={{
+                  <button key={item.id} className="btn-nav" onClick={()=>{ setPage(item.id); setMobileSidebar(false); }} style={{
                     width:"100%", display:"flex", alignItems:"center",
                     gap:10, padding:collapsed?"13px 0":"11px 18px",
                     justifyContent:collapsed?"center":"flex-start",
-                    background:active?"rgba(255,255,255,.13)":"transparent",
+                    background:active?"rgba(255,255,255,.15)":"transparent",
                     border:"none", cursor:"pointer",
                     borderLeft:active?"3px solid #FED7AA":"3px solid transparent",
-                    color:active?"#fff":"rgba(255,255,255,.45)",
+                    color:active?"#fff":"rgba(255,255,255,.5)",
                     fontWeight:active?700:400, fontSize:13 }}>
                     <Icon n={item.icon} s={16}/>
                     {!collapsed && <span style={{ whiteSpace:"nowrap" }}>{item.label}</span>}
                     {active && !collapsed && (
-                      <div style={{ marginLeft:"auto", width:5, height:5,
-                        borderRadius:"50%", background:"#FED7AA" }}/>
+                      <div style={{ marginLeft:"auto", width:6, height:6,
+                        borderRadius:"50%", background:"#FED7AA", flexShrink:0 }}/>
                     )}
                   </button>
                 );
@@ -5563,12 +5876,12 @@ function App() {
             {!collapsed && (
               <div style={{ padding:"13px 18px", borderTop:"1px solid rgba(255,255,255,.1)" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                  <div style={{ width:32, height:32, borderRadius:10, flexShrink:0,
+                  <div style={{ width:34, height:34, borderRadius:10, flexShrink:0,
                     background:"rgba(255,255,255,.15)",
                     display:"flex", alignItems:"center", justifyContent:"center",
-                    color:"rgba(255,255,255,.8)" }}><Icon n="user" s={15}/></div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:"#fff" }}>{currentUser.name}</div>
+                    color:"rgba(255,255,255,.85)" }}><Icon n="user" s={15}/></div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:"#fff", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{currentUser.name}</div>
                     <div style={{ fontSize:9, color:"rgba(255,255,255,.4)" }}>
                       {currentUser.role==="admin" ? "관리자" : "담당자"} · 경기도일자리재단
                     </div>
@@ -5576,17 +5889,17 @@ function App() {
                 </div>
                 {currentUser.role === "admin" && (
                   <button onClick={()=>setShowAccMgr(true)}
-                    style={{ width:"100%", padding:"6px 0", borderRadius:7,
+                    style={{ width:"100%", padding:"7px 0", borderRadius:8,
                       border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)",
-                      color:"rgba(255,255,255,.7)", cursor:"pointer", fontSize:11, fontWeight:600,
+                      color:"rgba(255,255,255,.75)", cursor:"pointer", fontSize:11, fontWeight:600,
                       marginBottom:6 }}>
                     👤 계정 관리
                   </button>
                 )}
                 <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) { try { sessionStorage.removeItem("gjf_user"); } catch {} addAudit("로그아웃", `${currentUser.name} 로그아웃`, currentUser.name); setCurrentUser(null); } }}
-                  style={{ width:"100%", padding:"6px 0", borderRadius:7,
+                  style={{ width:"100%", padding:"7px 0", borderRadius:8,
                     border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)",
-                    color:"rgba(255,255,255,.7)", cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                    color:"rgba(255,255,255,.75)", cursor:"pointer", fontSize:11, fontWeight:600 }}>
                   🚪 로그아웃
                 </button>
               </div>
@@ -5594,49 +5907,60 @@ function App() {
           </div>
 
           {/* MAIN */}
-          <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+          <div className="app-main" style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", minWidth:0 }}>
             {/* Header */}
-            <div style={{ height:52, background:"rgba(255,255,255,.9)", backdropFilter:"blur(12px)",
+            <div style={{ height:52, background:"rgba(255,255,255,.92)", backdropFilter:"blur(16px)",
               borderBottom:`1px solid ${T.bd}`,
               display:"flex", alignItems:"center", justifyContent:"space-between",
-              padding:"0 22px", flexShrink:0 }}>
-              <div style={{ fontSize:12, color:T.mu }}>
-                <span style={{ color:T.p, fontWeight:700 }}>경기도일자리재단 북부사업본부</span>
-                <span style={{ margin:"0 6px", color:T.bd }}>·</span>
-                직업교육 학사관리시스템 v2026
-              </div>
+              padding:"0 16px", flexShrink:0, gap:8 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                {/* 모바일 햄버거 메뉴 */}
+                <button className="mobile-menu-btn" onClick={()=>setMobileSidebar(true)}
+                  style={{ width:34, height:34, borderRadius:8, border:`1px solid ${T.bd}`,
+                    background:T.s2, cursor:"pointer", display:"flex", alignItems:"center",
+                    justifyContent:"center", color:T.mu, flexShrink:0 }}>
+                  <Icon n="bars" s={16}/>
+                </button>
+                <div style={{ fontSize:12, color:T.mu, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  <span className="header-title-full" style={{ color:T.p, fontWeight:700 }}>경기도일자리재단 북부사업본부</span>
+                  <span className="header-title-full" style={{ margin:"0 6px", color:T.bd }}>·</span>
+                  <span className="header-title-full">직업교육 학사관리시스템 v2026</span>
+                  <span className="header-title-short" style={{ display:"none", color:T.p, fontWeight:800, fontSize:13 }}>경기북부 LMS</span>
+                </div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
                 {/* 개인정보 상시 아이콘 */}
                 <div title="개인정보 포함 시스템 — 외부 유출 금지"
                   style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 8px",
                     borderRadius:6, background:"#FEF2F2", border:"1px solid #FECACA",
-                    fontSize:10, color:T.danger, fontWeight:700, cursor:"default" }}>
-                  🔒 개인정보 주의
+                    fontSize:10, color:T.danger, fontWeight:700, cursor:"default", whiteSpace:"nowrap" }}>
+                  🔒 <span className="header-title-full">개인정보 주의</span>
                 </div>
                 <button onClick={()=>setShowDataMgr(true)} style={{
                   display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
                   background:T.s3, border:`1px solid ${T.bd}`, borderRadius:8,
                   cursor:"pointer", fontSize:11, fontWeight:700, color:T.mu,
-                  transition:"all .15s" }}>
-                  <Icon n="dl" s={13}/> 데이터 관리
+                  transition:"all .15s", whiteSpace:"nowrap" }}>
+                  <Icon n="dl" s={13}/> <span className="header-title-full">데이터 관리</span>
                 </button>
-                <div style={{ display:"flex", alignItems:"center", gap:7, padding:"5px 10px",
-                  background:T.pbg, borderRadius:8 }}>
-                  <div style={{ width:24, height:24, borderRadius:6, background:T.p,
+                <div style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px",
+                  background:T.pbg, borderRadius:8, border:`1px solid rgba(234,88,12,.15)` }}>
+                  <div style={{ width:24, height:24, borderRadius:6,
+                    background:`linear-gradient(135deg,${T.pm},${T.p})`,
                     display:"flex", alignItems:"center", justifyContent:"center" }}>
                     <Icon n="user" s={12}/>
                   </div>
-                  <span style={{ fontSize:11, fontWeight:700, color:T.p }}>{currentUser.name}</span>
+                  <span style={{ fontSize:11, fontWeight:700, color:T.p, whiteSpace:"nowrap" }}>{currentUser.name}</span>
                   {currentUser.role==="admin" && (
                     <span style={{ fontSize:9, background:T.p, color:"#fff",
-                      padding:"1px 5px", borderRadius:3 }}>관리자</span>
+                      padding:"1px 5px", borderRadius:3, whiteSpace:"nowrap" }}>관리자</span>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Content */}
-            <div style={{ flex:1, overflowY:"auto", padding:22 }}>
+            <div style={{ flex:1, overflowY:"auto", padding:"18px 20px" }}>
               {renderPage()}
             </div>
           </div>

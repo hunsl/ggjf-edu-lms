@@ -18,6 +18,11 @@
 5. SQL Editor 입력창에 붙여넣고 **"Run"(또는 Ctrl+Enter)** 을 누르세요.
 6. 하단에 **"Success"** 메시지가 나오면 데이터베이스 준비 완료!
 
+> 💡 **이미 예전에 SQL을 실행했는데 저장 오류가 나는 경우:**  
+> `supabase-setup.sql`을 다시 한 번 실행하면 됩니다.  
+> 파일 끝에 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` 구문이 있어서  
+> **기존 데이터는 유지되면서 누락된 컬럼만 추가**됩니다.
+
 ---
 
 ### 📌 2단계 — index.html에 내 Supabase 주소 연결하기
@@ -82,8 +87,12 @@
 ## ❓ 자주 묻는 질문
 
 **Q. "DB 연결 오류"가 뜹니다.**  
-A. `index.html` 29~30번째 줄의 SB_URL, SB_KEY가 올바른지 확인하세요.  
+A. `index.html` 33~34번째 줄의 SB_URL, SB_KEY가 올바른지 확인하세요.  
    그리고 `supabase-setup.sql`을 Supabase에서 실행했는지 확인하세요.
+
+**Q. "Could not find the '...' column" 저장 오류가 납니다.**  
+A. 이전 버전 SQL로 만든 DB에 새 컬럼이 없는 경우입니다.  
+   `supabase-setup.sql`을 **다시 한 번 실행**하면 기존 데이터 그대로 누락 컬럼이 추가됩니다.
 
 **Q. 로그인이 안 됩니다.**  
 A. `supabase-setup.sql` 실행 후 accounts 테이블에 관리자 계정이 생성됩니다.  

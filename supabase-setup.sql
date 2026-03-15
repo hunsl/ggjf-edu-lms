@@ -239,5 +239,33 @@ CREATE TRIGGER trg_attendance_rate
   FOR EACH ROW EXECUTE FUNCTION update_student_rate();
 
 -- ==========================================
+-- 8. 컬럼 마이그레이션 (이미 실행한 DB도 안전하게 업데이트)
+-- 이전 버전 SQL로 만든 DB에 누락된 컬럼을 추가합니다.
+-- IF NOT EXISTS 덕분에 이미 있는 컬럼은 무시됩니다.
+-- ==========================================
+ALTER TABLE students ADD COLUMN IF NOT EXISTS addr_detail TEXT DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS addr_city   TEXT DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS phone2      TEXT DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS id_back     TEXT DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS itv_date    TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS itv_score   NUMERIC;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS itv_grade   TEXT DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS itv_pass    BOOLEAN DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS disabled    BOOLEAN DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS veteran     BOOLEAN DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS memo        TEXT DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS rate        NUMERIC DEFAULT 0;
+
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS pdf_name   TEXT;
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS pdf_data   TEXT;
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS links      JSONB DEFAULT '[]'::JSONB;
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS sched_days      TEXT;
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS sched_time_from TEXT;
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS sched_time_to   TEXT;
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS notes      TEXT;
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS c_goal     INTEGER DEFAULT 0;
+ALTER TABLE courses  ADD COLUMN IF NOT EXISTS e_goal     INTEGER DEFAULT 0;
+
+-- ==========================================
 -- ✅ 완료! 이제 index.html을 새로고침하세요
 -- ==========================================

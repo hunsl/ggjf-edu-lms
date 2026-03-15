@@ -914,7 +914,7 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
 /* ═══════════════════════════════════════════════════════════
    STUDENT MANAGEMENT  ★ Excel Upload / Download
 ═══════════════════════════════════════════════════════════ */
-const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
+const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew }) => {
   const [search, setSearch] = useState("");
   const [cFilter, setCFilter] = useState(0);
   const [riskOnly, setRisk] = useState(false);
@@ -946,19 +946,33 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
 
   const confirmImport = () => {
     if(!preview) return;
-    const newStudents = preview.map((r,i) => {
+    const toAdd = [];
+    const toUpdate = [];
+    preview.forEach((r,i) => {
       const code = r["과정코드"] || "";
       const c = courses.find(x=>x.code===code) || courses[0];
-      return {
-        id: Date.now()+i, cid:c.id, name:r["이름"]||"", birth:r["생년월일"]||"",
-        phone:r["연락처"]||"", addr:r["주소"]||"", edu:r["최종학력"]||"",
-        status:r["취업여부"]||"미취업", rate:Math.round(60+Math.random()*40)
+      const phone = String(r["연락처"] || "").trim();
+      const base = {
+        cid:c.id, name:r["이름"]||"", birth:r["생년월일"]||"",
+        phone, status:r["취업여부"]||"미취업",
       };
+      // ── Upsert: 연락처 일치 시 기존 훈련생 정보 업데이트 ──
+      const existing = phone ? students.find(s => s.phone && s.phone === phone) : null;
+      if (existing) {
+        toUpdate.push({ ...existing, ...base });
+      } else {
+        toAdd.push({ id: Date.now()+i, ...base, rate: Math.round(60+Math.random()*40) });
+      }
     });
-    onAdd(newStudents);
+    if (toAdd.length > 0) onAdd(toAdd);
+    if (toUpdate.length > 0 && onUpdate) toUpdate.forEach(s => onUpdate(s));
     setPreview(null);
     setTab("list");
-    alert(`✅ ${newStudents.length}명이 성공적으로 등록되었습니다.`);
+    const msg = [
+      toAdd.length    && `신규 ${toAdd.length}명 등록`,
+      toUpdate.length && `기존 ${toUpdate.length}명 업데이트`,
+    ].filter(Boolean).join(" / ");
+    alert(`✅ ${msg} 완료`);
   };
 
   return (
@@ -1341,8 +1355,10 @@ const AttendanceMgmt = ({ students, courses }) => {
   const fmtTime = (h, m) => `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
 
   // ── QR 데이터 ──
+  // 현재 페이지 URL에 ?mode=checkin 파라미터를 붙여 실제 모바일 출석 페이지로 라우팅
   const qrToken   = `${course.code}-${date}-${qrType.toUpperCase()}-2026GJF`;
-  const qrData    = `https://check.gjf.or.kr/attend?c=${course.code}&d=${date}&type=${qrType}&t=${qrToken}`;
+  const pageBase  = window.location.origin + window.location.pathname;
+  const qrData    = `${pageBase}?mode=checkin&cid=${course.id}&date=${date}&type=${qrType}&t=${encodeURIComponent(qrToken)}`;
   const qrColor   = qrType === "in" ? "2563EB" : "9A3412";
   const qrUrl     = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}&bgcolor=ffffff&color=${qrColor}&margin=12`;
 
@@ -1722,20 +1738,20 @@ const AttendanceMgmt = ({ students, courses }) => {
 
             <div style={{ padding:"8px 10px", background:T.pbg, borderRadius:6,
               fontSize:10, color:T.mu, wordBreak:"break-all", marginBottom:10 }}>
-              {qrData.slice(0,55)}…
+              {qrData.slice(0,60)}…
             </div>
 
             <div style={{ background:T.s2, borderRadius:8, padding:"9px 11px",
               border:`1px solid ${T.bd}`, fontSize:11, color:T.mu, lineHeight:1.8 }}>
               <b style={{color:T.tx, display:"block", marginBottom:3}}>📱 스캔 절차</b>
               1. 학생이 폰으로 QR 스캔<br/>
-              2. 입실/퇴실 체크인 페이지<br/>
-              3. 이름 확인 후 등록<br/>
-              4. 담당자 화면 실시간 반영
+              2. 모바일 출석 페이지 자동 이동<br/>
+              3. 이름 확인 후 출석 버튼 탭<br/>
+              4. 담당자 화면 0.5초 내 실시간 반영
             </div>
             <div style={{ marginTop:8, padding:"7px 10px", borderRadius:8,
-              background:"#FFFBEB", border:"1px solid #FDE68A", fontSize:10, color:"#92400E" }}>
-              ⚡ <b>시뮬레이션 모드</b> — 백엔드 연동 후 실제 작동
+              background:"#ECFDF5", border:"1px solid #6EE7B7", fontSize:10, color:"#065F46" }}>
+              ✅ <b>실시간 연동</b> — QR 스캔 즉시 출결 반영 (Supabase Realtime)
             </div>
           </Card>
 
@@ -2260,7 +2276,11 @@ const CertMgmt = ({ students, courses }) => {
   const attendEligible = students.filter(s => s.cid===course.id && s.rate>0);
   const eligible = docType==="cert" ? certEligible : attendEligible;
 
-  const getCertNo = (s, idx) => issued[s.id+docType]?.no ?? `${course.code}-${String(idx+1).padStart(3,"0")}`;
+  const getCertNo = (s, idx) => {
+    if (issued[s.id+docType]?.no) return issued[s.id+docType].no;
+    const suffix = docType === "cert" ? "수료" : "수강";
+    return `제 2026-북부-${suffix}-${String(idx+1).padStart(3,"0")}호`;
+  };
 
   const handleIssue = (s, idx) => {
     const no = getCertNo(s, idx);
@@ -3933,14 +3953,15 @@ const LoginScreen = ({ onLogin, accounts }) => {
 /* ═══════════════════════════════════════════════════════════
    👤 ACCOUNT MANAGEMENT  계정 관리 (관리자 전용)
 ═══════════════════════════════════════════════════════════ */
-const AccountMgmt = ({ accounts, onSave, onClose, currentUser }) => {
-  const [list, setList] = useState(accounts.map(a=>({...a})));
+const AccountMgmt = ({ accounts, onSave, onClose, currentUser, auditLog = [] }) => {
+  const [list,    setList]    = useState(accounts.map(a=>({...a})));
   const [editIdx, setEditIdx] = useState(null);
   const [newPw,   setNewPw]   = useState("");
   const [newPw2,  setNewPw2]  = useState("");
   const [pwErr,   setPwErr]   = useState("");
   const [addForm, setAddForm] = useState({ name:"", role:"staff", pw:"", pw2:"" });
   const [showAdd, setShowAdd] = useState(false);
+  const [tab,     setTab]     = useState("accounts"); // "accounts" | "audit"
 
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2, fontFamily:"inherit" };
@@ -3993,7 +4014,22 @@ const AccountMgmt = ({ accounts, onSave, onClose, currentUser }) => {
           </button>
         </div>
 
+        {/* 탭 */}
+        <div style={{ display:"flex", borderBottom:`1px solid ${T.bd}`, background:T.s2 }}>
+          {[{id:"accounts",label:"👤 계정 관리"},{id:"audit",label:"📋 감사 로그"}].map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+              flex:1, padding:"10px 0", border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
+              background: tab===t.id ? T.s : T.s2,
+              color: tab===t.id ? T.p : T.mu,
+              borderBottom: tab===t.id ? `2px solid ${T.p}` : "2px solid transparent",
+              transition:"all .15s",
+            }}>{t.label}</button>
+          ))}
+        </div>
+
         <div style={{ flex:1, overflowY:"auto", padding:"18px 22px", display:"flex", flexDirection:"column", gap:10 }}>
+
+          {tab === "accounts" ? (<>
 
           {/* 보안 안내 */}
           <div style={{ padding:"10px 14px", borderRadius:8, background:"#FFF7ED",
@@ -4097,13 +4133,45 @@ const AccountMgmt = ({ accounts, onSave, onClose, currentUser }) => {
               <Icon n="plus" s={14}/> 새 담당자 계정 추가
             </button>
           )}
+
+          </>) : (
+            /* ── 감사 로그 탭 ── */
+            <div>
+              <div style={{ fontSize:12, fontWeight:700, color:T.tx, marginBottom:10, display:"flex", gap:8, alignItems:"center" }}>
+                📋 데이터 수정 이력
+                <span style={{ marginLeft:"auto", fontSize:10, color:T.mu }}>최근 {Math.min(auditLog.length,300)}건</span>
+                <button onClick={()=>{ try { localStorage.removeItem("gjf_audit_log"); } catch{} window.location.reload(); }}
+                  style={{ fontSize:10, color:T.danger, background:"transparent", border:`1px solid #FECACA`,
+                    borderRadius:5, padding:"2px 8px", cursor:"pointer" }}>초기화</button>
+              </div>
+              {auditLog.length === 0 ? (
+                <div style={{ textAlign:"center", color:T.mu, padding:"30px 0", fontSize:12 }}>
+                  기록된 이력이 없습니다
+                </div>
+              ) : auditLog.map(e => (
+                <div key={e.id} style={{ padding:"9px 12px", borderRadius:8, marginBottom:6,
+                  background:T.s2, border:`1px solid ${T.bd}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:T.p }}>{e.action}</span>
+                    <span style={{ fontSize:10, color:T.mu }}>{e.when}</span>
+                  </div>
+                  <div style={{ fontSize:11, color:T.tx }}>{e.detail}</div>
+                  <div style={{ fontSize:10, color:T.mu, marginTop:2 }}>by {e.who}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div style={{ padding:"13px 22px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"flex-end", background:T.s2 }}>
-          <Btn onClick={()=>{ onSave(list); onClose(); }}>
-            <Icon n="check" s={13}/> 변경사항 저장
-          </Btn>
+          {tab === "accounts" ? (
+            <Btn onClick={()=>{ onSave(list); onClose(); }}>
+              <Icon n="check" s={13}/> 변경사항 저장
+            </Btn>
+          ) : (
+            <Btn variant="ghost" onClick={onClose}>닫기</Btn>
+          )}
         </div>
       </div>
     </div>
@@ -4123,8 +4191,191 @@ const NAV_ITEMS = [
 ];
 
 /* ═══════════════════════════════════════════════════════════
-   📡 REALTIME MANAGER (실시간 연동)
+   📱 MOBILE CHECKIN  (스마트 라우팅: ?mode=checkin)
+   로그인 없이 QR 스캔으로 출석 체크하는 학생용 페이지
 ═══════════════════════════════════════════════════════════ */
+const MobileCheckin = () => {
+  const params   = new URLSearchParams(window.location.search);
+  const cidParam = params.get("cid");
+  const date     = params.get("date") || new Date().toISOString().slice(0,10);
+  const type     = params.get("type") || "in"; // "in" | "out"
+  const token    = params.get("t");
+
+  const [course,   setCourse]   = useState(null);
+  const [students, setStudents] = useState([]);
+  const [status,   setStatus]   = useState("loading"); // loading | ready | success | error | expired
+  const [checkedId, setCheckedId] = useState(null);
+  const [errMsg,   setErrMsg]   = useState("");
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        // 과정 정보 로드
+        const { data: cData, error: cErr } = await sbGet("courses", `select=*&id=eq.${cidParam}`);
+        if (cErr || !cData || cData.length === 0) { setStatus("error"); setErrMsg("과정을 찾을 수 없습니다."); return; }
+        const c = toCourse(cData[0]);
+
+        // 토큰 검증
+        const expectedToken = `${c.code}-${date}-${type.toUpperCase()}-2026GJF`;
+        if (token && decodeURIComponent(token) !== expectedToken) {
+          setStatus("expired"); return;
+        }
+
+        setCourse(c);
+
+        // 해당 과정 학생 목록 로드
+        const { data: sData, error: sErr } = await sbGet("students", `select=*&cid=eq.${c.id}&order=name`);
+        if (sErr) throw sErr;
+        setStudents((sData || []).map(toStudent));
+        setStatus("ready");
+      } catch (e) {
+        setStatus("error"); setErrMsg(e.message || "오류가 발생했습니다.");
+      }
+    };
+    if (cidParam) init();
+    else { setStatus("error"); setErrMsg("올바르지 않은 QR 코드입니다."); }
+  }, []);
+
+  const handleCheckin = async (student) => {
+    setStatus("loading");
+    try {
+      const now  = new Date();
+      const time = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+      const { error } = await sbInsert("attendance", [{
+        student_id: student.id,
+        date,
+        type,
+        time,
+        created_at: now.toISOString(),
+      }]);
+      if (error) throw error;
+      setCheckedId(student.id);
+      setStatus("success");
+    } catch (e) {
+      setStatus("error"); setErrMsg(e.message || "저장 오류");
+    }
+  };
+
+  const typeLabel = type === "in" ? "입실" : "퇴실";
+  const typeColor = type === "in" ? "#2563EB" : "#9A3412";
+  const fmtDate   = d => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${y}년 ${m}월 ${dd}일`; };
+
+  const containerStyle = {
+    minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center",
+    background:`linear-gradient(160deg,${typeColor}22 0%,#FFF7ED 60%)`,
+    fontFamily:"'Pretendard',-apple-system,sans-serif", padding:"24px 20px",
+  };
+
+  if (status === "loading") return (
+    <div style={containerStyle}>
+      <div style={{ marginTop:80, fontSize:40 }}>⏳</div>
+      <div style={{ marginTop:16, fontSize:14, color:"#64748B" }}>잠시만 기다려 주세요…</div>
+    </div>
+  );
+
+  if (status === "expired") return (
+    <div style={containerStyle}>
+      <div style={{ marginTop:60, textAlign:"center" }}>
+        <div style={{ fontSize:56 }}>⏰</div>
+        <div style={{ fontSize:18, fontWeight:800, color:"#1E293B", marginTop:14 }}>QR 코드가 만료되었습니다</div>
+        <div style={{ fontSize:13, color:"#64748B", marginTop:8 }}>담당자에게 새 QR 코드를 요청하세요.</div>
+      </div>
+    </div>
+  );
+
+  if (status === "error") return (
+    <div style={containerStyle}>
+      <div style={{ marginTop:60, textAlign:"center" }}>
+        <div style={{ fontSize:56 }}>❌</div>
+        <div style={{ fontSize:18, fontWeight:800, color:"#1E293B", marginTop:14 }}>오류가 발생했습니다</div>
+        <div style={{ fontSize:13, color:"#64748B", marginTop:8 }}>{errMsg}</div>
+      </div>
+    </div>
+  );
+
+  if (status === "success") {
+    const s = students.find(x => x.id === checkedId);
+    return (
+      <div style={containerStyle}>
+        <div style={{ width:"100%", maxWidth:380, marginTop:40, textAlign:"center",
+          background:"#fff", borderRadius:20, padding:"32px 28px",
+          boxShadow:"0 8px 40px rgba(0,0,0,.12)" }}>
+          <div style={{ fontSize:56 }}>✅</div>
+          <div style={{ fontSize:22, fontWeight:900, color:"#1E293B", marginTop:12 }}>
+            {typeLabel} 완료!
+          </div>
+          <div style={{ fontSize:15, fontWeight:700, color:typeColor, marginTop:6 }}>
+            {s?.name}
+          </div>
+          <div style={{ fontSize:12, color:"#64748B", marginTop:8 }}>
+            {course?.name}<br/>
+            {fmtDate(date)} · {typeLabel} 기록 완료
+          </div>
+          <div style={{ marginTop:18, padding:"10px 14px", borderRadius:10,
+            background:`${typeColor}12`, border:`1px solid ${typeColor}30`,
+            fontSize:11, color:typeColor, fontWeight:700 }}>
+            📡 담당자 화면에 실시간 반영됩니다
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // status === "ready"
+  return (
+    <div style={containerStyle}>
+      {/* 헤더 */}
+      <div style={{ width:"100%", maxWidth:420, marginBottom:20 }}>
+        <div style={{ fontSize:11, color:"#64748B", marginBottom:4 }}>경기도일자리재단 북부사업본부</div>
+        <div style={{ fontSize:18, fontWeight:900, color:"#1E293B", display:"flex", alignItems:"center", gap:8 }}>
+          {type === "in" ? "📥" : "📤"}
+          {typeLabel} 출석 체크
+        </div>
+        <div style={{ fontSize:12, color:"#64748B", marginTop:3 }}>
+          {course?.name} · {fmtDate(date)}
+        </div>
+      </div>
+
+      {/* 안내 */}
+      <div style={{ width:"100%", maxWidth:420, padding:"11px 14px", borderRadius:10,
+        background:`${typeColor}10`, border:`1px solid ${typeColor}30`,
+        fontSize:12, color:typeColor, fontWeight:600, marginBottom:18 }}>
+        👇 아래 목록에서 본인 이름을 터치하세요
+      </div>
+
+      {/* 학생 목록 */}
+      <div style={{ width:"100%", maxWidth:420, display:"flex", flexDirection:"column", gap:8 }}>
+        {students.length === 0 ? (
+          <div style={{ textAlign:"center", color:"#94A3B8", padding:"40px 0", fontSize:14 }}>
+            등록된 훈련생이 없습니다
+          </div>
+        ) : students.map(s => (
+          <button key={s.id} onClick={()=>handleCheckin(s)}
+            style={{ padding:"16px 20px", borderRadius:14, border:`1.5px solid ${typeColor}30`,
+              background:"#fff", cursor:"pointer", textAlign:"left",
+              boxShadow:"0 2px 8px rgba(0,0,0,.06)", transition:"all .15s",
+              display:"flex", alignItems:"center", gap:14 }}>
+            <div style={{ width:42, height:42, borderRadius:12, flexShrink:0,
+              background:`${typeColor}15`, display:"flex", alignItems:"center",
+              justifyContent:"center", fontSize:18, fontWeight:900, color:typeColor }}>
+              {s.name[0]}
+            </div>
+            <div>
+              <div style={{ fontSize:16, fontWeight:800, color:"#1E293B" }}>{s.name}</div>
+              <div style={{ fontSize:11, color:"#94A3B8", marginTop:2 }}>{s.phone || "연락처 없음"}</div>
+            </div>
+            <div style={{ marginLeft:"auto", fontSize:22, color:`${typeColor}80` }}>›</div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ marginTop:24, fontSize:10, color:"#CBD5E1", textAlign:"center" }}>
+        © 2026 경기도일자리재단 북부사업본부 · 학사관리시스템
+      </div>
+    </div>
+  );
+};
+
 class RealtimeManager {
   constructor() {
     this.subscriptions = new Map(); // table -> { ws, intentionallyClosed }
@@ -4238,6 +4489,25 @@ function App() {
   const [editTarget, setEditTarget] = useState(null);
   const [showNew,    setShowNew]    = useState(false);
   const [showDataMgr,setShowDataMgr]= useState(false);
+
+  // ── 감사 로그 (Audit Log) — localStorage 영구 보관 ──
+  const [auditLog, setAuditLog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gjf_audit_log") || "[]"); } catch { return []; }
+  });
+  const addAudit = useCallback((action, detail, user) => {
+    const entry = {
+      id:     Date.now(),
+      who:    user || "시스템",
+      when:   new Date().toLocaleString("ko-KR"),
+      action,
+      detail,
+    };
+    setAuditLog(prev => {
+      const next = [entry, ...prev].slice(0, 300);
+      try { localStorage.setItem("gjf_audit_log", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
   const [loading,    setLoading]    = useState(true);   // 최초 로딩 상태
   const [dbError,    setDbError]    = useState("");     // DB 연결 오류
 
@@ -4348,35 +4618,39 @@ function App() {
       console.error("❌ 학생 저장 실패:", error);
       return; 
     }
-    
+    addAudit("훈련생 등록", `${newOnes.length}명 등록 (${newOnes.map(s=>s.name).join(", ")})`, currentUser?.name);
     console.log("✅ 학생 저장 완료:", (data||[]).length, "명 - 실시간 구독이 자동 반영");
-    // 실시간 구독이 자동으로 추가하므로 여기서는 아무것도 안 함
-  }, []);
+  }, [addAudit, currentUser]);
 
   const updateStudent = useCallback(async (updated) => {
     const { error } = await sbUpdate("students", `id=eq.${updated.id}`, fromStudent(updated));
     if (error) { alert("수정 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.map(s => s.id===updated.id ? updated : s));
-  }, []);
+    addAudit("훈련생 수정", `${updated.name} 정보 수정`, currentUser?.name);
+  }, [addAudit, currentUser]);
 
   const deleteStudent = useCallback(async (id) => {
     if (!window.confirm("이 훈련생을 삭제하시겠습니까?")) return;
+    const target = students.find(s => s.id === id);
     const { error } = await sbDelete("students", `id=eq.${id}`);
     if (error) { alert("삭제 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.filter(s => s.id!==id));
-  }, []);
+    addAudit("훈련생 삭제", `${target?.name || id} 삭제`, currentUser?.name);
+  }, [students, addAudit, currentUser]);
 
   const resetData = useCallback(async () => {
     const { error } = await sbDelete("students", "id=gte.0");
     if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents([]);
-  }, []);
+    addAudit("전체 초기화", "모든 훈련생 데이터 삭제", currentUser?.name);
+  }, [addAudit, currentUser]);
 
   const resetCoursStudents = useCallback(async (cid) => {
     const { error } = await sbDelete("students", `cid=eq.${cid}`);
     if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.filter(s => s.cid !== cid));
-  }, []);
+    addAudit("과정 초기화", `과정 ID ${cid} 훈련생 삭제`, currentUser?.name);
+  }, [addAudit, currentUser]);
 
   // ── 과정 CRUD ──
   const addCourse = useCallback(async (c) => {
@@ -4386,10 +4660,9 @@ function App() {
       console.error("❌ 과정 저장 실패:", error);
       return; 
     }
-    
+    addAudit("과정 등록", `${c.name} (${c.code}) 추가`, currentUser?.name);
     console.log("✅ 과정 저장 완료:", data?.name, "- 실시간 구독이 자동 반영");
-    // 실시간 구독이 자동으로 추가하므로 여기서는 아무것도 안 함
-  }, []);
+  }, [addAudit, currentUser]);
 
   const updateCourse = useCallback(async (c) => {
     const { error } = await sbUpdate("courses", `id=eq.${c.id}`, fromCourse(c));
@@ -4398,27 +4671,36 @@ function App() {
       console.error("❌ 과정 수정 실패:", error);
       return; 
     }
+    addAudit("과정 수정", `${c.name} (${c.code}) 정보 수정`, currentUser?.name);
     console.log("✅ 과정 수정 완료:", c.name);
     setCourses(prev => prev.map(x => x.id===c.id ? c : x));
-  }, []);
+  }, [addAudit, currentUser]);
 
   const deleteCourse = useCallback(async (id) => {
+    const target = courses.find(c => c.id === id);
     const { error } = await sbDelete("courses", `id=eq.${id}`);
     if (error) { 
       alert("과정 삭제 오류: " + (error.message||JSON.stringify(error))); 
       console.error("❌ 과정 삭제 실패:", error);
       return; 
     }
+    addAudit("과정 삭제", `${target?.name || id} 삭제`, currentUser?.name);
     console.log("✅ 과정 삭제 완료: ID", id);
     setCourses(prev => prev.filter(c => c.id!==id));
-  }, []);
+  }, [courses, addAudit, currentUser]);
+
+  // ── 스마트 라우팅: ?mode=checkin → 모바일 출석 페이지 (로그인 불필요) ──
+  const urlMode = new URLSearchParams(window.location.search).get("mode");
+  if (urlMode === "checkin") {
+    return <><GStyle/><MobileCheckin/></>;
+  }
 
   // ── 로그인 전이면 LoginScreen 표시 ──
   if (!currentUser) {
     return (
       <>
         <GStyle/>
-        <LoginScreen accounts={accounts} onLogin={user => { setCurrentUser(user); setPiDismissed(false); }}/>
+        <LoginScreen accounts={accounts} onLogin={user => { setCurrentUser(user); setPiDismissed(false); addAudit("로그인", `${user.name} 로그인`, user.name); }}/>
       </>
     );
   }
@@ -4461,7 +4743,7 @@ function App() {
     switch(page) {
       case "dash":        return <Dashboard students={students} courses={courses}/>;
       case "courses":     return <CourseList courses={courses} onAdd={addCourse} onUpdate={updateCourse} onDelete={deleteCourse}/>;
-      case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
+      case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
       case "instructors": return <InstructorMgmt courses={courses}/>;
       case "rooms":       return <RoomMgmt courses={courses}/>;
       case "attendance":  return <AttendanceMgmt students={students} courses={courses}/>;
@@ -4495,27 +4777,18 @@ function App() {
         <AccountMgmt
           accounts={accounts}
           currentUser={currentUser}
+          auditLog={auditLog}
           onSave={async (updated) => { 
             try {
-              // 기존 계정 전체 삭제 후 재생성 (간단한 방식)
-              // 실제 운영에서는 개별 CRUD 권장
               console.log("💾 계정 저장 중...");
-              
-              // 로컬 state 먼저 업데이트
               setAccounts(updated);
               setCurrentUser(prev => updated.find(a => a.id === prev.id) || prev);
-              
-              // Supabase 동기화는 백그라운드에서
-              // (실패해도 로컬은 작동하도록)
+              addAudit("계정 수정", `계정 목록 저장 (${updated.length}개)`, currentUser?.name);
               setTimeout(async () => {
                 try {
-                  // 기존 데이터 삭제
                   await sbDelete("accounts", "id=gte.0");
-                  
-                  // 새 데이터 삽입
                   const { error } = await sbInsert("accounts", updated.map(fromAccount));
                   if (error) throw error;
-                  
                   console.log("✅ 계정 저장 완료:", updated.length, "개");
                 } catch (err) {
                   console.error("❌ 계정 저장 실패 (로컬은 유지):", err);

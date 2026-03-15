@@ -1,168 +1,22 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>경기북부 직업교육 학사관리시스템</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"/>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body, #root { height: 100%; }
-    body { font-family: 'Pretendard', -apple-system, sans-serif; background: #F8F9FA; -webkit-font-smoothing: antialiased; }
-    #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #7C2D12, #EA580C, #FFF7ED); z-index: 9999; }
-    #loading .icon { font-size: 48px; margin-bottom: 16px; animation: pulse 1.5s ease infinite; }
-    #loading .msg { font-size: 15px; font-weight: 800; color: #fff; margin-bottom: 6px; }
-    #loading .sub { font-size: 12px; color: rgba(255,255,255,.6); }
-    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
-    @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
-    .page { animation: fadeUp .3s ease both; }
-    .row-hover:hover { background:#fff7ed !important; }
-  </style>
-</head>
-<body>
-  <div id="loading">
-    <div class="icon">🎓</div>
-    <div class="msg">경기북부 학사관리시스템</div>
-    <div class="sub">시스템을 준비하는 중입니다…</div>
-  </div>
-  <div id="root"></div>
+// Importing React and necessary components
+import React from 'react';
+import Dashboard from './components/Dashboard';
+import CourseManagement from './components/CourseManagement';
+import StudentManagement from './components/StudentManagement';
+import AttendanceTracking from './components/AttendanceTracking';
+import CertificateGeneration from './components/CertificateGeneration';
 
-  <script type="text/babel">
-    const { useState, useMemo } = React;
-    const T = { p: "#EA580C", pm: "#F97316", pl: "#FB923C", pbg: "#FFF7ED", sb: "#7C2D12", ok: "#059669", warn: "#D97706", danger: "#DC2626", info: "#2563EB", s: "#FFFFFF", s2: "#F8FAFC", s3: "#F1F5F9", bd: "#E2E8F0", tx: "#1E293B", mu: "#64748B" };
-    
-    const COURSES = [
-      { id:1, cat:"늘봄강사양성", cc:"#EA580C", name:"초등 피지컬 코딩강사 양성", code:"NB-01", dateFrom:"2026-06-01", dateTo:"2026-07-31", period:"6~7월", method:"블렌디드", hours:92, tgt:20, cGoal:18, eGoal:12 },
-      { id:2, cat:"늘봄강사양성", cc:"#EA580C", name:"AI 딥러닝 전문강사 양성", code:"NB-02", dateFrom:"2026-06-01", dateTo:"2026-08-31", period:"6~8월", method:"블렌디드", hours:104, tgt:20, cGoal:18, eGoal:12 },
-      { id:3, cat:"늘봄강사양성", cc:"#EA580C", name:"늘봄학교 창의융합교육강사 양성", code:"NB-03", dateFrom:"2026-04-01", dateTo:"2026-06-30", period:"4~6월", method:"대면", hours:140, tgt:20, cGoal:18, eGoal:12 },
-      { id:4, cat:"지역연계·기여", cc:"#C2410C", name:"ERP·지게차 물류관리 실무자 양성", code:"JY-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월", method:"대면", hours:182, tgt:15, cGoal:14, eGoal:9 },
-      { id:5, cat:"지역연계·기여", cc:"#C2410C", name:"승강기 전문가 양성", code:"JY-02", dateFrom:"2026-05-04", dateTo:"2026-06-26", period:"5~6월", method:"대면", hours:80, tgt:15, cGoal:14, eGoal:9 },
-      { id:6, cat:"지역연계·기여", cc:"#C2410C", name:"중장년 기회강사 양성", code:"JY-03", dateFrom:"2026-05-01", dateTo:"2026-07-31", period:"5~7월", method:"블렌디드", hours:83, tgt:15, cGoal:14, eGoal:9 },
-      { id:7, cat:"지역연계·기여", cc:"#C2410C", name:"미지��� 공모과정 (지역연계)", code:"JY-04", dateFrom:"", dateTo:"", period:"-", method:"-", hours:0, tgt:20, cGoal:18, eGoal:12 },
-      { id:8, cat:"사무분야", cc:"#9A3412", name:"행정회계 사무 OA (1기)", code:"SM-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월", method:"대면", hours:200, tgt:20, cGoal:18, eGoal:12 },
-      { id:9, cat:"사무분야", cc:"#9A3412", name:"행정회계 사무 OA (2기)", code:"SM-02", dateFrom:"2026-07-01", dateTo:"2026-09-30", period:"7~9월", method:"대면", hours:200, tgt:20, cGoal:18, eGoal:12 },
-      { id:10, cat:"식품분야", cc:"#DC2626", name:"HACCP 전문인력 양성", code:"FD-01", dateFrom:"2026-04-01", dateTo:"2026-05-31", period:"4~5월", method:"대면", hours:112, tgt:20, cGoal:18, eGoal:12 },
-      { id:11, cat:"IT 신직무", cc:"#F97316", name:"AI 시대의 캐릭터 크리에이터 양성", code:"IT-01", dateFrom:"2026-08-03", dateTo:"2026-09-30", period:"8~9월", method:"비대면", hours:108, tgt:20, cGoal:18, eGoal:12 },
-      { id:12, cat:"IT 신직무", cc:"#F97316", name:"미지정 공모과정 (IT-A)", code:"IT-02", dateFrom:"", dateTo:"", period:"-", method:"-", hours:0, tgt:20, cGoal:18, eGoal:12 },
-      { id:13, cat:"IT 신직무", cc:"#F97316", name:"미지정 공모과정 (IT-B)", code:"IT-03", dateFrom:"", dateTo:"", period:"-", method:"-", hours:0, tgt:15, cGoal:14, eGoal:9 },
-    ];
+const App = () => {
+  return (
+    <div className="App">
+      <h1>경기북부 직업교육 학사관리시스템</h1>
+      <Dashboard />
+      <CourseManagement />
+      <StudentManagement />
+      <AttendanceTracking />
+      <CertificateGeneration />
+    </div>
+  );
+};
 
-    const SEED_STUDENTS = [
-      { id:1, cid:4, name:"김민준", gender:"남", birth:"1992-04-15", phone:"010-1234-5678", addrCity:"의정부시", itvScore:88, itvGrade:"A", rate:94 },
-      { id:2, cid:4, name:"이서연", gender:"여", birth:"1997-07-22", phone:"010-2345-6789", addrCity:"양주시", itvScore:72, itvGrade:"B", rate:75 },
-      { id:3, cid:4, name:"박지훈", gender:"남", birth:"1990-01-30", phone:"010-3456-7890", addrCity:"포천시", itvScore:65, itvGrade:"C", rate:62 },
-      { id:4, cid:4, name:"최수아", gender:"여", birth:"1999-11-05", phone:"010-4567-8901", addrCity:"의정부시", itvScore:95, itvGrade:"A+", rate:97 },
-      { id:5, cid:4, name:"정우진", gender:"남", birth:"1995-08-14", phone:"010-5678-9012", addrCity:"남양주시", itvScore:83, itvGrade:"B+", rate:88 },
-      { id:6, cid:8, name:"강다은", gender:"여", birth:"1993-03-20", phone:"010-6789-0123", addrCity:"의정부시", itvScore:90, itvGrade:"A", rate:91 },
-      { id:7, cid:8, name:"윤서준", gender:"남", birth:"1996-12-08", phone:"010-7890-1234", addrCity:"동두천시", itvScore:70, itvGrade:"B", rate:78 },
-      { id:8, cid:1, name:"임지수", gender:"여", birth:"2000-06-17", phone:"010-8901-2345", addrCity:"양주시", itvScore:98, itvGrade:"A+", rate:100 },
-      { id:9, cid:1, name:"한예린", gender:"여", birth:"1988-09-11", phone:"010-9012-3456", addrCity:"의정부시", itvScore:87, itvGrade:"A", rate:83 },
-      { id:10, cid:10, name:"오민혁", gender:"남", birth:"1994-02-25", phone:"010-0123-4567", addrCity:"포천시", itvScore:60, itvGrade:"C", rate:55 },
-    ];
-
-    const Chip = (p) => <span style={{ background: p.bg||"#f1f5f9", color: p.color||"#64748B", fontSize: p.size||11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>{p.label}</span>;
-    const rateColor = (r) => r>=80?T.ok:r>=70?T.warn:T.danger;
-    const RBar = (p) => <div style={{ width:"100%", height:p.h||5, background:T.bd, borderRadius:p.h||5, overflow:"hidden" }}><div style={{ height:"100%", width:Math.min(p.r,100)+"%", background:rateColor(p.r), borderRadius:p.h||5 }}/></div>;
-    const Card = (p) => <div style={{ background:T.s, borderRadius:12, border:"1px solid "+T.bd, boxShadow:"0 1px 4px rgba(0,0,0,.05)", ...p.style }}>{p.children}</div>;
-    const Btn = (p) => <button onClick={p.onClick} style={{ border:"none", borderRadius:8, cursor:"pointer", fontWeight:700, padding:"8px 16px", fontSize:12, background:T.p, color:"#fff", display:"inline-flex", alignItems:"center", gap:6 }}>{p.children}</button>;
-    const Icon = (p) => <svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}></svg>;
-
-    const Dashboard = (p) => {
-      const totalTgt = p.courses.reduce((a,b)=>a+b.tgt,0);
-      const totalCG = p.courses.reduce((a,b)=>a+b.cGoal,0);
-      const avgRate = p.students.length?(p.students.reduce((a,b)=>a+b.rate,0)/p.students.length).toFixed(1):0;
-      return <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:20}}>대시보드</h2><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:20}}>{[{label:"총 모집 목표",val:totalTgt+"명",icon:"people",color:T.p},{label:"수료 목표",val:totalCG+"명",icon:"check",color:T.ok},{label:"현재 훈련생",val:p.students.length+"명",icon:"award",color:"#D97706"},{label:"평균 출석률",val:avgRate+"%",icon:"cal",color:T.info}].map((k,i)=><Card key={i} style={{padding:"18px 20px",display:"flex",gap:12,alignItems:"flex-start"}}><div style={{width:42,height:42,borderRadius:10,background:k.color+"15",color:k.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{k.icon}</div><div><div style={{fontSize:24,fontWeight:800,color:T.tx}}>{k.val}</div><div style={{fontSize:11,color:T.mu,marginTop:3}}>{k.label}</div></div></Card>)}</div></div>;
-    };
-
-    const CourseList = (p) => {
-      const [cat, setCat] = useState("전체");
-      const cats = ["전체", ...new Set(p.courses.map(c => c.cat))];
-      const list = cat === "전체" ? p.courses : p.courses.filter(c => c.cat === cat);
-      return <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:18}}>과정 현황</h2><div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>{cats.map(c => <button key={c} onClick={() => setCat(c)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:cat===c?T.p:T.s3,color:cat===c?"#fff":T.mu}}>{c}</button>)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>{list.map(c => <Card key={c.id} style={{padding:18,borderLeft:"4px solid "+c.cc}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><Chip label={c.cat} bg={c.cc+"15"} color={c.cc}/><Chip label={c.method||"-"} bg={T.s3} color={T.mu}/></div><div style={{fontSize:13,fontWeight:700,color:T.tx,marginBottom:8}}>{c.name}</div><div style={{fontSize:11,color:T.mu,marginBottom:10}}>{c.code}·{c.period||"기간미정"}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>{[{l:"모집",v:c.tgt},{l:"수료",v:c.cGoal},{l:"취업",v:c.eGoal}].map(x => <div key={x.l} style={{textAlign:"center",padding:"7px 4px",background:T.s2,borderRadius:6}}><div style={{fontSize:16,fontWeight:800,color:T.tx}}>{x.v}</div><div style={{fontSize:9,color:T.mu,marginTop:1}}>{x.l}</div></div>)}</div></Card>)}</div></div>;
-    };
-
-    const StudentMgmt = (p) => {
-      const [search, setSearch] = useState("");
-      const [cFilter, setCFilter] = useState(0);
-      const filtered = useMemo(() => p.students.filter(s => { if(cFilter && s.cid !== cFilter) return false; if(search && !s.name.includes(search)) return false; return true; }), [p.students, cFilter, search]);
-      return <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:14}}>훈련생 관리</h2><Card style={{padding:"12px 16px",marginBottom:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}><input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름 검색..." style={{padding:"7px 11px",border:"1px solid "+T.bd,borderRadius:8,fontSize:12,outline:"none",flex:1,minWidth:150}}/><select value={cFilter} onChange={e => setCFilter(+e.target.value)} style={{padding:"7px 10px",border:"1px solid "+T.bd,borderRadius:8,fontSize:12,outline:"none",background:T.s2}}><option value={0}>전체 과정</option>{p.courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><div style={{marginLeft:"auto",fontSize:12,color:T.mu}}>검색:{filtered.length}명</div></Card><Card style={{overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr style={{background:T.s2}}>{["이름","성별","생년월일","과정","출석률",""].map(h => <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:T.mu,fontWeight:700,borderBottom:"1px solid "+T.bd}}>{h}</th>)}</tr></thead><tbody>{filtered.map(s => { const c = p.courses.find(x => x.id === s.cid); return <tr key={s.id} className="row-hover" style={{borderBottom:"1px solid "+T.bd}}><td style={{padding:"11px 12px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:32,height:32,borderRadius:9,background:s.gender==="여"?"#FDF2F8":"#EFF6FF",color:s.gender==="여"?"#BE185D":"#1D4ED8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900}}>{s.name?.[0]}</div><div style={{fontSize:13,fontWeight:700,color:T.tx}}>{s.name}</div></div></td><td style={{padding:"11px 12px",fontSize:12,color:T.mu}}>{s.gender}</td><td style={{padding:"11px 12px",fontSize:12,color:T.mu}}>{s.birth}</td><td style={{padding:"11px 12px"}}><div style={{fontSize:11,fontWeight:600,color:T.tx}}>{c?c.name:"-"}</div><div style={{fontSize:10,color:T.mu}}>{c?c.code:"-"}</div></td><td style={{padding:"11px 12px",textAlign:"center"}}><div style={{fontSize:14,fontWeight:800,color:rateColor(s.rate)}}>{s.rate}%</div><RBar r={s.rate} h={4}/></td><td style={{padding:"11px 12px"}}></td></tr>; })}</tbody></table></Card></div>;
-    };
-
-    const InstructorMgmt = () => <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:18}}>강사 관리</h2><Card style={{padding:40,textAlign:"center",color:T.mu}}><p style={{fontSize:14,fontWeight:700,color:T.tx}}>강사 관리</p></Card></div>;
-    const RoomMgmt = () => <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:18}}>강의실 관리</h2><Card style={{padding:40,textAlign:"center",color:T.mu}}><p style={{fontSize:14,fontWeight:700,color:T.tx}}>강의실 관리</p></Card></div>;
-    const AttendanceMgmt = () => <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:18}}>출결 관리</h2><Card style={{padding:40,textAlign:"center",color:T.mu}}><p style={{fontSize:14,fontWeight:700,color:T.tx}}>출결 관리</p></Card></div>;
-    const CompletionMgmt = () => <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:18}}>수료 관리</h2><Card style={{padding:40,textAlign:"center",color:T.mu}}><p style={{fontSize:14,fontWeight:700,color:T.tx}}>수료 관리</p></Card></div>;
-    const CertMgmt = () => <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:18}}>증명서 발급</h2><Card style={{padding:40,textAlign:"center",color:T.mu}}><p style={{fontSize:14,fontWeight:700,color:T.tx}}>증명서 발급</p></Card></div>;
-    const AccountMgmt = () => <div className="page"><h2 style={{fontSize:20,fontWeight:800,color:T.tx,marginBottom:18}}>계정 관리</h2><Card style={{padding:40,textAlign:"center",color:T.mu}}><p style={{fontSize:14,fontWeight:700,color:T.tx}}>계정 관리</p></Card></div>;
-
-    const LoginScreen = (p) => {
-      const accounts = [{id:1,name:"관리자",pw:"admin1234"},{id:2,name:"김담당",pw:"gjf2026"},{id:3,name:"이담당",pw:"gjf2026"}];
-      const [selId, setSelId] = useState(1);
-      const [pw, setPw] = useState("");
-      const [error, setError] = useState("");
-      const handleLogin = () => {
-        const acc = accounts.find(a => a.id === selId);
-        if(!acc || acc.pw !== pw) { setError("비밀번호 오류"); setPw(""); return; }
-        p.onLogin(acc);
-      };
-      return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#7C2D12 0%,#EA580C 40%,#F97316 70%,#FED7AA 100%)",padding:20}}><div style={{width:"100%",maxWidth:440}}><div style={{textAlign:"center",marginBottom:28}}><div style={{fontSize:28,marginBottom:14}}>🎓</div><div style={{fontSize:18,fontWeight:900,color:"#fff"}}>경기북부 직업교육</div><div style={{fontSize:12,color:"rgba(255,255,255,.6)",marginTop:4}}>학사관리 v2026</div></div><div style={{background:"rgba(255,255,255,.96)",borderRadius:20,padding:"30px 32px",boxShadow:"0 24px 64px rgba(0,0,0,.25)"}}><div style={{fontSize:15,fontWeight:800,marginBottom:22,textAlign:"center"}}>🔐 로그인</div><div style={{marginBottom:14,display:"flex",flexWrap:"wrap",gap:6}}>{accounts.map(a => <button key={a.id} onClick={() => {setSelId(a.id);setError("");}} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:selId===a.id?T.p:T.s3,color:selId===a.id?"#fff":T.mu}}>{a.name}</button>)}</div><input type="password" value={pw} onChange={e => {setPw(e.target.value);setError("");}} onKeyDown={e => {if(e.key==="Enter")handleLogin();}} placeholder="비밀번호" style={{width:"100%",padding:"12px 16px",border:"1px solid"+T.bd,borderRadius:10,fontSize:12,outline:"none",marginBottom:8}}/>{error && <div style={{marginBottom:8,fontSize:11,color:T.danger,fontWeight:600}}>⚠️ {error}</div>}<button onClick={handleLogin} style={{width:"100%",padding:"13px 0",borderRadius:11,border:"none",background:"linear-gradient(135deg,"+T.sb+","+T.p+")",color:"#fff",cursor:"pointer",fontSize:14,fontWeight:800}}>로그인</button></div></div></div>;
-    };
-
-    const NAV_ITEMS = [{id:"dash",label:"대시보드"},{id:"courses",label:"과정 현황"},{id:"students",label:"훈련생 관리"},{id:"instructors",label:"강사 관리"},{id:"rooms",label:"강의실 관리"},{id:"attendance",label:"출결 관리"},{id:"completion",label:"수료 관리"},{id:"cert",label:"증명서 발급"},{id:"account",label:"계정 관리"}];
-
-    function App() {
-      const [currentUser, setCurrentUser] = useState(() => {try { const u = sessionStorage.getItem("gjf_user"); return u ? JSON.parse(u) : null; } catch { return null; }});
-      const [page, setPage] = useState("dash");
-      const [students] = useState(SEED_STUDENTS);
-      const [courses] = useState(COURSES);
-
-      if(!currentUser) return <LoginScreen onLogin={u => {sessionStorage.setItem("gjf_user",JSON.stringify(u));setCurrentUser(u);}}/>;
-
-      const renderPage = () => {
-        switch(page){
-          case"dash":return<Dashboard students={students} courses={courses}/>;
-          case"courses":return<CourseList courses={courses}/>;
-          case"students":return<StudentMgmt students={students} courses={courses}/>;
-          case"instructors":return<InstructorMgmt/>;
-          case"rooms":return<RoomMgmt/>;
-          case"attendance":return<AttendanceMgmt/>;
-          case"completion":return<CompletionMgmt/>;
-          case"cert":return<CertMgmt/>;
-          case"account":return<AccountMgmt/>;
-          default:return null;
-        }
-      };
-
-      return <div style={{display:"flex",height:"100vh",background:"linear-gradient(160deg,#FED7AA 0%,#FDBA74 12%,#FFF7ED 45%,#F1F5F9 75%,#FFEDD5 100%)"}}>
-        <div style={{width:240,flexShrink:0,background:"linear-gradient(180deg,"+T.sb+" 0%,"+T.p+" 100%)",display:"flex",flexDirection:"column",color:"#fff"}}>
-          <div style={{padding:"16px 18px",borderBottom:"1px solid rgba(255,255,255,.1)"}}><div style={{fontSize:13,fontWeight:900}}>경기북부 직업교육</div><div style={{fontSize:10,color:"rgba(255,255,255,.6)",marginTop:3}}>2026 학사관리</div></div>
-          <nav style={{flex:1,padding:"10px 0"}}>
-            {NAV_ITEMS.map(item => (
-              <button key={item.id} onClick={() => setPage(item.id)} style={{width:"100%",padding:"11px 16px",border:"none",background:page===item.id?"rgba(255,255,255,.2)":"transparent",cursor:"pointer",color:page===item.id?"#fff":"rgba(255,255,255,.6)",fontSize:12,fontWeight:600,textAlign:"left"}}>
-                {item.label}
-              </button>
-            ))}
-          </nav>
-          <div style={{padding:"13px 18px",borderTop:"1px solid rgba(255,255,255,.1)"}}><button onClick={() => {if(window.confirm("로그아웃?")) {sessionStorage.removeItem("gjf_user"); setCurrentUser(null);}}} style={{width:"100%",padding:"6px 0",border:"none",background:"rgba(255,255,255,.1)",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600,borderRadius:8}}>로그아웃</button></div>
-        </div>
-
-        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-          <div style={{height:52,background:"rgba(255,255,255,.9)",borderBottom:"1px solid"+T.bd,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 22px"}}>
-            <div style={{fontSize:12,color:T.mu}}><span style={{color:T.p,fontWeight:700}}>경기도일자리재단</span> · 직업교육 학사관리 v2026</div>
-            <div style={{display:"flex",alignItems:"center",gap:7,padding:"5px 10px",background:T.pbg,borderRadius:8}}><div style={{width:24,height:24,borderRadius:6,background:T.p,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff"}}>👤</div><span style={{fontSize:11,fontWeight:700,color:T.p}}>{currentUser.name}</span></div>
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:22}}>{renderPage()}</div>
-        </div>
-      </div>;
-    }
-
-    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-
-    (function hideSplash(){let attempts=0;const timer=setInterval(function(){attempts++;if(document.getElementById('root').children.length>0||attempts>60){clearInterval(timer);const l=document.getElementById('loading');if(l){l.style.opacity='0';setTimeout(function(){if(l.parentNode)l.parentNode.removeChild(l);},400);}}},200);})();
-  </script>
-</body>
-</html>
+export default App;

@@ -139,7 +139,7 @@ const sbStorageUpload = async (bucket, path, file) => {
 
 /* ── DB 컬럼(snake_case) ↔ 앱(camelCase) 변환 ── */
 const toStudent = r => r ? ({
-  id: r.id, cid: r.cid, name: r.name, gender: r.gender||"",
+  id: Number(r.id), cid: Number(r.cid), name: r.name, gender: r.gender||"",
   birth: r.birth||"", idBack: r.id_back||"", phone: r.phone||"",
   phone2: r.phone2||"", addrCity: r.addr_city||"", addrDetail: r.addr_detail||"",
   edu: r.edu||"", major: r.major||"", career: r.career||"", cert: r.cert||"",
@@ -279,6 +279,11 @@ const GStyle = () => (
     @keyframes shake    { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
     @keyframes tabSlide { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
     .page { animation: fadeUp .3s ease both; }
+    @keyframes shimmer  { 0%{background-position:200% center} 100%{background-position:-200% center} }
+    @keyframes heroGlow { 0%,100%{box-shadow:0 8px 32px rgba(234,88,12,.30)} 50%{box-shadow:0 12px 48px rgba(234,88,12,.50)} }
+    .kpi-card { transition: transform .2s ease, box-shadow .2s ease !important; cursor:default; }
+    .kpi-card:hover { transform:translateY(-4px) scale(1.015) !important; box-shadow:0 14px 36px rgba(234,88,12,.20) !important; }
+    .dash-hero { animation: fadeUp .45s ease both; }
     .row-hover:hover { background:#fff7ed !important; }
     .btn-nav { transition: all .15s; }
     .btn-nav:hover { background: rgba(255,255,255,.15) !important; }
@@ -637,7 +642,7 @@ const Icon = ({ n, s=16 }) => {
 
 const SectionHead = ({ title, sub, right }) => (
   <div className="section-head-wrap" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:20 }}>
-    <div>
+    <div style={{ borderLeft:`4px solid ${T.p}`, paddingLeft:12, borderRadius:1 }}>
       <h2 style={{ fontSize:20, fontWeight:800, color:T.tx, letterSpacing:"-.3px" }}>{title}</h2>
       {sub && <p style={{ fontSize:12, color:T.mu, marginTop:3 }}>{sub}</p>}
     </div>
@@ -729,6 +734,31 @@ const Dashboard = ({ students, courses }) => {
 
   return (
     <div className="page">
+      {/* ─── 히어로 배너 ─── */}
+      <div className="dash-hero" style={{
+        background:"linear-gradient(135deg,#7C2D12 0%,#9A3412 25%,#EA580C 60%,#F97316 100%)",
+        borderRadius:18, padding:"22px 28px", marginBottom:20, position:"relative",
+        overflow:"hidden", color:"#fff",
+        boxShadow:"0 8px 32px rgba(234,88,12,.35)",
+        animation:"heroGlow 4s ease-in-out infinite" }}>
+        {/* 장식 원 */}
+        <div style={{ position:"absolute",top:-40,right:-40,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,.07)",pointerEvents:"none" }}/>
+        <div style={{ position:"absolute",bottom:-50,right:100,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.05)",pointerEvents:"none" }}/>
+        <div style={{ position:"absolute",top:10,right:200,width:60,height:60,borderRadius:"50%",background:"rgba(255,255,255,.06)",pointerEvents:"none" }}/>
+        <div style={{ position:"relative" }}>
+          <div style={{ fontSize:10,fontWeight:700,letterSpacing:2.5,opacity:.7,marginBottom:5,textTransform:"uppercase" }}>
+            경기도일자리재단 경기북부 인력개발원
+          </div>
+          <div style={{ fontSize:22,fontWeight:900,letterSpacing:"-.5px" }}>학사관리 현황판</div>
+          <div style={{ display:"flex",gap:16,marginTop:8,flexWrap:"wrap" }}>
+            <span style={{ fontSize:11,opacity:.8 }}>📅 {todayStr} 기준</span>
+            <span style={{ fontSize:11,opacity:.8 }}>📚 {courses.length}개 과정 운영</span>
+            <span style={{ fontSize:11,opacity:.8 }}>👥 훈련생 {students.length}명</span>
+            {activeCnt > 0 && <span style={{ fontSize:11,background:"rgba(255,255,255,.2)",borderRadius:20,padding:"1px 10px",fontWeight:700 }}>이번달 {activeCnt}개 진행중</span>}
+          </div>
+        </div>
+      </div>
+
       {/* KPIs */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:12, marginBottom:20 }}>
         {[
@@ -738,17 +768,23 @@ const Dashboard = ({ students, courses }) => {
           { label:"현재 위험 훈련생", val:`${atRisk.length}명`, sub:"출석률 80% 미만", icon:"alert", color:T.danger },
           { label:"평균 출석률", val:`${avgRate}%`, sub:"전체 훈련생", icon:"cal", color:T.info },
         ].map((k,i) => (
-          <Card key={i} style={{ padding:"18px 20px", display:"flex", gap:12, alignItems:"flex-start" }}>
-            <div style={{ width:42, height:42, borderRadius:10, background:`${k.color}15`, color:k.color,
-              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              <Icon n={k.icon} s={20}/>
+          <div key={i} className="kpi-card" style={{
+            background:T.s, borderRadius:14, border:`1.5px solid ${k.color}20`,
+            boxShadow:`0 2px 12px ${k.color}12,0 1px 3px rgba(0,0,0,.04)`,
+            padding:"20px 22px", display:"flex", gap:14, alignItems:"flex-start",
+            backgroundImage:`linear-gradient(145deg,#fff 0%,${k.color}08 100%)` }}>
+            <div style={{ width:46,height:46,borderRadius:13,
+              background:`linear-gradient(135deg,${k.color}28,${k.color}15)`,color:k.color,
+              display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+              boxShadow:`0 4px 12px ${k.color}22` }}>
+              <Icon n={k.icon} s={22}/>
             </div>
             <div>
-              <div style={{ fontSize:24, fontWeight:800, color:T.tx, lineHeight:1 }}>{k.val}</div>
-              <div style={{ fontSize:11, color:T.mu, marginTop:3 }}>{k.label}</div>
-              {k.sub && <div style={{ fontSize:10, color:k.color, marginTop:1, fontWeight:600 }}>{k.sub}</div>}
+              <div style={{ fontSize:26,fontWeight:900,color:T.tx,lineHeight:1 }}>{k.val}</div>
+              <div style={{ fontSize:11,color:T.mu,marginTop:4 }}>{k.label}</div>
+              {k.sub && <div style={{ fontSize:10,color:k.color,marginTop:2,fontWeight:700 }}>{k.sub}</div>}
             </div>
-          </Card>
+          </div>
         ))}
       </div>
 
@@ -5325,6 +5361,7 @@ const NAV_ITEMS = [
 const MobileCheckin = () => {
   const params   = new URLSearchParams(window.location.search);
   const cidParam = params.get("cid");
+  const cidNum   = Number(cidParam); // URL 파라미터를 숫자로 변환 (DB id 비교용)
   const date     = params.get("date") || new Date().toISOString().slice(0,10);
   const type     = params.get("type") || "in"; // "in" | "out"
   const token    = params.get("t");
@@ -5353,8 +5390,8 @@ const MobileCheckin = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        // 과정 정보 로드
-        const { data: cData, error: cErr } = await sbGet("courses", `select=*&id=eq.${cidParam}`);
+        // 과정 정보 로드 (cidNum으로 숫자 비교)
+        const { data: cData, error: cErr } = await sbGet("courses", `select=*&id=eq.${cidNum}`);
         if (cErr || !cData || cData.length === 0) { setStatus("error"); setErrMsg("과정을 찾을 수 없습니다."); return; }
         const c = toCourse(cData[0]);
 
@@ -5362,10 +5399,12 @@ const MobileCheckin = () => {
         const expectedToken = `${c.code}-${date}-${type.toUpperCase()}-${QR_TOKEN_SUFFIX}`;
         if (token) {
           let decodedToken = token;
-          try { decodedToken = decodeURIComponent(token); } catch (_) { /* 잘못된 인코딩은 원본 사용 */ }
+          try { decodedToken = decodeURIComponent(token); } catch (_e) { /* 잘못된 인코딩: 원본 토큰 사용 */ }
           if (decodedToken.trim() !== expectedToken.trim()) {
+            // 인코딩 차이나 공백으로 인한 불일치는 경고만 출력 (차단하지 않음)
+            // 운영 전환 시 아래 두 줄의 주석을 해제하여 엄격 검증으로 복원 가능:
+            // setStatus("expired"); return;
             console.warn("QR 토큰 불일치 (경고만):", decodedToken, "vs", expectedToken);
-            // setStatus("expired"); return; // 토큰 불일치 시 차단하지 않고 경고만 남김
           }
         }
 
@@ -5387,7 +5426,7 @@ const MobileCheckin = () => {
         setStatus("error"); setErrMsg(e.message || "오류가 발생했습니다.");
       }
     };
-    if (cidParam) init();
+    if (cidNum) init();
     else { setStatus("error"); setErrMsg("올바르지 않은 QR 코드입니다."); }
   }, []);
 

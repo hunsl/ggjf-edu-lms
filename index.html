@@ -333,6 +333,22 @@ const buildCourseDates = (course) => {
   return dates.length ? dates : [today.toISOString().slice(0, 10)];
 };
 
+// 과정명 한글 요약 (드롭다운 등에서 간결하게 표시)
+const shortCourseName = (name = "", maxLen = 13) => {
+  if (!name) return "";
+  // 기수 정보 추출 (1기, 2기 등)
+  const kiMatch = name.match(/\((\d+기)\)/);
+  const ki = kiMatch ? ` (${kiMatch[1]})` : "";
+  // 불필요한 단어 제거
+  let short = name
+    .replace(/\([^)]*\)/g, "")                    // 괄호 내용 제거
+    .replace(/전문강사 양성|강사 양성|양성과정|양성|실무자|교육|과정/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (short.length > maxLen) short = short.slice(0, maxLen) + "…";
+  return short + ki;
+};
+
 /* ═══════════════════════════════════════════════════════════
    TINY COMPONENTS
 ═══════════════════════════════════════════════════════════ */
@@ -1098,7 +1114,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
       if (existing) {
         toUpdate.push({ ...existing, ...base });
       } else {
-        toAdd.push({ id: Date.now()+i, ...base, rate: 0 });
+        toAdd.push({ ...base, rate: 0 }); // ID는 DB 자동 생성
       }
     });
     if (toAdd.length > 0) onAdd(toAdd);
@@ -1211,7 +1227,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                           ))}
                           <td style={{ padding:"10px 14px" }}>
                             {c
-                              ? <Chip label={c.name.length>14?c.name.slice(0,14)+"…":c.name} bg={`${c.cc}12`} color={c.cc}/>
+                              ? <Chip label={shortCourseName(c.name)} bg={`${c.cc}12`} color={c.cc}/>
                               : <Chip label="과정코드 오류" bg="#FEF2F2" color={T.danger}/>
                             }
                           </td>
@@ -1242,7 +1258,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
               padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
               fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer" }}>
               <option value={0}>전체 과정</option>
-              {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
             </select>
             <button onClick={()=>setRisk(!riskOnly)} style={{
               display:"flex", alignItems:"center", gap:5, padding:"7px 13px",
@@ -1541,64 +1557,83 @@ const AttendanceMgmt = ({ students, courses }) => {
     loadAttendance();
   }, [course, date]);
 
-  // ── 실시간 출결 업데이트 구독 ──
+  // ── 실시간 출결 업데이트 구독 (안정화 버전) ──
   useEffect(() => {
     if (!course || !date) return;
 
     let intentionallyClosed = false;
-    let heartbeatId = null;
-    let currentWs = null;
+    let heartbeatId         = null;
+    let currentWs           = null;
+    let retryDelay          = 2000;
+    let refCount            = 0;
     const channel = `realtime:public:attendance`;
+    const joinRef = String(++refCount);
+    let   subIds  = [];
+
+    const send = (obj) => {
+      if (currentWs?.readyState === WebSocket.OPEN) currentWs.send(JSON.stringify(obj));
+    };
 
     const connect = () => {
       if (intentionallyClosed) return;
 
       const ws = new WebSocket(
-        `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+        `wss://${SB_URL.replace("https://","")}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
       );
       currentWs = ws;
 
       ws.onopen = () => {
-        console.log(`🔔 출결 실시간 구독 시작 (${date})`);
-        ws.send(JSON.stringify({
-          topic: channel,
-          event: "phx_join",
-          payload: {
+        retryDelay = 2000;
+        console.log(`🔔 [출결 Realtime] ${date} 구독 시작`);
+        send({
+          topic:    channel,
+          event:    "phx_join",
+          payload:  {
             config: {
+              broadcast:        { self: false },
+              presence:         { key: "" },
               postgres_changes: [{
-                event: "*",
+                event:  "*",
                 schema: "public",
-                table: "attendance",
+                table:  "attendance",
                 filter: `date=eq.${date}`
               }]
             },
             access_token: SB_KEY
           },
-          ref: Date.now().toString()
-        }));
+          ref:      joinRef,
+          join_ref: joinRef
+        });
 
         heartbeatId = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              topic: "phoenix",
-              event: "heartbeat",
-              payload: {},
-              ref: Date.now().toString()
-            }));
-          } else {
-            clearInterval(heartbeatId);
-            heartbeatId = null;
-          }
-        }, 30000);
+          send({ topic: "phoenix", event: "heartbeat", payload: {}, ref: String(++refCount) });
+        }, 25000);
       };
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+
+          // phx_reply 확인
+          if (msg.event === "phx_reply" && msg.ref === joinRef) {
+            if (msg.payload?.status === "ok") {
+              subIds = (msg.payload.response?.postgres_changes || []).map(c => c.id);
+              console.log(`✅ [출결 Realtime] 구독 확인 (${date}) IDs:`, subIds);
+            } else {
+              console.error(`❌ [출결 Realtime] 구독 실패:`, msg.payload?.response);
+            }
+            return;
+          }
+
+          // CDC 이벤트
           if (msg.event === "postgres_changes" && msg.payload?.data) {
-            // Supabase Realtime v2: type/record/old_record
+            const ids = msg.payload.ids || [];
+            if (subIds.length > 0 && !ids.some(id => subIds.includes(id))) return;
+
             const { type: eventType, record: newRecord } = msg.payload.data;
             if (eventType === "INSERT" || eventType === "UPDATE") {
+              // 현재 날짜 필터 (서버 필터와 함께 클라이언트 이중 확인)
+              if (newRecord?.date !== date) return;
               const [h, m] = (newRecord?.time || "00:00").split(":").map(Number);
               const mins = h * 60 + m;
               setRecords(prev => ({
@@ -1610,21 +1645,22 @@ const AttendanceMgmt = ({ students, courses }) => {
                     : { time: newRecord.time }
                 }
               }));
-              console.log(`🔔 실시간 출결: ${newRecord.type} - 학생 ID ${newRecord.student_id}`);
+              console.log(`📌 [출결 Realtime] ${newRecord.type} ← 학생 ID ${newRecord.student_id}`);
             }
           }
         } catch (err) {
-          console.error("실시간 메시지 파싱 오류:", err);
+          console.error("[출결 Realtime] 메시지 파싱 오류:", err);
         }
       };
 
-      ws.onerror = (err) => console.error("❌ 출결 구독 오류:", err);
-      ws.onclose = () => {
+      ws.onerror = () => console.warn("⚠️ [출결 Realtime] 소켓 오류");
+      ws.onclose = (ev) => {
         clearInterval(heartbeatId);
         heartbeatId = null;
         if (!intentionallyClosed) {
-          console.warn("🔌 출결 구독 종료 - 5초 후 재연결");
-          setTimeout(connect, 5000);
+          console.warn(`🔌 [출결 Realtime] 연결 끊김 (code:${ev.code}) — ${retryDelay/1000}초 후 재연결`);
+          setTimeout(connect, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 30000);
         }
       };
     };
@@ -1803,7 +1839,7 @@ const AttendanceMgmt = ({ students, courses }) => {
           <select value={course.id} onChange={e=>handleCourseChange(courses.find(c=>c.id===+e.target.value)||courses[0])}
             style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
               fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
           </select>
         </div>
         <div>
@@ -2125,7 +2161,7 @@ const CompletionMgmt = ({ students, courses }) => {
             fontSize:11, fontWeight:600, whiteSpace:"nowrap",
             background: course.id===c.id ? c.cc : T.s3,
             color: course.id===c.id ? "#fff" : T.mu }}>
-            {c.name.length>14?c.name.slice(0,14)+"…":c.name}
+            {shortCourseName(c.name)}
           </button>
         ))}
       </div>
@@ -2504,7 +2540,7 @@ const CertMgmt = ({ students, courses }) => {
             fontSize:11, fontWeight:600, whiteSpace:"nowrap",
             background: course.id===c.id ? c.cc : T.s3,
             color: course.id===c.id ? "#fff" : T.mu }}>
-            {c.name.length>14 ? c.name.slice(0,14)+"…" : c.name}
+            {shortCourseName(c.name)}
           </button>
         ))}
       </div>
@@ -3175,8 +3211,7 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => 
           <FLD label="과정">
             <select value={form.courseId} onChange={e=>{ const c=courses.find(x=>x.id===+e.target.value); set("courseId",+e.target.value); set("label",c?.name||""); }}
               style={{...inp,cursor:"pointer"}}>
-              {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-              <option value={0}>직접 입력</option>
+              {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
             </select>
           </FLD>
           <FLD label="표시 이름">
@@ -4691,82 +4726,109 @@ const MobileCheckin = () => {
 
 class RealtimeManager {
   constructor() {
-    this.subscriptions = new Map(); // table -> { ws, intentionallyClosed }
+    this.subscriptions = new Map(); // table -> state object
+    this._refCount = 0;
   }
+
+  _nextRef() { return String(++this._refCount); }
 
   subscribe(table, callbacks = {}) {
     if (this.subscriptions.has(table)) return;
 
     const { onInsert, onUpdate, onDelete } = callbacks;
     const channel = `realtime:public:${table}`;
-    const state = { intentionallyClosed: false, heartbeatId: null, ws: null };
+    const joinRef  = this._nextRef();
+    const state = {
+      intentionallyClosed: false,
+      heartbeatId:         null,
+      ws:                  null,
+      retryDelay:          2000,   // 지수 backoff 초기값
+      subIds:              [],     // phx_reply에서 받은 subscription IDs
+    };
     this.subscriptions.set(table, state);
+
+    const send = (obj) => {
+      if (state.ws?.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify(obj));
+      }
+    };
 
     const connect = () => {
       if (state.intentionallyClosed) return;
 
       const ws = new WebSocket(
-        `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+        `wss://${SB_URL.replace("https://","")}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
       );
       state.ws = ws;
 
       ws.onopen = () => {
-        console.log(`✅ ${table} 실시간 구독 시작`);
-        ws.send(JSON.stringify({
-          topic: channel,
-          event: "phx_join",
-          payload: {
+        state.retryDelay = 2000; // 성공 시 backoff 리셋
+        console.log(`✅ [Realtime] ${table} 연결됨`);
+
+        // phx_join
+        send({
+          topic:    channel,
+          event:    "phx_join",
+          payload:  {
             config: {
-              postgres_changes: [{
-                event: "*",
-                schema: "public",
-                table: table
-              }]
+              broadcast:        { self: false },
+              presence:         { key: "" },
+              postgres_changes: [{ event: "*", schema: "public", table }]
             },
             access_token: SB_KEY
           },
-          ref: Date.now().toString()
-        }));
+          ref:      joinRef,
+          join_ref: joinRef
+        });
 
+        // Heartbeat 30초마다
         state.heartbeatId = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              topic: "phoenix",
-              event: "heartbeat",
-              payload: {},
-              ref: Date.now().toString()
-            }));
-          } else {
-            clearInterval(state.heartbeatId);
-            state.heartbeatId = null;
-          }
-        }, 30000);
+          send({ topic: "phoenix", event: "heartbeat", payload: {}, ref: this._nextRef() });
+        }, 25000);
       };
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+
+          // phx_reply — join 확인 및 subscription ID 저장
+          if (msg.event === "phx_reply" && msg.ref === joinRef) {
+            if (msg.payload?.status === "ok") {
+              state.subIds = (msg.payload.response?.postgres_changes || []).map(c => c.id);
+              console.log(`🔔 [Realtime] ${table} 구독 확인 IDs:`, state.subIds);
+            } else {
+              console.error(`❌ [Realtime] ${table} 구독 실패:`, msg.payload?.response);
+            }
+            return;
+          }
+
+          // postgres_changes CDC 이벤트
           if (msg.event === "postgres_changes" && msg.payload?.data) {
-            // Supabase Realtime v2: type/record/old_record
+            // IDs 필터: subIds가 비어있으면 모두 통과 (폴백)
+            const ids = msg.payload.ids || [];
+            if (state.subIds.length > 0 && !ids.some(id => state.subIds.includes(id))) return;
+
             const { type: eventType, record: newRecord, old_record: oldRecord } = msg.payload.data;
-            switch(eventType) {
-              case "INSERT": onInsert?.(newRecord); break;
+            switch (eventType) {
+              case "INSERT": onInsert?.(newRecord);            break;
               case "UPDATE": onUpdate?.(newRecord, oldRecord); break;
-              case "DELETE": onDelete?.(oldRecord); break;
+              case "DELETE": onDelete?.(oldRecord);            break;
             }
           }
         } catch (err) {
-          console.error(`${table} 메시지 파싱 오류:`, err);
+          console.error(`[Realtime] ${table} 파싱 오류:`, err);
         }
       };
 
-      ws.onerror = (err) => console.error(`❌ ${table} 구독 오류:`, err);
-      ws.onclose = () => {
+      ws.onerror = () => console.warn(`⚠️ [Realtime] ${table} 소켓 오류`);
+
+      ws.onclose = (ev) => {
         clearInterval(state.heartbeatId);
         state.heartbeatId = null;
         if (!state.intentionallyClosed) {
-          console.warn(`🔌 ${table} 구독 종료 - 5초 후 재연결`);
-          setTimeout(connect, 5000);
+          console.warn(`🔌 [Realtime] ${table} 연결 끊김 (code:${ev.code}) — ${state.retryDelay/1000}초 후 재연결`);
+          setTimeout(connect, state.retryDelay);
+          state.retryDelay = Math.min(state.retryDelay * 2, 30000); // 최대 30초
         }
       };
     };

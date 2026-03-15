@@ -23,9 +23,9 @@ const { useState, useMemo, useEffect, useRef, useCallback } = React;
 // XLSX is loaded via CDN script tag in index.html
 
 
-/* ══════════════════════════════════════════════════════════
+/* ==========================================================
    Supabase REST API — fetch 직접 호출 (라이브러리 불필요)
-══════════════════════════════════════════════════════════ */
+========================================================== */
 const SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";
 const API   = `${SB_URL}/rest/v1`;
@@ -141,9 +141,9 @@ const fromAccount = a => ({
   pw: a.pw||"",
 });
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    GLOBAL STYLES
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const GStyle = () => (
   <style>{`
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -161,6 +161,7 @@ const GStyle = () => (
     @keyframes checkIn  { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
     @keyframes loginBg  { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
     @keyframes shake    { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+    @keyframes tabSlide { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
     .page { animation: fadeUp .3s ease both; }
     .row-hover:hover { background:#fff7ed !important; }
     .btn-nav { transition: all .15s; }
@@ -170,13 +171,16 @@ const GStyle = () => (
     .course-card { transition: all .2s; }
     .course-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(234,88,12,.15) !important; }
     .checkin-row { animation: checkIn .4s ease both; }
+    .tab-pill { transition: color .2s cubic-bezier(.4,0,.2,1), background .2s cubic-bezier(.4,0,.2,1), box-shadow .2s cubic-bezier(.4,0,.2,1); position:relative; }
+    .tab-pill:hover:not(.tab-pill-active) { color:#EA580C !important; background:rgba(234,88,12,.07) !important; }
+    .tab-pill-active { animation: tabSlide .2s ease both; }
   `}</style>
 );
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    QR CODE (로컬 생성 — api.qrserver.com 대신 qrcode-generator CDN 사용)
    Tracking Prevention 오류를 방지하기 위해 canvas에 직접 렌더링
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const QRCanvas = ({ data, size = 200, color = "#000000", bgColor = "#ffffff", style = {} }) => {
   const canvasRef = useRef(null);
   const [libMissing, setLibMissing] = useState(false);
@@ -224,7 +228,7 @@ const QRCanvas = ({ data, size = 200, color = "#000000", bgColor = "#ffffff", st
   );
   return <canvas ref={canvasRef} style={{ display:"block", borderRadius:8, ...style }} />;
 };
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const T = {
   p: "#EA580C", pm: "#F97316", pl: "#FB923C", pbg: "#FFF7ED",
   sb: "#7C2D12",
@@ -233,9 +237,9 @@ const T = {
   bd: "#E2E8F0", tx: "#1E293B", mu: "#64748B",
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    DATA
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const COURSES = [
   { id:1,  cat:"늘봄강사양성",  cc:"#EA580C", name:"초등 피지컬 코딩강사 양성",      code:"NB-01", dateFrom:"2026-06-01", dateTo:"2026-07-31", period:"6~7월",  method:"블렌디드", hours:92,  tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 목", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:2,  cat:"늘봄강사양성",  cc:"#EA580C", name:"AI 딥러닝 전문강사 양성",         code:"NB-02", dateFrom:"2026-06-01", dateTo:"2026-08-31", period:"6~8월",  method:"블렌디드", hours:104, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
@@ -349,9 +353,9 @@ const shortCourseName = (name = "", maxLen = 13) => {
   return short + ki;
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    TINY COMPONENTS
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const Chip = ({ label, bg, color, size=11 }) => (
   <span style={{ background:bg, color, fontSize:size, fontWeight:700,
     padding:"2px 8px", borderRadius:20, whiteSpace:"nowrap", letterSpacing:".2px" }}>
@@ -432,9 +436,9 @@ const SectionHead = ({ title, sub, right }) => (
   </div>
 );
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    EXCEL UTILITIES
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const TEMPLATE_HEADERS = [
   "이름","성별","생년월일","주민번호뒷자리",
   "연락처","거주시",
@@ -479,9 +483,9 @@ const downloadTemplate = (courses) => {
   a.click();
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    DASHBOARD
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const Dashboard = ({ students, courses }) => {
   const totalTgt = courses.reduce((a,b)=>a+b.tgt,0);
   const totalCG  = courses.reduce((a,b)=>a+b.cGoal,0);
@@ -601,12 +605,12 @@ const Dashboard = ({ students, courses }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    COURSES
-═══════════════════════════════════════════════════════════ */
-/* ═══════════════════════════════════════════════════════════
+=========================================================== */
+/* ===========================================================
    COURSE EDIT MODAL
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const CAT_COLORS = {
   "늘봄강사양성":"#EA580C","지역연계·기여":"#C2410C",
   "사무분야":"#9A3412","식품분야":"#DC2626","IT 신직무":"#F97316",
@@ -903,9 +907,9 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    COURSE LIST  ★ 과정 추가 / 수정 / 삭제
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
   const [cat, setCat]         = useState("전체");
   const [editCourse, setEdit] = useState(null);   // null = 닫힘, {} = 신규, {id...} = 수정
@@ -1044,9 +1048,9 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    STUDENT MANAGEMENT  ★ Excel Upload / Download
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew }) => {
   const [search, setSearch] = useState("");
   const [cFilter, setCFilter] = useState(0);
@@ -1452,9 +1456,9 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    QR ATTENDANCE  ★ QR 출석 체크
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const AttendanceMgmt = ({ students, courses }) => {
   const initCourse = courses[3] || courses[0];
   const initDates  = buildCourseDates(initCourse);
@@ -2138,9 +2142,9 @@ const AttendanceMgmt = ({ students, courses }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    COMPLETION
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const CompletionMgmt = ({ students, courses }) => {
   const [course, setCourse] = useState(courses[3] || courses[0]);
   const [threshold, setThr] = useState(80);
@@ -2252,9 +2256,9 @@ const CompletionMgmt = ({ students, courses }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    CERTIFICATE  ★ 공식 수료증 양식
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 
 // 수료증 HTML 생성 함수 — 새 창에서 인쇄/PDF 저장
 /* ── 공통 인쇄 스타일 ── */
@@ -2654,9 +2658,9 @@ const CertMgmt = ({ students, courses }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    EDIT MODAL  ★ 면접 등록카드 (탭 구성)
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const FLD = ({ label, required, children }) => (
   <div>
     <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
@@ -2892,9 +2896,9 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    ③ INSTRUCTOR MANAGEMENT  강사관리
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const SEED_INSTRUCTORS = [
   { id:1, name:"김민준", type:"주강사", subject:"코딩·AI", phone:"010-1111-2222", email:"kim@gjf.or.kr",
     career:"5년", cert:"직업훈련교사 2급", cids:[1,2], note:"초등 코딩 전문" },
@@ -3131,9 +3135,9 @@ const InstructorMgmt = ({ courses }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    ④ ROOM MANAGEMENT  강의실관리  (월간 캘린더)
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const SEED_ROOMS = [
   { id:1, name:"101호 강의실", addr:"의정부시 청사로 1", capacity:25, equip:"빔프로젝터·PC 25대·화이트보드" },
   { id:2, name:"세미나실 A",   addr:"의정부시 청사로 1", capacity:15, equip:"TV·노트북 연결" },
@@ -3619,6 +3623,9 @@ const RoomMgmt = ({ courses }) => {
 };
 
 
+/* shared style for active pill tab */
+const TAB_PILL_SHADOW = `0 1px 6px rgba(0,0,0,.10),0 0 0 1px rgba(234,88,12,.18)`;
+
 const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) => {
   const [tab,      setTab]      = useState("status");   // "status" | "course" | "backup"
   const [selCid,   setSelCid]   = useState(courses[0]?.id || 0);
@@ -3690,16 +3697,11 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
     a.click();
   };
 
-  const TAB_BTN = (id, label) => (
-    <button key={id} onClick={()=>setTab(id)} style={{
-      flex:1, padding:"10px 0", border:"none", cursor:"pointer", fontWeight:700, fontSize:12,
-      fontFamily:"inherit",
-      background: tab===id ? T.s : "transparent",
-      color: tab===id ? T.p : T.mu,
-      borderBottom: tab===id ? `2px solid ${T.p}` : "2px solid transparent",
-      transition:"all .15s",
-    }}>{label}</button>
-  );
+  const TAB_ITEMS_DM = [
+    { id:"status", icon:"📊", label:"현황" },
+    { id:"course", icon:"📂", label:"과정별 관리" },
+    { id:"backup", icon:"💾", label:"백업 · 초기화" },
+  ];
 
   const selCourse = courses.find(c=>c.id===selCid);
   const selStudents = students.filter(s=>s.cid===selCid);
@@ -3729,17 +3731,37 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
           </button>
         </div>
 
-        {/* 탭 */}
-        <div style={{ display:"flex", background:T.s2, borderBottom:`1px solid ${T.bd}`, flexShrink:0 }}>
-          {TAB_BTN("status", "📊 현황")}
-          {TAB_BTN("course", "📂 과정별 관리")}
-          {TAB_BTN("backup", "💾 백업 · 초기화")}
+        {/* 탭 — pill segmented control */}
+        <div style={{ padding:"12px 16px 0", background:T.s2, borderBottom:`1px solid ${T.bd}`, flexShrink:0 }}>
+          <div style={{ display:"flex", gap:2, background:T.s3, borderRadius:12, padding:4 }}>
+          {TAB_ITEMS_DM.map(t => {
+            const active = tab===t.id;
+            return (
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                aria-current={active ? "page" : undefined}
+                className={`tab-pill${active?" tab-pill-active":""}`}
+                style={{
+                  flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+                  padding:"8px 10px", border:"none", cursor:"pointer", fontFamily:"inherit",
+                  fontWeight:700, fontSize:12, borderRadius:9,
+                  background: active ? T.s : "transparent",
+                  color: active ? T.p : T.mu,
+                  boxShadow: active ? TAB_PILL_SHADOW : "none",
+                }}>
+                <span style={{ fontSize:14 }} aria-hidden="true">{t.icon}</span>
+                <span>{t.label}</span>
+                {active && <span aria-hidden="true" style={{ width:5, height:5, borderRadius:"50%",
+                  background:T.p, flexShrink:0, marginLeft:2 }}/>}
+              </button>
+            );
+          })}
+          </div>
         </div>
 
         {/* 콘텐츠 */}
         <div style={{ flex:1, overflowY:"auto", padding:"18px 22px" }}>
 
-          {/* ══ 탭1: 현황 ══ */}
+          {/* == 탭1: 현황 == */}
           {tab==="status" && (
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {/* 전체 요약 */}
@@ -3807,7 +3829,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
             </div>
           )}
 
-          {/* ══ 탭2: 과정별 관리 ══ */}
+          {/* == 탭2: 과정별 관리 == */}
           {tab==="course" && (
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
               {/* 과정 선택 */}
@@ -3938,7 +3960,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
             </div>
           )}
 
-          {/* ══ 탭3: 백업·초기화 ══ */}
+          {/* == 탭3: 백업·초기화 == */}
           {tab==="backup" && (
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
 
@@ -4020,9 +4042,9 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    🔐 LOGIN SCREEN  담당자 로그인
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 // 초기 계정 (역할: admin=관리자, staff=담당자)
 // ※ 실제 운영 시 백엔드 인증으로 교체 필요
 const INIT_ACCOUNTS = [
@@ -4203,9 +4225,9 @@ const LoginScreen = ({ onLogin, accounts }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    👤 ACCOUNT MANAGEMENT  계정 관리 (관리자 전용)
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const AccountMgmt = ({ accounts, onSave, onClose, currentUser, auditLog = [] }) => {
   const [list,    setList]    = useState(accounts.map(a=>({...a})));
   const [editIdx, setEditIdx] = useState(null);
@@ -4267,17 +4289,31 @@ const AccountMgmt = ({ accounts, onSave, onClose, currentUser, auditLog = [] }) 
           </button>
         </div>
 
-        {/* 탭 */}
-        <div style={{ display:"flex", borderBottom:`1px solid ${T.bd}`, background:T.s2 }}>
-          {[{id:"accounts",label:"👤 계정 관리"},{id:"audit",label:"📋 감사 로그"}].map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{
-              flex:1, padding:"10px 0", border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
-              background: tab===t.id ? T.s : T.s2,
-              color: tab===t.id ? T.p : T.mu,
-              borderBottom: tab===t.id ? `2px solid ${T.p}` : "2px solid transparent",
-              transition:"all .15s",
-            }}>{t.label}</button>
-          ))}
+        {/* 탭 — pill segmented control */}
+        <div style={{ padding:"12px 16px 0", borderBottom:`1px solid ${T.bd}`, background:T.s2 }}>
+          <div style={{ display:"flex", gap:2, background:T.s3, borderRadius:12, padding:4 }}>
+          {[{id:"accounts",icon:"👤",label:"계정 관리"},{id:"audit",icon:"📋",label:"감사 로그"}].map(t=>{
+            const active = tab===t.id;
+            return (
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                aria-current={active ? "page" : undefined}
+                className={`tab-pill${active?" tab-pill-active":""}`}
+                style={{
+                  flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+                  padding:"8px 10px", border:"none", cursor:"pointer", fontFamily:"inherit",
+                  fontWeight:700, fontSize:12, borderRadius:9,
+                  background: active ? T.s : "transparent",
+                  color: active ? T.p : T.mu,
+                  boxShadow: active ? TAB_PILL_SHADOW : "none",
+                }}>
+                <span style={{ fontSize:14 }} aria-hidden="true">{t.icon}</span>
+                <span>{t.label}</span>
+                {active && <span aria-hidden="true" style={{ width:5, height:5, borderRadius:"50%",
+                  background:T.p, flexShrink:0, marginLeft:2 }}/>}
+              </button>
+            );
+          })}
+          </div>
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding:"18px 22px", display:"flex", flexDirection:"column", gap:10 }}>
@@ -4443,10 +4479,10 @@ const NAV_ITEMS = [
   { id:"cert",        label:"증명서 발급", icon:"dl"     },
 ];
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    📱 MOBILE CHECKIN  (스마트 라우팅: ?mode=checkin)
    로그인 없이 QR 스캔으로 출석 체크하는 학생용 페이지
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 const MobileCheckin = () => {
   const params   = new URLSearchParams(window.location.search);
   const cidParam = params.get("cid");
@@ -4849,11 +4885,11 @@ class RealtimeManager {
 
 const realtimeManager = new RealtimeManager();
 
-/* ═══════════════════════════════════════════════════════════
+/* ===========================================================
    APP ROOT
-═══════════════════════════════════════════════════════════ */
+=========================================================== */
 function App() {
-  // ══ 모든 훅은 조건문 전에 선언 (Rules of Hooks) ══
+  // == 모든 훅은 조건문 전에 선언 (Rules of Hooks) ==
   const [accounts,    setAccounts]   = useState(INIT_ACCOUNTS);
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem("gjf_user") || "null"); } catch (e) { console.warn("세션 복원 실패:", e); return null; }

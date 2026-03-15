@@ -550,6 +550,17 @@ const buildCourseDates = (course) => {
   return dates.length ? dates : [today.toISOString().slice(0, 10)];
 };
 
+// 과정 기간 표시 — date_from/date_to 기반으로 통일 (period 문자열 대체)
+// 예: "2026.3.2 ~ 2026.5.29"  (앞자리 0 없음 — 한국 날짜 표기 관례)
+const formatCoursePeriod = (c) => {
+  if (!c?.dateFrom) return "기간 미정";
+  const fmt = d => {
+    const [y, m, day] = (d || "").split("-");
+    return `${y}.${String(+m)}.${String(+day)}`;
+  };
+  return c.dateTo ? `${fmt(c.dateFrom)} ~ ${fmt(c.dateTo)}` : `${fmt(c.dateFrom)} ~`;
+};
+
 // 과정명 한글 요약 (드롭다운 등에서 간결하게 표시)
 const shortCourseName = (name = "", maxLen = 13) => {
   if (!name) return "";
@@ -673,7 +684,7 @@ const downloadTemplate = (courses) => {
   XLSX.utils.book_append_sheet(wb, ws, "훈련생명단");
   const wsRef = XLSX.utils.aoa_to_sheet([
     ["과정코드","과정명","교육기간","방식","시수"],
-    ...courses.map(c=>[c.code, c.name, c.period, c.method, c.hours])
+    ...courses.map(c=>[c.code, c.name, formatCoursePeriod(c), c.method, c.hours])
   ]);
   wsRef["!cols"] = [{wch:8},{wch:30},{wch:10},{wch:8},{wch:6}];
   XLSX.utils.book_append_sheet(wb, wsRef, "과정코드참고");
@@ -1248,7 +1259,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
           <div style={{ padding:"12px 14px", borderRadius:10, background:T.s2, border:`1px solid ${T.bd}`, borderLeft:`4px solid ${form.cc||T.p}` }}>
             <div style={{ fontSize:11, color:T.mu, marginBottom:4 }}>미리보기</div>
             <div style={{ fontSize:13, fontWeight:700, color:T.tx }}>{form.name||"(과정명 없음)"}</div>
-            <div style={{ fontSize:11, color:T.mu, marginTop:2 }}>{form.code} · {form.period||"기간 미정"} · {form.method} · {form.hours||0}시간</div>
+            <div style={{ fontSize:11, color:T.mu, marginTop:2 }}>{form.code} · {formatCoursePeriod(form)} · {form.method} · {form.hours||0}시간</div>
           </div>
         </div>
 
@@ -1335,7 +1346,7 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
               <Chip label={c.method||"-"} bg={T.s3} color={T.mu}/>
             </div>
             <div style={{ fontSize:13, fontWeight:700, color:T.tx, lineHeight:1.45, marginBottom:3, paddingRight:60 }}>{c.name}</div>
-            <div style={{ fontSize:11, color:T.mu, marginBottom:10 }}>{c.code} · {c.period||"기간미정"} · {c.hours>0?`${c.hours}시간`:"미정"}
+            <div style={{ fontSize:11, color:T.mu, marginBottom:10 }}>{c.code} · {formatCoursePeriod(c)} · {c.hours>0?`${c.hours}시간`:"미정"}
               {c.schedDays && <span style={{ color:T.p, marginLeft:6 }}>📅 {c.schedDays}</span>}
               {(c.schedTimeFrom&&c.schedTimeTo) && <span style={{ color:T.mu, marginLeft:4 }}>{c.schedTimeFrom}∼{c.schedTimeTo}</span>}
             </div>
@@ -1709,7 +1720,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         </div>
                         <div style={{ fontSize:10, marginTop:1 }}>
                           <span style={{ color:c?.cc, fontWeight:700 }}>{c?.code}</span>
-                          <span style={{ color:T.mu, marginLeft:4 }}>{c?.period}</span>
+                          <span style={{ color:T.mu, marginLeft:4 }}>{formatCoursePeriod(c)}</span>
                         </div>
                       </td>
 
@@ -2195,24 +2206,52 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
       </Card>
 
       {/* 과정·날짜 선택 + 요약 */}
-      <Card style={{ padding:"14px 18px", marginBottom:16, display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
-        <div>
-          <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>과정 선택</div>
-          <select value={course.id} onChange={e=>handleCourseChange(courses.find(c=>c.id===+e.target.value)||courses[0])}
-            style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
-              fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
-          </select>
+      <Card style={{ padding:"14px 18px", marginBottom:16 }}>
+        {/* ── 과정 선택 버튼 그룹 ── */}
+        <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:10, color:T.mu, marginBottom:6, fontWeight:600 }}>과정 선택</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {courses.map(c => {
+              const active = course.id === c.id;
+              return (
+                <button key={c.id} type="button" onClick={()=>handleCourseChange(c)}
+                  style={{ padding:"5px 10px", borderRadius:8,
+                    border:`1.5px solid ${active ? T.p : T.bd}`,
+                    background: active ? T.p : T.s2,
+                    color: active ? "#fff" : T.tx,
+                    cursor:"pointer", fontSize:11, fontWeight:600,
+                    transition:"all .15s", whiteSpace:"nowrap",
+                    boxShadow: active ? `0 2px 6px ${T.p}44` : "none" }}>
+                  <span style={{ opacity: active ? .85 : .6, fontSize:10 }}>[{c.code}]</span>
+                  {" "}{shortCourseName(c.name)}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>수업일</div>
-          <select value={date} onChange={e=>setDate(e.target.value)}
-            style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
-              fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {buildCourseDates(course).map(d=><option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
+
+        {/* ── 수업일 선택 + 수업 요일/시간 표시 + 요약 카운트 ── */}
+        <div style={{ display:"flex", gap:14, alignItems:"center", flexWrap:"wrap",
+          borderTop:`1px solid ${T.bd}`, paddingTop:10 }}>
+          <div>
+            <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>수업일 선택</div>
+            <select value={date} onChange={e=>setDate(e.target.value)}
+              style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
+                fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
+              {buildCourseDates(course).map(d=><option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          {/* 수업 요일 / 시간 통합 표시 */}
+          {course.schedDays && (
+            <div style={{ padding:"6px 12px", borderRadius:8, background:T.s2,
+              border:`1px solid ${T.bd}`, fontSize:11, color:T.mu, lineHeight:1.5 }}>
+              📅 <b style={{ color:T.tx }}>{course.schedDays}</b>
+              {course.schedTimeFrom && course.schedTimeTo && (
+                <span style={{ marginLeft:6 }}>🕘 {course.schedTimeFrom} ~ {course.schedTimeTo}</span>
+              )}
+            </div>
+          )}
+          <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
           {[
             {v:presentCnt,   l:"출석",   c:T.ok      },
             {v:lateCnt,      l:"지각",   c:T.warn     },
@@ -2255,6 +2294,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             whiteSpace:"nowrap" }}>
             🚩 결석 일괄 마감
           </button>
+        </div>
         </div>
       </Card>
 
@@ -2748,7 +2788,7 @@ const printCertificate = (s, c, certNo, issueDate) => {
     <div class="field-row"><span class="field-label">성　　명</span><span class="field-colon">:</span><span class="field-value name">${s.name}</span></div>
     <div class="field-row"><span class="field-label">생 년 월 일</span><span class="field-colon">:</span><span class="field-value">${birthFmt}</span></div>
     <div class="field-row"><span class="field-label">교 육 과 정</span><span class="field-colon">:</span><span class="field-value">「${c.name}」</span></div>
-    <div class="field-row"><span class="field-label">교 육 기 간</span><span class="field-colon">:</span><span class="field-value">${c.period||""} (총 ${c.hours}시간)</span></div>
+    <div class="field-row"><span class="field-label">교 육 기 간</span><span class="field-colon">:</span><span class="field-value">${formatCoursePeriod(c)} (총 ${c.hours}시간)</span></div>
   </div>
   <div class="body-text">위 사람은 상기내용과 같이 교육을 정상 수료하였음을<br/>다음과 같이 증명합니다.</div>
   <div class="sign-wrap">
@@ -2776,9 +2816,8 @@ const printAttendCert = (s, c, certNo, issueDate) => {
   const periodLine = (() => {
     const fmtDate = d => d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, day) =>
       `${y}. ${String(+m)}. ${String(+day)}`) : "　　. 　. 　";
-    const p = (c.dateFrom || c.dateTo)
-      ? `${fmtDate(c.dateFrom)} ~ ${fmtDate(c.dateTo)}`
-      : (c.period || "　　. 　. 　 ~ 　　. 　. 　");
+    // dateFrom/dateTo 우선 — period 문자열 폴백 제거 (기간 혼재 방지)
+    const p = `${fmtDate(c.dateFrom||"")} ~ ${fmtDate(c.dateTo||"")}`;
     const days  = c.schedDays     || "";
     const tFrom = c.schedTimeFrom || "";
     const tTo   = c.schedTimeTo   || "";
@@ -6050,6 +6089,11 @@ function App() {
   const [loading,    setLoading]    = useState(true);   // 최초 로딩 상태
   const [dbError,    setDbError]    = useState("");     // DB 연결 오류
   const loadDataRef  = useRef(null);                    // 재시도용 함수 ref
+  // 최신 courses/students 참조 (stale closure 방지)
+  const coursesRef  = useRef(courses);
+  const studentsRef = useRef(students);
+  useEffect(() => { coursesRef.current  = courses;  }, [courses]);
+  useEffect(() => { studentsRef.current = students; }, [students]);
 
   // ── 계정 로드 (앱 시작 시 1회) ──
   useEffect(() => {
@@ -6310,19 +6354,54 @@ function App() {
     setCourses(prev => prev.filter(c => c.id!==id));
   }, [courses, addAudit, currentUser]);
 
-  // ── 출결 저장 후 해당 과정 훈련생 rate 재조회 (DB 트리거가 없을 경우 클라이언트 폴백) ──
-  const refreshStudentRates = useCallback(async (courseId) => {
+  // ── 출결 저장 후 출석률 재계산 → students.rate DB 업데이트 → 로컬 state 반영 ──
+  // attendance 테이블에서 직접 집계하므로 DB 트리거 없이도 수료/증명서 기준이 정확히 반영됨
+  const recalculateAttendanceRate = useCallback(async (courseId) => {
     try {
-      const { data, error } = await sbGet("students", `select=id,rate&cid=eq.${courseId}`);
+      const course = coursesRef.current.find(c => c.id === Number(courseId));
+      if (!course) return;
+      const allDays = buildCourseDates(course);
+      const totalDays = allDays.length;
+      if (totalDays === 0) return;
+      const validDates = new Set(allDays);
+      const courseStuds = studentsRef.current.filter(s => Number(s.cid) === Number(courseId));
+      if (courseStuds.length === 0) return;
+      const ids = courseStuds.map(s => s.id).join(",");
+      const { data: att, error } = await sbGet(
+        "attendance",
+        `select=student_id,date,status&type=eq.in&student_id=in.(${ids})`
+      );
       if (error) throw error;
-      if (data && data.length > 0) {
-        setStudents(prev => prev.map(s => {
-          const updated = data.find(d => d.id === s.id);
-          return updated ? { ...s, rate: updated.rate } : s;
-        }));
-      }
+      // 학생별로 그룹핑
+      const byStudent = {};
+      (att || []).forEach(r => {
+        if (!byStudent[r.student_id]) byStudent[r.student_id] = [];
+        byStudent[r.student_id].push(r);
+      });
+      const updates = [];
+      courseStuds.forEach(s => {
+        const recs = byStudent[s.id] || [];
+        // 동일 날짜 중복 레코드 방지를 위해 Set으로 고유 날짜 집계
+        const presentDays = new Set(
+          recs
+            .filter(r => validDates.has(r.date) && (r.status === "O" || r.status === "L"))
+            .map(r => r.date)
+        ).size;
+        const newRate = Math.min(100, Math.round((presentDays / totalDays) * 100));
+        updates.push({ id: s.id, rate: newRate });
+      });
+      // DB 업데이트 (Promise.all로 완료 보장 — 수료/증명서 화면 탐색 전 일관성 확보)
+      await Promise.all(
+        updates.map(u => sbUpdate("students", `id=eq.${u.id}`, { rate: u.rate }).catch(console.warn))
+      );
+      // 로컬 state 즉시 반영 → 수료/증명서 화면이 바로 갱신됨
+      setStudents(prev => prev.map(s => {
+        const upd = updates.find(u => u.id === s.id);
+        return upd ? { ...s, rate: upd.rate } : s;
+      }));
+      console.debug(`출석률 재계산 완료: ${updates.length}명 (총 ${totalDays}일 기준)`);
     } catch (err) {
-      console.warn("출석률 재조회 실패:", err.message || err);
+      console.warn("출석률 재계산 실패:", err.message || err);
     }
   }, []);
 
@@ -6399,7 +6478,7 @@ function App() {
       case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
       case "instructors": return <InstructorMgmt courses={courses}/>;
       case "rooms":       return <RoomMgmt courses={courses}/>;
-      case "attendance":  return <AttendanceMgmt students={students} courses={courses} onRatesUpdated={refreshStudentRates}/>;
+      case "attendance":  return <AttendanceMgmt students={students} courses={courses} onRatesUpdated={recalculateAttendanceRate}/>;
       case "completion":  return <CompletionMgmt students={students} courses={courses}/>;
       case "cert":        return <CertMgmt students={students} courses={courses}/>;
       default:            return null;

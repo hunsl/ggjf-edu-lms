@@ -2416,8 +2416,8 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead>
               <tr style={{ background:T.s2 }}>
-                {["이름","누적 출석률","당일 출결 입력"].map(h=>(
-                  <th key={h} style={{ padding:"10px 16px",
+                {["이름","누적 출석률","입실 시간","퇴실 시간","출결 상태","저장"].map(h=>(
+                  <th key={h} style={{ padding:"10px 12px",
                     textAlign:h==="이름"?"left":"center",
                     fontSize:11, color:T.mu, fontWeight:700,
                     borderBottom:`1px solid ${T.bd}` }}>{h}</th>
@@ -2426,30 +2426,93 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             </thead>
             <tbody>
               {courseStudents.map(s=>{
-                const cur = manualAtt[s.id] || "O";
+                const row = manualAtt[s.id] || {};
+                const curStatus = row.status || "";
+                const curIn  = row.inTime  || "";
+                const curOut = row.outTime || "";
+                const dirty  = row.saved === false; // 저장 전 수정됨
+                const saved  = row.saved === true;
+                const setRow = (patch) => setManualAtt(p => ({
+                  ...p, [s.id]: { ...(p[s.id]||{}), ...patch, saved: false }
+                }));
+                const saveRow = async () => {
+                  try {
+                    const now = new Date();
+                    const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                    const rows = [];
+                    if (curIn || curStatus) {
+                      rows.push({
+                        student_id: s.id, date, type: "in",
+                        time: curIn || defaultTime,
+                        status: curStatus || "O",
+                        created_at: now.toISOString()
+                      });
+                    }
+                    if (curOut) {
+                      rows.push({
+                        student_id: s.id, date, type: "out",
+                        time: curOut,
+                        created_at: now.toISOString()
+                      });
+                    }
+                    if (rows.length === 0) { alert("입실 시간 또는 상태를 먼저 입력하세요."); return; }
+                    const { error } = await sbInsert("attendance", rows);
+                    if (error) throw error;
+                    setManualAtt(p => ({ ...p, [s.id]: { ...(p[s.id]||{}), saved: true } }));
+                    if (onRatesUpdated) onRatesUpdated(course.id);
+                  } catch(err) {
+                    alert("저장 오류: " + (err.message || JSON.stringify(err)));
+                  }
+                };
                 return (
-                  <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
-                    <td style={{ padding:"12px 16px", fontSize:13, fontWeight:700, color:T.tx }}>
+                  <tr key={s.id} className="row-hover"
+                    style={{ borderBottom:`1px solid ${T.bd}`,
+                       background: saved ? "#F0FDF4" : "transparent" }}>
+                    <td style={{ padding:"10px 12px", fontSize:13, fontWeight:700, color:T.tx }}>
                       {s.name}
                       {s.rate<80 && <span style={{ marginLeft:6, fontSize:10, color:T.danger }}>⚠</span>}
                     </td>
-                    <td style={{ padding:"12px 16px", textAlign:"center" }}>
-                      <div style={{ fontSize:14, fontWeight:800, color:rateColor(s.rate) }}>{s.rate}%</div>
-                      <RBar r={s.rate} h={4}/>
+                    <td style={{ padding:"10px 12px", textAlign:"center" }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:rateColor(s.rate) }}>{s.rate}%</div>
+                      <RBar r={s.rate} h={3}/>
                     </td>
-                    <td style={{ padding:"12px 16px" }}>
-                      <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
+                    {/* 입실 시간 */}
+                    <td style={{ padding:"10px 8px", textAlign:"center" }}>
+                      <input type="time" value={curIn}
+                        onChange={e=>setRow({inTime:e.target.value})}
+                        style={{ width:90, padding:"5px 6px", borderRadius:6, fontSize:12,
+                          border:`1px solid ${curIn?T.ok:T.bd}`, outline:"none" }}/>
+                    </td>
+                    {/* 퇴실 시간 */}
+                    <td style={{ padding:"10px 8px", textAlign:"center" }}>
+                      <input type="time" value={curOut}
+                        onChange={e=>setRow({outTime:e.target.value})}
+                        style={{ width:90, padding:"5px 6px", borderRadius:6, fontSize:12,
+                          border:`1px solid ${curOut?T.p:T.bd}`, outline:"none" }}/>
+                    </td>
+                    {/* 출결 상태 */}
+                    <td style={{ padding:"10px 8px" }}>
+                      <div style={{ display:"flex", gap:4, justifyContent:"center" }}>
                         {Object.entries(ATT_MAP).map(([k,v])=>(
                           <button key={k}
-                            onClick={()=>setManualAtt(p=>({...p,[s.id]:k}))}
-                            style={{ width:46, height:30, border:"none", borderRadius:6,
+                            onClick={()=>setRow({status:k})}
+                            style={{ width:40, height:26, border:"none", borderRadius:5,
                               cursor:"pointer", fontSize:11, fontWeight:700, transition:"all .15s",
-                              background: cur===k ? v.color : T.s2,
-                              color: cur===k ? "#fff" : T.mu }}>
+                              background: curStatus===k ? v.color : T.s2,
+                              color: curStatus===k ? "#fff" : T.mu }}>
                             {v.label}
                           </button>
                         ))}
                       </div>
+                    </td>
+                    {/* 개별 저장 버튼 */}
+                    <td style={{ padding:"10px 8px", textAlign:"center" }}>
+                      <button onClick={saveRow}
+                        style={{ padding:"6px 12px", borderRadius:6, border:"none",
+                          background: saved ? T.ok : T.p, color:"#fff",
+                          fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                        {saved ? "✓ 저장됨" : "저장"}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -2457,44 +2520,52 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             </tbody>
           </table>
           
-          {/* 수동 입력 저장 버튼 */}
+          {/* 전체 일괄 저장 버튼 */}
           <div style={{ padding:"14px 18px", borderTop:`1px solid ${T.bd}`, 
             display:"flex", gap:10, justifyContent:"flex-end", alignItems:"center" }}>
             <div style={{ fontSize:11, color:T.mu }}>
-              {Object.keys(manualAtt).length}명 입력됨
+              {Object.values(manualAtt).filter(r=>r.saved).length}명 저장됨
             </div>
+            <Btn variant="ghost" onClick={()=>setManualAtt({})}>
+              초기화
+            </Btn>
             <Btn onClick={async ()=>{
-              if(Object.keys(manualAtt).length === 0) {
-                alert("입력된 출결이 없습니다");
-                return;
-              }
+              const unsaved = courseStudents.filter(s => {
+                const row = manualAtt[s.id]||{};
+                return (row.inTime || row.status || row.outTime) && !row.saved;
+              });
+              if(unsaved.length === 0) { alert("저장할 내용이 없습니다."); return; }
               try {
                 const now = new Date();
-                const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-                
-                // 수동 입력은 입실 기록으로 저장
-                const records = Object.entries(manualAtt).map(([studentId, status]) => ({
-                  student_id: parseInt(studentId),
-                  date: date,
-                  type: 'in',
-                  time: time,
-                  status: status, // O, L, A, E
-                  created_at: now.toISOString()
-                }));
-
+                const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                const records = [];
+                unsaved.forEach(s => {
+                  const row = manualAtt[s.id]||{};
+                  if (row.inTime || row.status) {
+                    records.push({ student_id:s.id, date, type:"in",
+                      time: row.inTime || defaultTime, status: row.status||"O",
+                      created_at: now.toISOString() });
+                  }
+                  if (row.outTime) {
+                    records.push({ student_id:s.id, date, type:"out",
+                      time: row.outTime, created_at: now.toISOString() });
+                  }
+                });
                 const { error } = await sbInsert("attendance", records);
                 if (error) throw error;
-
-                alert(`✅ ${records.length}명 출결 저장 완료`);
-                setManualAtt({});
-                // DB 트리거가 없는 환경을 위한 클라이언트 폴백: 해당 과정 rate 재조회
+                setManualAtt(p => {
+                  const next = {...p};
+                  unsaved.forEach(s => { next[s.id] = {...(next[s.id]||{}), saved:true}; });
+                  return next;
+                });
+                alert(`✅ ${unsaved.length}명 출결 일괄 저장 완료`);
                 if (onRatesUpdated) onRatesUpdated(course.id);
               } catch(err) {
                 alert("저장 오류: " + (err.message || JSON.stringify(err)));
               }
             }}>
               <Icon n="check" s={13}/>
-              출결 저장
+              전체 일괄 저장
             </Btn>
           </div>
         </Card>
@@ -2845,8 +2916,8 @@ const CertMgmt = ({ students, courses }) => {
 
   // 수료증: 출석률 80% 이상
   // 수강증명서: 해당 과정 수강자 전체 (출석 1% 이상)
-  const certEligible   = students.filter(s => s.cid===course.id && s.rate>=80);
-  const attendEligible = students.filter(s => s.cid===course.id && s.rate>0);
+  const certEligible   = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>=80);
+  const attendEligible = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>0);
   const eligible = docType==="cert" ? certEligible : attendEligible;
 
   const getCertNo = (s, idx) => {
@@ -5368,13 +5439,17 @@ const MobileCheckin = () => {
 
   const [course,   setCourse]   = useState(null);
   const [students, setStudents] = useState([]);
-  const [status,   setStatus]   = useState("loading"); // loading | ready | success | error | expired | duplicate
+  const [status,   setStatus]   = useState("loading"); // loading | identifying | confirming | success | duplicate | error | expired
   const [checkedId, setCheckedId] = useState(null);
   const [checkedTime, setCheckedTime] = useState("");
   const [errMsg,   setErrMsg]   = useState("");
   const [nowStr,   setNowStr]   = useState("");
-  const [searchQ,  setSearchQ]  = useState("");
   const [countdown, setCountdown] = useState(0);
+  // 이름+핸드폰 입력 방식
+  const [nameInput,  setNameInput]  = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [matchErr,   setMatchErr]   = useState("");
+  const [matchedStudent, setMatchedStudent] = useState(null);
 
   // 현재 시각 표시 (매초 갱신)
   useEffect(() => {
@@ -5436,7 +5511,7 @@ const MobileCheckin = () => {
             : SEED_STUDENTS.filter(s => Number(s.cid) === Number(c.id)).map(toStudent);
           setStudents(list);
         }
-        setStatus("ready");
+        setStatus("identifying");
       } catch (e) {
         setStatus("error"); setErrMsg(e.message || "오류가 발생했습니다.");
       }
@@ -5487,7 +5562,7 @@ const MobileCheckin = () => {
     setCountdown(3);
     const iv = setInterval(() => {
       setCountdown(prev => {
-        if (prev <= 1) { setStatus("ready"); return 0; }
+        if (prev <= 1) { setStatus("identifying"); setNameInput(""); setPhoneInput(""); setMatchErr(""); setMatchedStudent(null); return 0; }
         return prev - 1;
       });
     }, 1000);
@@ -5571,7 +5646,7 @@ const MobileCheckin = () => {
               ? <span>⚠️ {checkedTime}에 이미 {typeLabel} 처리되었습니다.<br/>중복 기록은 생성되지 않습니다.</span>
               : "📡 담당자 화면에 실시간 반영됩니다"}
           </div>
-          <button onClick={()=>setStatus("ready")}
+          <button onClick={()=>{ setStatus("identifying"); setNameInput(""); setPhoneInput(""); setMatchErr(""); setMatchedStudent(null); }}
             style={{ marginTop:16, padding:"13px 28px", borderRadius:12, border:"none",
               background: isDup ? "#F1F5F9" : typeColor, color: isDup ? "#64748B" : "#fff",
               fontWeight:700, fontSize:14, cursor:"pointer", width:"100%",
@@ -5583,32 +5658,37 @@ const MobileCheckin = () => {
     );
   }
 
-  // status === "ready"
-  const filtered = searchQ
-    ? students.filter(s => s.name.includes(searchQ) || (s.phone||"").includes(searchQ))
-    : students;
+  // 이름+핸드폰으로 학생 매칭
+  const handleIdentify = () => {
+    setMatchErr("");
+    const nameTrim  = nameInput.trim();
+    const phoneTrim = phoneInput.replace(/[^0-9]/g, "");
+    if (!nameTrim) { setMatchErr("이름을 입력하세요."); return; }
+    if (!phoneTrim) { setMatchErr("휴대폰 번호를 입력하세요."); return; }
+    const found = students.find(s => {
+      const sPhone = (s.phone||"").replace(/[^0-9]/g, "");
+      return s.name === nameTrim && sPhone === phoneTrim;
+    });
+    if (!found) { setMatchErr("일치하는 교육생이 없습니다.\n이름과 휴대폰 번호를 확인해 주세요."); return; }
+    setMatchedStudent(found);
+    setStatus("confirming");
+  };
 
-  return (
+  // status === "identifying" — 이름 + 핸드폰 입력 화면
+  if (status === "identifying") return (
     <div style={containerStyle}>
-      {/* 상단 헤더 */}
-      <div style={{ width:"100%", maxWidth:440, marginBottom:16 }}>
-        {/* 기관명 */}
-        <div style={{ fontSize:11, color:"#94A3B8", letterSpacing:1, marginBottom:4 }}>
+      <div style={{ width:"100%", maxWidth:420, marginTop:20 }}>
+        <div style={{ fontSize:11, color:"#94A3B8", letterSpacing:1, marginBottom:6 }}>
           경기도일자리재단 북부사업본부
         </div>
-        {/* 타이틀 */}
-        <div style={{ fontSize:22, fontWeight:900, color:"#1E293B",
-          display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:28 }}>{type === "in" ? "📥" : "📤"}</span>
+        <div style={{ fontSize:24, fontWeight:900, color:"#1E293B",
+          display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+          <span>{type === "in" ? "📥" : "📤"}</span>
           {typeLabel} 출석 체크
         </div>
-        {/* 과정명 + 날짜 */}
-        <div style={{ fontSize:13, color:"#64748B", marginTop:4, fontWeight:500 }}>
-          {course?.name}
-        </div>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:4 }}>
+        <div style={{ fontSize:13, color:"#64748B", fontWeight:600 }}>{course?.name}</div>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:4 }}>
           <div style={{ fontSize:12, color:"#94A3B8" }}>{fmtDate(date)}</div>
-          {/* 현재 시각 */}
           <div style={{ fontSize:15, fontWeight:900, color:typeColor, letterSpacing:2,
             background:`${typeColor}10`, padding:"3px 10px", borderRadius:8 }}>
             🕐 {nowStr}
@@ -5616,67 +5696,114 @@ const MobileCheckin = () => {
         </div>
       </div>
 
-      {/* 안내 배너 */}
-      <div style={{ width:"100%", maxWidth:440, padding:"12px 16px", borderRadius:12,
-        background:`${typeColor}12`, border:`1px solid ${typeColor}30`,
-        fontSize:13, color:typeColor, fontWeight:700, marginBottom:14,
-        display:"flex", alignItems:"center", gap:8 }}>
-        <span style={{ fontSize:18 }}>👇</span>
-        <span>아래 목록에서 본인 이름을 터치하세요</span>
-      </div>
+      <div style={{ width:"100%", maxWidth:420, marginTop:20,
+        background:"#fff", borderRadius:20, padding:"28px 24px",
+        boxShadow:"0 8px 40px rgba(0,0,0,.09)", border:`1px solid ${typeColor}20` }}>
+        <div style={{ fontSize:16, fontWeight:800, color:"#1E293B", marginBottom:20,
+          display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:22 }}>🙋</span> 본인 확인
+        </div>
 
-      {/* 검색 입력 */}
-      <div style={{ width:"100%", maxWidth:440, marginBottom:12 }}>
-        <input
-          value={searchQ}
-          onChange={e=>setSearchQ(e.target.value)}
-          placeholder="🔍  이름 또는 전화번호 검색"
-          autoComplete="off"
-          style={{ width:"100%", padding:"14px 16px", borderRadius:12,
-            border:`1.5px solid ${typeColor}40`, fontSize:15, outline:"none",
-            background:"#fff", boxSizing:"border-box",
-            fontFamily:"inherit", color:"#1E293B" }}
-        />
-      </div>
+        {/* 이름 */}
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontSize:12, fontWeight:700, color:"#64748B", display:"block", marginBottom:6 }}>
+            이름
+          </label>
+          <input
+            value={nameInput}
+            onChange={e=>{ setNameInput(e.target.value); setMatchErr(""); }}
+            onKeyDown={e=>e.key==="Enter" && handleIdentify()}
+            placeholder="홍길동"
+            autoFocus
+            style={{ width:"100%", padding:"15px 16px", borderRadius:12,
+              border:`1.5px solid ${nameInput ? typeColor+"60" : "#E2E8F0"}`,
+              fontSize:18, outline:"none", boxSizing:"border-box",
+              fontFamily:"inherit", color:"#1E293B", fontWeight:700 }}
+          />
+        </div>
 
-      {/* 학생 카드 목록 */}
-      <div style={{ width:"100%", maxWidth:440, display:"flex", flexDirection:"column", gap:10 }}>
-        {filtered.length === 0 ? (
-          <div style={{ textAlign:"center", color:"#94A3B8", padding:"40px 0", fontSize:14 }}>
-            {searchQ ? "검색 결과가 없습니다" : "등록된 훈련생이 없습니다"}
+        {/* 핸드폰 */}
+        <div style={{ marginBottom:20 }}>
+          <label style={{ fontSize:12, fontWeight:700, color:"#64748B", display:"block", marginBottom:6 }}>
+            휴대폰 번호
+          </label>
+          <input
+            value={phoneInput}
+            onChange={e=>{ setPhoneInput(e.target.value); setMatchErr(""); }}
+            onKeyDown={e=>e.key==="Enter" && handleIdentify()}
+            placeholder="010-0000-0000"
+            inputMode="tel"
+            style={{ width:"100%", padding:"15px 16px", borderRadius:12,
+              border:`1.5px solid ${phoneInput ? typeColor+"60" : "#E2E8F0"}`,
+              fontSize:18, outline:"none", boxSizing:"border-box",
+              fontFamily:"inherit", color:"#1E293B", fontWeight:700 }}
+          />
+        </div>
+
+        {/* 오류 메시지 */}
+        {matchErr && (
+          <div style={{ padding:"12px 14px", borderRadius:10, background:"#FEF2F2",
+            border:"1px solid #FECACA", fontSize:13, color:"#DC2626", fontWeight:600,
+            marginBottom:16, whiteSpace:"pre-line" }}>
+            ⚠️ {matchErr}
           </div>
-        ) : filtered.map(s => (
-          <button key={s.id} onClick={()=>handleCheckin(s)}
-            style={{ padding:"20px 20px", borderRadius:16, border:`1.5px solid ${typeColor}30`,
-              background:"#fff", cursor:"pointer", textAlign:"left",
-              boxShadow:"0 2px 12px rgba(0,0,0,.06)", transition:"all .15s",
-              display:"flex", alignItems:"center", gap:14, WebkitTapHighlightColor:"transparent",
-              WebkitUserSelect:"none", userSelect:"none" }}>
-            {/* 아바타 */}
-            <div style={{ width:52, height:52, borderRadius:14, flexShrink:0,
-              background:`${typeColor}18`, display:"flex", alignItems:"center",
-              justifyContent:"center", fontSize:22, fontWeight:900, color:typeColor }}>
-              {s.name[0]}
-            </div>
-            {/* 이름 / 연락처 */}
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:18, fontWeight:800, color:"#1E293B" }}>{s.name}</div>
-              <div style={{ fontSize:12, color:"#94A3B8", marginTop:3 }}>
-                {s.phone ? s.phone.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3") : "연락처 없음"}
-              </div>
-            </div>
-            {/* 화살표 */}
-            <div style={{ fontSize:26, color:`${typeColor}70`, fontWeight:900 }}>›</div>
-          </button>
-        ))}
+        )}
+
+        {/* 확인 버튼 */}
+        <button onClick={handleIdentify}
+          style={{ width:"100%", padding:"16px", borderRadius:14, border:"none",
+            background:typeColor, color:"#fff", fontWeight:800, fontSize:17,
+            cursor:"pointer", letterSpacing:.5 }}>
+          {typeLabel} 출석 확인 →
+        </button>
       </div>
 
-      <div style={{ marginTop:28, fontSize:10, color:"#CBD5E1", textAlign:"center", lineHeight:1.8 }}>
-        총 {students.length}명 등록 · {filtered.length}명 표시<br/>
-        © 2026 경기도일자리재단 북부사업본부 · 학사관리시스템
+      <div style={{ marginTop:24, fontSize:10, color:"#CBD5E1", textAlign:"center" }}>
+        © 2026 경기도일자리재단 북부사업본부
       </div>
     </div>
   );
+
+  // status === "confirming" — 매칭된 학생 최종 확인 후 출석 처리
+  if (status === "confirming" && matchedStudent) return (
+    <div style={containerStyle}>
+      <div style={{ width:"100%", maxWidth:420, marginTop:20,
+        background:"#fff", borderRadius:20, padding:"28px 24px",
+        boxShadow:"0 8px 40px rgba(0,0,0,.09)", border:`1px solid ${typeColor}20` }}>
+        <div style={{ fontSize:13, color:"#94A3B8", marginBottom:16 }}>
+          경기도일자리재단 북부사업본부 · {course?.name}
+        </div>
+        <div style={{ textAlign:"center", marginBottom:24 }}>
+          <div style={{ width:72, height:72, borderRadius:20, background:`${typeColor}18`,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:32, fontWeight:900, color:typeColor, margin:"0 auto 12px" }}>
+            {matchedStudent.name[0]}
+          </div>
+          <div style={{ fontSize:26, fontWeight:900, color:"#1E293B" }}>{matchedStudent.name}</div>
+          <div style={{ fontSize:13, color:"#94A3B8", marginTop:4 }}>
+            {matchedStudent.phone || ""}
+          </div>
+          <div style={{ marginTop:12, fontSize:14, fontWeight:700, color:typeColor,
+            background:`${typeColor}12`, padding:"8px 20px", borderRadius:20, display:"inline-block" }}>
+            {fmtDate(date)} · {typeLabel}
+          </div>
+        </div>
+        <button onClick={()=>handleCheckin(matchedStudent)}
+          style={{ width:"100%", padding:"16px", borderRadius:14, border:"none",
+            background:typeColor, color:"#fff", fontWeight:800, fontSize:17,
+            cursor:"pointer", letterSpacing:.5, marginBottom:10 }}>
+          ✅ 맞습니다 — {typeLabel} 처리
+        </button>
+        <button onClick={()=>{ setStatus("identifying"); setMatchedStudent(null); setMatchErr(""); }}
+          style={{ width:"100%", padding:"13px", borderRadius:14, border:`1.5px solid #E2E8F0`,
+            background:"#F8FAFC", color:"#64748B", fontWeight:700, fontSize:14, cursor:"pointer" }}>
+          ← 다시 입력
+        </button>
+      </div>
+    </div>
+  );
+
+  return null; // 다른 status는 위에서 처리됨
 };
 
 class RealtimeManager {

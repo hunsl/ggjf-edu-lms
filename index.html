@@ -228,7 +228,7 @@ const QRCanvas = ({ data, size = 200, color = "#000000", bgColor = "#ffffff", st
   );
   return <canvas ref={canvasRef} style={{ display:"block", borderRadius:8, ...style }} />;
 };
-=========================================================== */
+
 const T = {
   p: "#EA580C", pm: "#F97316", pl: "#FB923C", pbg: "#FFF7ED",
   sb: "#7C2D12",
@@ -3334,6 +3334,107 @@ const RoomModal = ({ room, onClose, setRooms }) => {
 
 const BOOKING_COLORS = ["#EA580C","#C2410C","#7C2D12","#9A3412","#DC2626","#2563EB","#7C3AED","#059669"];
 
+/* shared style for active pill tab — defined here so RoomMgmt can use it */
+const TAB_PILL_SHADOW = `0 1px 6px rgba(0,0,0,.10),0 0 0 1px rgba(234,88,12,.18)`;
+
+/* 충돌 방지 ID 생성기 */
+let _idCounter = Date.now();
+const genId = () => ++_idCounter;
+
+/* ── RoomGanttChart: 월간 Gantt 뷰 ── */
+const RoomGanttChart = ({ rooms, bookings, courses, onEditBook }) => {
+  const today = new Date();
+  const [year,  setYear]  = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const MONTH_KR = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+
+  const dateStr = d => `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+
+  const prevMonth = () => { if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1); };
+  const nextMonth = () => { if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1); };
+
+  return (
+    <Card style={{ overflow:"auto", padding:0 }}>
+      <div style={{ padding:"12px 18px", borderBottom:`1px solid ${T.bd}`,
+        display:"flex", alignItems:"center", gap:12, background:T.s2 }}>
+        <button onClick={prevMonth} style={{ width:30, height:30, borderRadius:8, border:`1px solid ${T.bd}`,
+          background:T.s, cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+        <span style={{ fontSize:15, fontWeight:800, color:T.tx, minWidth:120, textAlign:"center" }}>{year}년 {MONTH_KR[month]}</span>
+        <button onClick={nextMonth} style={{ width:30, height:30, borderRadius:8, border:`1px solid ${T.bd}`,
+          background:T.s, cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+        <button onClick={()=>{ setYear(today.getFullYear()); setMonth(today.getMonth()); }}
+          style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${T.bd}`,
+            background:T.s2, cursor:"pointer", fontSize:11, color:T.mu, marginLeft:4 }}>오늘</button>
+      </div>
+      <div style={{ minWidth: 140 + daysInMonth * 30, padding:"14px 14px 18px" }}>
+        {/* 날짜 헤더 */}
+        <div style={{ display:"grid", gridTemplateColumns:`140px repeat(${daysInMonth}, 30px)`, gap:1, marginBottom:6 }}>
+          <div style={{ fontWeight:700, color:T.mu, fontSize:10, padding:"4px 8px" }}>강의실</div>
+          {Array.from({length:daysInMonth}).map((_,i) => {
+            const ds = dateStr(i+1);
+            const dow = new Date(year, month, i+1).getDay();
+            const isToday = ds === todayStr;
+            return (
+              <div key={i} style={{ textAlign:"center", fontSize:9,
+                fontWeight:isToday?900:600,
+                color: isToday?T.p : dow===0?"#EF4444" : dow===6?"#3B82F6" : T.mu,
+                padding:"4px 0", background:isToday?T.pbg:"transparent", borderRadius:4 }}>
+                {i+1}
+              </div>
+            );
+          })}
+        </div>
+        {/* 강의실별 행 */}
+        {rooms.map(room => (
+          <div key={room.id} style={{ display:"grid",
+            gridTemplateColumns:`140px repeat(${daysInMonth}, 30px)`, gap:1, marginBottom:3 }}>
+            <div style={{ fontWeight:600, color:T.tx, fontSize:11, padding:"6px 8px",
+              display:"flex", alignItems:"center", background:T.s2, borderRadius:6, overflow:"hidden" }}>
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{room.name}</span>
+            </div>
+            {Array.from({length:daysInMonth}).map((_,dayIdx) => {
+              const ds = dateStr(dayIdx+1);
+              const dayBooks = bookings.filter(b => b.roomId===room.id && b.start<=ds && b.end>=ds);
+              const conflict = dayBooks.length > 1;
+              const isToday  = ds === todayStr;
+              return (
+                <div key={dayIdx}
+                  onClick={()=>{ if(dayBooks.length>0 && onEditBook) onEditBook(dayBooks[0]); }}
+                  title={conflict ? "⚠️ 중복 예약!" : dayBooks[0]?.label || ""}
+                  style={{ height:28, borderRadius:4,
+                    background: dayBooks.length>0 ? dayBooks[0].color : isToday ? T.pbg : T.s2,
+                    border: conflict ? `2px solid ${T.danger}` : isToday ? `1px solid ${T.pl}` : "none",
+                    cursor: dayBooks.length>0 ? "pointer" : "default",
+                    display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+                  {dayBooks.length > 0 && (
+                    <span style={{ fontSize:8, color:"#fff", fontWeight:700,
+                      padding:"0 3px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {conflict ? "⚠️" : dayBooks[0].label.slice(0,5)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {/* 범례 */}
+        {bookings.length > 0 && (
+          <div style={{ marginTop:12, display:"flex", flexWrap:"wrap", gap:8 }}>
+            {[...new Map(bookings.map(b=>[b.label, b])).values()].map(b=>(
+              <div key={b.label} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:3, background:b.color, flexShrink:0 }}/>
+                <span style={{ fontSize:10, color:T.mu }}>{b.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+};
+
 const RoomMgmt = ({ courses }) => {
   const today = new Date();
   const [year,  setYear]  = useState(today.getFullYear());
@@ -3349,6 +3450,7 @@ const RoomMgmt = ({ courses }) => {
   const [editRoom,  setEditRoom]  = useState(null);
   const [editBook,  setEditBook]  = useState(null);
   const [selRoom,   setSelRoom]   = useState(0); // 0 = 전체
+  const [viewMode,  setViewMode]  = useState("calendar"); // "calendar" | "gantt"
 
   // 달력 날짜 생성
   const firstDay = new Date(year, month, 1).getDay();
@@ -3425,7 +3527,19 @@ const RoomMgmt = ({ courses }) => {
         title="강의실 관리"
         sub="월간 캘린더 · 강의실 등록 · 강의 기간 설정"
         right={
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            {/* 뷰 전환 토글 */}
+            <div style={{ display:"flex", background:T.s3, borderRadius:8, padding:2 }}>
+              {[["calendar","📅 캘린더"],["gantt","📊 Gantt"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setViewMode(v)} style={{
+                  padding:"5px 10px", border:"none", cursor:"pointer", fontFamily:"inherit",
+                  fontWeight:600, fontSize:11, borderRadius:6,
+                  background: viewMode===v ? T.s : "transparent",
+                  color: viewMode===v ? T.p : T.mu,
+                  boxShadow: viewMode===v ? TAB_PILL_SHADOW : "none",
+                  transition:"all .15s" }}>{l}</button>
+              ))}
+            </div>
             <Btn variant="ghost" size="sm" onClick={()=>{setEditRoom(null);setShowRM(true);}}>
               <Icon n="plus" s={13}/> 강의실 추가
             </Btn>
@@ -3475,6 +3589,8 @@ const RoomMgmt = ({ courses }) => {
         ) : null;
       })()}
 
+      {/* 캘린더 뷰 */}
+      {viewMode === "calendar" && (<>
       {/* 월 네비게이션 */}
       <Card style={{ padding:0, overflow:"hidden" }}>
         <div style={{ padding:"12px 18px", borderBottom:`1px solid ${T.bd}`,
@@ -3618,13 +3734,21 @@ const RoomMgmt = ({ courses }) => {
           </Card>
         );
       })()}
+      </>)}
+
+      {/* Gantt 뷰 */}
+      {viewMode === "gantt" && (
+        <RoomGanttChart
+          rooms={rooms}
+          bookings={bookings}
+          courses={courses}
+          onEditBook={b=>setEditBook(b)}
+        />
+      )}
     </div>
   );
 };
 
-
-/* shared style for active pill tab */
-const TAB_PILL_SHADOW = `0 1px 6px rgba(0,0,0,.10),0 0 0 1px rgba(234,88,12,.18)`;
 
 const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) => {
   const [tab,      setTab]      = useState("status");   // "status" | "course" | "backup"
@@ -4225,6 +4349,151 @@ const LoginScreen = ({ onLogin, accounts }) => {
   );
 };
 
+/* ── 감사 로그 탭 컴포넌트 ── */
+const MAX_VISIBLE_LOGS = 100;
+const AuditLogTab = ({ auditLog }) => {
+  const [logFilter, setLogFilter] = useState({ who:"all", days:30, q:"" });
+  const [detailLog, setDetailLog] = useState(null);
+
+  const cutoff = new Date(Date.now() - logFilter.days * 86400000).toISOString().slice(0,16).replace("T"," ");
+  const allUsers = [...new Set(auditLog.map(e=>e.who))];
+  const visible = auditLog.filter(e => {
+    if(e.when < cutoff) return false;
+    if(logFilter.who !== "all" && e.who !== logFilter.who) return false;
+    if(logFilter.q && !e.action.includes(logFilter.q) && !(e.detail||"").includes(logFilter.q)) return false;
+    return true;
+  });
+
+  const actionBg = a => {
+    if(a.includes("등록")||a.includes("추가")||a.includes("로그인")) return "#ECFDF5";
+    if(a.includes("수정")||a.includes("변경")) return "#FFFBEB";
+    if(a.includes("삭제")||a.includes("초기화")||a.includes("로그아웃")) return "#FEF2F2";
+    return T.s3;
+  };
+  const actionColor = a => {
+    if(a.includes("등록")||a.includes("추가")||a.includes("로그인")) return T.ok;
+    if(a.includes("수정")||a.includes("변경")) return T.warn;
+    if(a.includes("삭제")||a.includes("초기화")||a.includes("로그아웃")) return T.danger;
+    return T.mu;
+  };
+
+  const sel = { padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
+    fontSize:11, outline:"none", background:T.s2, cursor:"pointer", color:T.tx };
+
+  return (
+    <div>
+      {/* 상세 모달 */}
+      {detailLog && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:2000,
+          display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={()=>setDetailLog(null)}>
+          <div style={{ background:T.s, borderRadius:16, width:460, maxWidth:"96vw",
+            maxHeight:"75vh", overflow:"hidden", boxShadow:"0 24px 64px rgba(0,0,0,.3)",
+            animation:"fadeUp .2s ease" }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ background:`linear-gradient(135deg,${T.sb},${T.p})`,
+              padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontSize:14, fontWeight:800, color:"#fff" }}>📋 변경 상세</div>
+              <button onClick={()=>setDetailLog(null)} style={{ width:26, height:26, borderRadius:6,
+                border:"none", background:"rgba(255,255,255,.15)", color:"#fff", cursor:"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <Icon n="x" s={13}/>
+              </button>
+            </div>
+            <div style={{ padding:"16px 20px", overflowY:"auto", maxHeight:"calc(75vh - 56px)" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+                <div style={{ padding:"8px 12px", borderRadius:8, background:T.s2, border:`1px solid ${T.bd}` }}>
+                  <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>작업</div>
+                  <Chip label={detailLog.action} bg={actionBg(detailLog.action)} color={actionColor(detailLog.action)}/>
+                </div>
+                <div style={{ padding:"8px 12px", borderRadius:8, background:T.s2, border:`1px solid ${T.bd}` }}>
+                  <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>담당자 · 시각</div>
+                  <div style={{ fontSize:11, fontWeight:600, color:T.tx }}>{detailLog.who}</div>
+                  <div style={{ fontSize:10, color:T.mu }}>{detailLog.when}</div>
+                </div>
+              </div>
+              <div style={{ fontSize:11, fontWeight:700, color:T.mu, marginBottom:6 }}>상세 내용</div>
+              <pre style={{ background:T.s2, border:`1px solid ${T.bd}`, borderRadius:8,
+                padding:"10px 14px", fontSize:12, color:T.tx,
+                whiteSpace:"pre-wrap", wordBreak:"break-all", lineHeight:1.6 }}>
+                {detailLog.detail}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 필터 바 */}
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginBottom:12 }}>
+        <select value={logFilter.who} onChange={e=>setLogFilter(f=>({...f,who:e.target.value}))} style={sel}>
+          <option value="all">전체 사용자</option>
+          {allUsers.map(u=><option key={u} value={u}>{u}</option>)}
+        </select>
+        <select value={logFilter.days} onChange={e=>setLogFilter(f=>({...f,days:+e.target.value}))} style={sel}>
+          <option value={7}>최근 7일</option>
+          <option value={30}>최근 30일</option>
+          <option value={90}>최근 90일</option>
+          <option value={365}>최근 1년</option>
+        </select>
+        <input value={logFilter.q} onChange={e=>setLogFilter(f=>({...f,q:e.target.value}))}
+          placeholder="🔍 검색..." style={{...sel, flex:1, minWidth:100}}/>
+        <span style={{ fontSize:11, color:T.mu, flexShrink:0 }}>총 {visible.length}건</span>
+        <button onClick={()=>{ if(!window.confirm("감사 로그를 초기화하시겠습니까?")) return;
+            try { localStorage.removeItem("gjf_audit_log"); } catch{}
+            window.location.reload(); }}
+          style={{ fontSize:10, color:T.danger, background:"transparent",
+            border:`1px solid #FECACA`, borderRadius:6, padding:"4px 10px", cursor:"pointer" }}>
+          초기화
+        </button>
+      </div>
+
+      {/* 로그 목록 */}
+      {visible.length === 0 ? (
+        <div style={{ textAlign:"center", color:T.mu, padding:"30px 0", fontSize:12 }}>
+          {auditLog.length===0 ? "아직 기록된 이력이 없습니다" : "필터 조건에 맞는 로그가 없습니다"}
+        </div>
+      ) : (
+        <div style={{ borderRadius:10, border:`1px solid ${T.bd}`, overflow:"hidden" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"72px 1fr 88px 36px",
+            padding:"8px 12px", background:T.s2, borderBottom:`1px solid ${T.bd}`,
+            fontSize:10, fontWeight:700, color:T.mu }}>
+            <div>담당자</div>
+            <div>내용</div>
+            <div>시각</div>
+            <div></div>
+          </div>
+          {visible.slice(0,MAX_VISIBLE_LOGS).map(e=>(
+            <div key={e.id} className="row-hover"
+              style={{ display:"grid", gridTemplateColumns:"72px 1fr 88px 36px",
+                padding:"9px 12px", borderBottom:`1px solid ${T.bd}`, alignItems:"center" }}>
+              <div style={{ fontSize:11, fontWeight:600, color:T.tx,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.who}</div>
+              <div>
+                <Chip label={e.action} bg={actionBg(e.action)} color={actionColor(e.action)}/>
+                <div style={{ fontSize:10, color:T.mu, marginTop:3,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.detail}</div>
+              </div>
+              <div style={{ fontSize:9, color:T.mu, lineHeight:1.5 }}>
+                {e.when?.slice(0,16).replace("T","\n")||""}
+              </div>
+              <button onClick={()=>setDetailLog(e)}
+                style={{ fontSize:10, color:T.p, cursor:"pointer", border:"none",
+                  background:"none", fontWeight:700, padding:"4px 0" }}>
+                상세
+              </button>
+            </div>
+          ))}
+          {visible.length > MAX_VISIBLE_LOGS && (
+            <div style={{ padding:"10px 12px", textAlign:"center", fontSize:11, color:T.mu, background:T.s2 }}>
+              최근 {MAX_VISIBLE_LOGS}건만 표시 (전체 {visible.length}건)
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ===========================================================
    👤 ACCOUNT MANAGEMENT  계정 관리 (관리자 전용)
 =========================================================== */
@@ -4425,30 +4694,7 @@ const AccountMgmt = ({ accounts, onSave, onClose, currentUser, auditLog = [] }) 
 
           </>) : (
             /* ── 감사 로그 탭 ── */
-            <div>
-              <div style={{ fontSize:12, fontWeight:700, color:T.tx, marginBottom:10, display:"flex", gap:8, alignItems:"center" }}>
-                📋 데이터 수정 이력
-                <span style={{ marginLeft:"auto", fontSize:10, color:T.mu }}>최근 {Math.min(auditLog.length,300)}건</span>
-                <button onClick={()=>{ try { localStorage.removeItem("gjf_audit_log"); } catch{} window.location.reload(); }}
-                  style={{ fontSize:10, color:T.danger, background:"transparent", border:`1px solid #FECACA`,
-                    borderRadius:5, padding:"2px 8px", cursor:"pointer" }}>초기화</button>
-              </div>
-              {auditLog.length === 0 ? (
-                <div style={{ textAlign:"center", color:T.mu, padding:"30px 0", fontSize:12 }}>
-                  기록된 이력이 없습니다
-                </div>
-              ) : auditLog.map(e => (
-                <div key={e.id} style={{ padding:"9px 12px", borderRadius:8, marginBottom:6,
-                  background:T.s2, border:`1px solid ${T.bd}` }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
-                    <span style={{ fontSize:11, fontWeight:700, color:T.p }}>{e.action}</span>
-                    <span style={{ fontSize:10, color:T.mu }}>{e.when}</span>
-                  </div>
-                  <div style={{ fontSize:11, color:T.tx }}>{e.detail}</div>
-                  <div style={{ fontSize:10, color:T.mu, marginTop:2 }}>by {e.who}</div>
-                </div>
-              ))}
-            </div>
+            <AuditLogTab auditLog={auditLog}/>
           )}
         </div>
 

@@ -1387,73 +1387,97 @@ const AttendanceMgmt = ({ students, courses }) => {
   // ── 실시간 출결 업데이트 구독 ──
   useEffect(() => {
     if (!course || !date) return;
-    
+
+    let intentionallyClosed = false;
+    let heartbeatId = null;
+    let currentWs = null;
     const channel = `realtime:public:attendance`;
-    const ws = new WebSocket(
-      `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1?apikey=${SB_KEY}&vsn=1.0.0`
-    );
 
-    ws.onopen = () => {
-      console.log(`🔔 출결 실시간 구독 시작 (${date})`);
-      ws.send(JSON.stringify({
-        topic: channel,
-        event: "phx_join",
-        payload: {
-          config: {
-            postgres_changes: [{
-              event: "*",
-              schema: "public",
-              table: "attendance",
-              filter: `date=eq.${date}`
-            }]
-          }
-        },
-        ref: Date.now().toString()
-      }));
+    const connect = () => {
+      if (intentionallyClosed) return;
 
-      const heartbeat = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            topic: "phoenix",
-            event: "heartbeat",
-            payload: {},
-            ref: Date.now().toString()
-          }));
-        } else {
-          clearInterval(heartbeat);
-        }
-      }, 30000);
-    };
+      const ws = new WebSocket(
+        `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+      );
+      currentWs = ws;
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.event === "postgres_changes") {
-          const { eventType, new: newRecord } = msg.payload.data;
-          if (eventType === "INSERT" || eventType === "UPDATE") {
-            const [h, m] = newRecord.time.split(":").map(Number);
-            const mins = h * 60 + m;
-            setRecords(prev => ({
-              ...prev,
-              [newRecord.student_id]: {
-                ...(prev[newRecord.student_id] || {}),
-                [newRecord.type]: newRecord.type === "in" 
-                  ? { time: newRecord.time, mins }
-                  : { time: newRecord.time }
-              }
+      ws.onopen = () => {
+        console.log(`🔔 출결 실시간 구독 시작 (${date})`);
+        ws.send(JSON.stringify({
+          topic: channel,
+          event: "phx_join",
+          payload: {
+            config: {
+              postgres_changes: [{
+                event: "*",
+                schema: "public",
+                table: "attendance",
+                filter: `date=eq.${date}`
+              }]
+            }
+          },
+          ref: Date.now().toString()
+        }));
+
+        heartbeatId = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              topic: "phoenix",
+              event: "heartbeat",
+              payload: {},
+              ref: Date.now().toString()
             }));
-            console.log(`🔔 실시간 출결: ${newRecord.type} - 학생 ID ${newRecord.student_id}`);
+          } else {
+            clearInterval(heartbeatId);
+            heartbeatId = null;
           }
+        }, 30000);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.event === "postgres_changes") {
+            const { eventType, new: newRecord } = msg.payload.data;
+            if (eventType === "INSERT" || eventType === "UPDATE") {
+              const [h, m] = newRecord.time.split(":").map(Number);
+              const mins = h * 60 + m;
+              setRecords(prev => ({
+                ...prev,
+                [newRecord.student_id]: {
+                  ...(prev[newRecord.student_id] || {}),
+                  [newRecord.type]: newRecord.type === "in"
+                    ? { time: newRecord.time, mins }
+                    : { time: newRecord.time }
+                }
+              }));
+              console.log(`🔔 실시간 출결: ${newRecord.type} - 학생 ID ${newRecord.student_id}`);
+            }
+          }
+        } catch (err) {
+          console.error("실시간 메시지 파싱 오류:", err);
         }
-      } catch (err) {
-        console.error("실시간 메시지 파싱 오류:", err);
-      }
+      };
+
+      ws.onerror = (err) => console.error("❌ 출결 구독 오류:", err);
+      ws.onclose = () => {
+        clearInterval(heartbeatId);
+        heartbeatId = null;
+        if (!intentionallyClosed) {
+          console.warn("🔌 출결 구독 종료 - 5초 후 재연결");
+          setTimeout(connect, 5000);
+        }
+      };
     };
 
-    ws.onerror = (err) => console.error("❌ 출결 구독 오류:", err);
-    ws.onclose = () => console.warn("🔌 출결 구독 종료");
+    connect();
 
-    return () => ws.close();
+    return () => {
+      intentionallyClosed = true;
+      clearInterval(heartbeatId);
+      heartbeatId = null;
+      currentWs?.close();
+    };
   }, [course, date]);
 
   // 상태 계산 (입실 시각 → 출석/지각/결석)
@@ -4103,7 +4127,7 @@ const NAV_ITEMS = [
 ═══════════════════════════════════════════════════════════ */
 class RealtimeManager {
   constructor() {
-    this.subscriptions = new Map();
+    this.subscriptions = new Map(); // table -> { ws, intentionallyClosed }
   }
 
   subscribe(table, callbacks = {}) {
@@ -4111,71 +4135,86 @@ class RealtimeManager {
 
     const { onInsert, onUpdate, onDelete } = callbacks;
     const channel = `realtime:public:${table}`;
-    const ws = new WebSocket(
-      `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1?apikey=${SB_KEY}&vsn=1.0.0`
-    );
+    const state = { intentionallyClosed: false, heartbeatId: null, ws: null };
+    this.subscriptions.set(table, state);
 
-    ws.onopen = () => {
-      console.log(`✅ ${table} 실시간 구독 시작`);
-      ws.send(JSON.stringify({
-        topic: channel,
-        event: "phx_join",
-        payload: {
-          config: {
-            postgres_changes: [{
-              event: "*",
-              schema: "public",
-              table: table
-            }]
+    const connect = () => {
+      if (state.intentionallyClosed) return;
+
+      const ws = new WebSocket(
+        `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+      );
+      state.ws = ws;
+
+      ws.onopen = () => {
+        console.log(`✅ ${table} 실시간 구독 시작`);
+        ws.send(JSON.stringify({
+          topic: channel,
+          event: "phx_join",
+          payload: {
+            config: {
+              postgres_changes: [{
+                event: "*",
+                schema: "public",
+                table: table
+              }]
+            }
+          },
+          ref: Date.now().toString()
+        }));
+
+        state.heartbeatId = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              topic: "phoenix",
+              event: "heartbeat",
+              payload: {},
+              ref: Date.now().toString()
+            }));
+          } else {
+            clearInterval(state.heartbeatId);
+            state.heartbeatId = null;
           }
-        },
-        ref: Date.now().toString()
-      }));
+        }, 30000);
+      };
 
-      const heartbeat = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            topic: "phoenix",
-            event: "heartbeat",
-            payload: {},
-            ref: Date.now().toString()
-          }));
-        } else {
-          clearInterval(heartbeat);
-        }
-      }, 30000);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.event === "postgres_changes") {
-          const { eventType, new: newRecord, old: oldRecord } = msg.payload.data;
-          switch(eventType) {
-            case "INSERT": onInsert?.(newRecord); break;
-            case "UPDATE": onUpdate?.(newRecord, oldRecord); break;
-            case "DELETE": onDelete?.(oldRecord); break;
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.event === "postgres_changes") {
+            const { eventType, new: newRecord, old: oldRecord } = msg.payload.data;
+            switch(eventType) {
+              case "INSERT": onInsert?.(newRecord); break;
+              case "UPDATE": onUpdate?.(newRecord, oldRecord); break;
+              case "DELETE": onDelete?.(oldRecord); break;
+            }
           }
+        } catch (err) {
+          console.error(`${table} 메시지 파싱 오류:`, err);
         }
-      } catch (err) {
-        console.error(`${table} 메시지 파싱 오류:`, err);
-      }
+      };
+
+      ws.onerror = (err) => console.error(`❌ ${table} 구독 오류:`, err);
+      ws.onclose = () => {
+        clearInterval(state.heartbeatId);
+        state.heartbeatId = null;
+        if (!state.intentionallyClosed) {
+          console.warn(`🔌 ${table} 구독 종료 - 5초 후 재연결`);
+          setTimeout(connect, 5000);
+        }
+      };
     };
 
-    ws.onerror = (err) => console.error(`❌ ${table} 구독 오류:`, err);
-    ws.onclose = () => {
-      console.warn(`🔌 ${table} 구독 종료 - 5초 후 재연결`);
-      setTimeout(() => {
-        this.subscriptions.delete(table);
-        this.subscribe(table, callbacks);
-      }, 5000);
-    };
-
-    this.subscriptions.set(table, ws);
+    connect();
   }
 
   unsubscribeAll() {
-    this.subscriptions.forEach(ws => ws.close());
+    this.subscriptions.forEach(state => {
+      state.intentionallyClosed = true;
+      clearInterval(state.heartbeatId);
+      state.heartbeatId = null;
+      state.ws?.close();
+    });
     this.subscriptions.clear();
   }
 }

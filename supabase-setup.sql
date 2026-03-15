@@ -270,5 +270,12 @@ ALTER TABLE instructors ADD COLUMN IF NOT EXISTS cids JSONB DEFAULT '[]'::JSONB;
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
 
 -- ==========================================
+-- 9. PostgREST 스키마 캐시 강제 갱신
+-- 새 컬럼 추가 후 PostgREST가 즉시 인식하도록 알림을 전송합니다.
+-- "Could not find the '...' column ... in the schema cache" 오류 해결
+-- ==========================================
+NOTIFY pgrst, 'reload schema';
+
+-- ==========================================
 -- ✅ 완료! 이제 index.html을 새로고침하세요
 -- ==========================================

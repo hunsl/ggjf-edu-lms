@@ -24,18 +24,52 @@ const { useState, useMemo, useEffect, useRef, useCallback } = React;
 
 /* ── 스토리지 안전 래퍼 (Tracking Prevention / 서드파티 쿠키 차단 대응) ──
    Edge/Safari의 Intelligent Tracking Prevention이 cross-origin iframe 환경에서
-   sessionStorage/localStorage 접근을 차단할 때 인메모리로 폴백합니다. */
+   sessionStorage/localStorage 접근을 차단할 때 인메모리로 폴백합니다.
+   앱 시작 시 probe 쓰기/읽기로 실제 사용 가능 여부를 먼저 검사하고,
+   차단된 경우 반복 콘솔 경고 없이 즉시 인메모리로 전환합니다. */
 const _mem = {};
+
+// 앱 시작 시 스토리지 실제 읽기/쓰기 가능 여부를 probe로 확인
+const _probe = (storage) => {
+  if (!storage || typeof storage.setItem !== "function") return false;
+  try {
+    const k = "__tp_probe__";
+    storage.setItem(k, "1");
+    const ok = storage.getItem(k) === "1";
+    storage.removeItem(k);
+    return ok;
+  } catch { return false; }
+};
+// storage 객체가 존재하지 않는 환경(SSR 등)은 즉시 false
+const _sessionOk = (typeof sessionStorage !== "undefined") ? _probe(sessionStorage) : false;
+const _localOk   = (typeof localStorage  !== "undefined") ? _probe(localStorage)  : false;
+// 차단 여부를 외부에서 읽을 수 있도록 공개
+const storageBlocked = !_sessionOk || !_localOk;
+
 const safeSession = {
-  get:    k => { try { return sessionStorage.getItem(k); } catch { return _mem["s_"+k]||null; } },
-  set:    (k,v) => { try { sessionStorage.setItem(k,v); } catch { _mem["s_"+k]=v; } },
-  remove: k => { try { sessionStorage.removeItem(k); } catch { delete _mem["s_"+k]; } },
+  get:    k => { if(!_sessionOk) return _mem["s_"+k]||null;
+    try { return sessionStorage.getItem(k); } catch { return _mem["s_"+k]||null; } },
+  set:    (k,v) => { if(!_sessionOk) { _mem["s_"+k]=v; return; }
+    try { sessionStorage.setItem(k,v); } catch { _mem["s_"+k]=v; } },
+  remove: k => { if(!_sessionOk) { delete _mem["s_"+k]; return; }
+    try { sessionStorage.removeItem(k); } catch { delete _mem["s_"+k]; } },
 };
 const safeLocal = {
-  get:    k => { try { return localStorage.getItem(k); } catch { return _mem["l_"+k]||null; } },
-  set:    (k,v) => { try { localStorage.setItem(k,v); } catch { _mem["l_"+k]=v; } },
-  remove: k => { try { localStorage.removeItem(k); } catch { delete _mem["l_"+k]; } },
+  get:    k => { if(!_localOk) return _mem["l_"+k]||null;
+    try { return localStorage.getItem(k); } catch { return _mem["l_"+k]||null; } },
+  set:    (k,v) => { if(!_localOk) { _mem["l_"+k]=v; return; }
+    try { localStorage.setItem(k,v); } catch { _mem["l_"+k]=v; } },
+  remove: k => { if(!_localOk) { delete _mem["l_"+k]; return; }
+    try { localStorage.removeItem(k); } catch { delete _mem["l_"+k]; } },
 };
+if (storageBlocked) {
+  console.warn(
+    "⚠️ [스토리지] 브라우저 추적 방지(Tracking Prevention)로 인해",
+    "localStorage/sessionStorage 접근이 차단됐습니다.",
+    "인메모리 모드로 동작합니다.",
+    "로그인 세션과 감사 로그는 페이지 새로고침 시 초기화됩니다."
+  );
+}
 
 
 /* ==========================================================
@@ -5660,6 +5694,7 @@ const SyncPanel = ({ dbStatus = "loading", rtStatus = "pending", lastOp = null, 
         rtPending ? "실시간 연결중…" : rtOk ? "실시간 연결됨" : "실시간 끊김",
         rtOk, rtPending
       )}
+      {storageBlocked && row("💾", "스토리지 차단 (인메모리)", false, false, "새로고침 시 세션 초기화")}
       {lastOp && row(
         opIcon,
         `마지막 ${opLabel}: ${lastOp.status === "ok" ? "성공" : "실패"}`,
@@ -5681,6 +5716,7 @@ function App() {
   });
   const [showAccMgr,  setShowAccMgr] = useState(false);
   const [piDismissed, setPiDismissed] = useState(false);
+  const [stgBannerDismissed, setStgBannerDismissed] = useState(false);
 
   const [page,           setPage]           = useState("dash");
   const [collapsed,      setCollapsed]      = useState(false);
@@ -6134,6 +6170,26 @@ function App() {
               style={{ marginLeft:"auto", background:"rgba(255,255,255,.15)", border:"none",
                 color:"#fff", borderRadius:5, padding:"2px 10px", cursor:"pointer", fontSize:11, flexShrink:0 }}>
               확인
+            </button>
+          </div>
+        )}
+
+        {/* ── 스토리지 차단 경고 배너 (Tracking Prevention) ── */}
+        {storageBlocked && !stgBannerDismissed && (
+          <div style={{ background:"linear-gradient(90deg,#78350F,#D97706)",
+            padding:"7px 22px", display:"flex", alignItems:"center", gap:10,
+            fontSize:11, color:"#fff", flexShrink:0 }}>
+            <span style={{ fontSize:13 }}>⚠️</span>
+            <span>
+              <b>스토리지 차단:</b> 브라우저의 추적 방지(Tracking Prevention) 설정으로 인해 로컬 저장소 접근이 차단됐습니다.
+              {" "}<b>로그인 세션이 새로고침 시 초기화</b>되며, 감사 로그가 보존되지 않습니다.
+              {" "}Edge: <b>설정 → 개인정보 → 추적 방지 → 균형잡힌</b> 또는 이 사이트를 예외로 추가.
+              {" "}Safari: <b>설정 → 개인정보 → 사이트 간 추적 방지 해제</b> 또는 이 사이트를 신뢰하도록 설정하세요.
+            </span>
+            <button onClick={()=>setStgBannerDismissed(true)}
+              style={{ marginLeft:"auto", background:"rgba(255,255,255,.15)", border:"none",
+                color:"#fff", borderRadius:5, padding:"2px 10px", cursor:"pointer", fontSize:11, flexShrink:0 }}>
+              닫기
             </button>
           </div>
         )}

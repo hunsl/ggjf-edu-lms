@@ -2206,24 +2206,52 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
       </Card>
 
       {/* 과정·날짜 선택 + 요약 */}
-      <Card style={{ padding:"14px 18px", marginBottom:16, display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
-        <div>
-          <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>과정 선택</div>
-          <select value={course.id} onChange={e=>handleCourseChange(courses.find(c=>c.id===+e.target.value)||courses[0])}
-            style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
-              fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
-          </select>
+      <Card style={{ padding:"14px 18px", marginBottom:16 }}>
+        {/* ── 과정 선택 버튼 그룹 ── */}
+        <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:10, color:T.mu, marginBottom:6, fontWeight:600 }}>과정 선택</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {courses.map(c => {
+              const active = course.id === c.id;
+              return (
+                <button key={c.id} type="button" onClick={()=>handleCourseChange(c)}
+                  style={{ padding:"5px 10px", borderRadius:8,
+                    border:`1.5px solid ${active ? T.p : T.bd}`,
+                    background: active ? T.p : T.s2,
+                    color: active ? "#fff" : T.tx,
+                    cursor:"pointer", fontSize:11, fontWeight:600,
+                    transition:"all .15s", whiteSpace:"nowrap",
+                    boxShadow: active ? `0 2px 6px ${T.p}44` : "none" }}>
+                  <span style={{ opacity: active ? .85 : .6, fontSize:10 }}>[{c.code}]</span>
+                  {" "}{shortCourseName(c.name)}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>수업일</div>
-          <select value={date} onChange={e=>setDate(e.target.value)}
-            style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
-              fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {buildCourseDates(course).map(d=><option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
+
+        {/* ── 수업일 선택 + 수업 요일/시간 표시 + 요약 카운트 ── */}
+        <div style={{ display:"flex", gap:14, alignItems:"center", flexWrap:"wrap",
+          borderTop:`1px solid ${T.bd}`, paddingTop:10 }}>
+          <div>
+            <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>수업일 선택</div>
+            <select value={date} onChange={e=>setDate(e.target.value)}
+              style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
+                fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
+              {buildCourseDates(course).map(d=><option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          {/* 수업 요일 / 시간 통합 표시 */}
+          {course.schedDays && (
+            <div style={{ padding:"6px 12px", borderRadius:8, background:T.s2,
+              border:`1px solid ${T.bd}`, fontSize:11, color:T.mu, lineHeight:1.5 }}>
+              📅 <b style={{ color:T.tx }}>{course.schedDays}</b>
+              {course.schedTimeFrom && course.schedTimeTo && (
+                <span style={{ marginLeft:6 }}>🕘 {course.schedTimeFrom} ~ {course.schedTimeTo}</span>
+              )}
+            </div>
+          )}
+          <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
           {[
             {v:presentCnt,   l:"출석",   c:T.ok      },
             {v:lateCnt,      l:"지각",   c:T.warn     },
@@ -2266,6 +2294,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             whiteSpace:"nowrap" }}>
             🚩 결석 일괄 마감
           </button>
+        </div>
         </div>
       </Card>
 
@@ -6358,7 +6387,7 @@ function App() {
             .filter(r => validDates.has(r.date) && (r.status === "O" || r.status === "L"))
             .map(r => r.date)
         ).size;
-        const newRate = Math.round((presentDays / totalDays) * 100);
+        const newRate = Math.min(100, Math.round((presentDays / totalDays) * 100));
         updates.push({ id: s.id, rate: newRate });
       });
       // DB 업데이트 (Promise.all로 완료 보장 — 수료/증명서 화면 탐색 전 일관성 확보)
@@ -6370,7 +6399,7 @@ function App() {
         const upd = updates.find(u => u.id === s.id);
         return upd ? { ...s, rate: upd.rate } : s;
       }));
-      console.log(`✅ 출석률 재계산 완료: ${updates.length}명 (총 ${totalDays}일 기준)`);
+      console.debug(`출석률 재계산 완료: ${updates.length}명 (총 ${totalDays}일 기준)`);
     } catch (err) {
       console.warn("출석률 재계산 실패:", err.message || err);
     }

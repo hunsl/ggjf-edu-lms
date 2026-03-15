@@ -22,6 +22,21 @@ const { useState, useMemo, useEffect, useRef, useCallback } = React;
 /* ── XLSX (CDN global) ── */
 // XLSX is loaded via CDN script tag in index.html
 
+/* ── 스토리지 안전 래퍼 (Tracking Prevention / 서드파티 쿠키 차단 대응) ──
+   Edge/Safari의 Intelligent Tracking Prevention이 cross-origin iframe 환경에서
+   sessionStorage/localStorage 접근을 차단할 때 인메모리로 폴백합니다. */
+const _mem = {};
+const safeSession = {
+  get:    k => { try { return sessionStorage.getItem(k); } catch { return _mem["s_"+k]||null; } },
+  set:    (k,v) => { try { sessionStorage.setItem(k,v); } catch { _mem["s_"+k]=v; } },
+  remove: k => { try { sessionStorage.removeItem(k); } catch { delete _mem["s_"+k]; } },
+};
+const safeLocal = {
+  get:    k => { try { return localStorage.getItem(k); } catch { return _mem["l_"+k]||null; } },
+  set:    (k,v) => { try { localStorage.setItem(k,v); } catch { _mem["l_"+k]=v; } },
+  remove: k => { try { localStorage.removeItem(k); } catch { delete _mem["l_"+k]; } },
+};
+
 
 /* ==========================================================
    ★★★ Supabase 연결 설정 ★★★
@@ -2954,7 +2969,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
             </FLD>
             <FLD label="과정">
               <select value={form.cid} onChange={e=>set("cid",+e.target.value)} style={selStyle}>
-                {courses.map(c=><option key={c.id} value={c.id}>{c.code}</option>)}
+                {courses.map(c=><option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
               </select>
             </FLD>
           </div>
@@ -3128,12 +3143,12 @@ const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
             <label style={{ fontSize:11,fontWeight:600,color:T.mu,display:"block",marginBottom:7 }}>담당 과정 (복수 선택)</label>
             <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
               {courses.map(c=>(
-                <button key={c.id} type="button" onClick={()=>toggleCid(c.id)} style={{
+                <button key={c.id} type="button" title={c.name} onClick={()=>toggleCid(c.id)} style={{
                   padding:"5px 11px", borderRadius:16, border:"none", cursor:"pointer",
                   fontSize:11, fontWeight:600,
                   background: form.cids.includes(c.id) ? c.cc : T.s3,
                   color: form.cids.includes(c.id) ? "#fff" : T.mu }}>
-                  {c.code}
+                  {c.code}{form.cids.includes(c.id) && " ✓"}
                 </button>
               ))}
             </div>
@@ -3192,19 +3207,35 @@ const InstructorMgmt = ({ courses }) => {
   });
 
   const handleSave = async inst => {
+    const isSchemaErr = (e, col) => {
+      const m = e?.message || e?.hint || JSON.stringify(e);
+      return m.includes("schema cache") && m.includes(col);
+    };
+    const doSave = async (body) => isNew
+      ? sbInsert("instructors", body)
+      : sbUpdate("instructors", `id=eq.${inst.id}`, body);
+
     try {
+      const body = fromInstructor(inst);
+      let res = await doSave(body);
+
+      // cids/note 컬럼 스키마 캐시 미등록 → 해당 필드 제외 후 재시도
+      if (res.error && (isSchemaErr(res.error, "cids") || isSchemaErr(res.error, "note"))) {
+        console.warn("⚠️ instructors.cids/note 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload 클릭");
+        const { cids, note, ...fallback } = body;
+        res = await doSave(fallback);
+      }
+
+      if (res.error) throw res.error;
+
       if (isNew) {
-        const { data, error } = await sbInsert("instructors", fromInstructor(inst));
-        if (error) throw error;
-        const saved = (data && data[0]) ? toInstructor(data[0]) : { ...inst, id: Date.now() };
+        const saved = (res.data && res.data[0]) ? toInstructor(res.data[0]) : { ...inst, id: Date.now() };
         setInst(p => [...p, saved]);
       } else {
-        const { error } = await sbUpdate("instructors", `id=eq.${inst.id}`, fromInstructor(inst));
-        if (error) throw error;
         setInst(p => p.map(x => x.id===inst.id ? inst : x));
       }
     } catch (err) {
-      alert("저장 오류: " + (err.message || JSON.stringify(err)));
+      alert("저장 오류: " + (err.message || String(err)));
       throw err;
     }
   };
@@ -3684,6 +3715,14 @@ const RoomMgmt = ({ courses }) => {
   }, []);
 
   // ── 강의실 저장/삭제 핸들러 (BookModal, RoomModal에서 호출) ──
+  const _roomErrMsg = (err, prefix) => {
+    const m = err?.message || String(err);
+    const is404 = err?.code === "42P01" || m.includes("does not exist") || m.includes("404");
+    return is404
+      ? `${prefix}: 'rooms' 테이블이 없습니다.\nSupabase SQL Editor에서 supabase-setup.sql 전체를 실행하세요.`
+      : `${prefix}: ${m}`;
+  };
+
   const handleRoomSave = async (room) => {
     try {
       if (room.id) {
@@ -3696,7 +3735,7 @@ const RoomMgmt = ({ courses }) => {
         setRooms(p => [...p, saved]);
       }
     } catch (err) {
-      alert("강의실 저장 오류: " + (err.message || JSON.stringify(err)));
+      alert(_roomErrMsg(err, "강의실 저장 오류"));
       throw err;
     }
   };
@@ -3708,12 +3747,22 @@ const RoomMgmt = ({ courses }) => {
         setBookings(p => p.map(b => b.id===book.id ? book : b));
       } else {
         const { data, error } = await sbInsert("room_bookings", fromBooking(book));
-        if (error) throw error;
+        if (error) {
+          // room_bookings 테이블 미존재 → 로컬 전용 모드로 저장
+          const m = error?.message || String(error);
+          if (m.includes("does not exist") || m.includes("404") || error?.code === "42P01") {
+            console.warn("⚠️ room_bookings 테이블 없음 — 로컬 저장 (DB 미반영). Supabase SQL Editor에서 supabase-setup.sql을 실행하세요.");
+            alert("강의실 예약 테이블이 없어 이번 세션에만 임시 저장됩니다.\nSupabase SQL Editor에서 supabase-setup.sql 전체를 실행하면 영구 저장됩니다.");
+            setBookings(p => [...p, { ...book, id: Date.now() }]);
+            return;
+          }
+          throw error;
+        }
         const saved = (data && data[0]) ? toBooking(data[0]) : { ...book, id: Date.now() };
         setBookings(p => [...p, saved]);
       }
     } catch (err) {
-      alert("일정 저장 오류: " + (err.message || JSON.stringify(err)));
+      alert(_roomErrMsg(err, "일정 저장 오류"));
       throw err;
     }
   };
@@ -4245,7 +4294,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                           fontSize:11, fontWeight:700, transition:"all .15s",
                           background: selCid===c.id ? T.p : T.s3,
                           color: selCid===c.id ? "#fff" : T.mu }}>
-                        {c.code}
+                        {c.code} {form.cids.includes(c.id) && " ✓"}
                         <span style={{ marginLeft:5, fontSize:10,
                           opacity:.75 }}>({cnt}명)</span>
                       </button>
@@ -4714,7 +4763,7 @@ const AuditLogTab = ({ auditLog }) => {
           placeholder="🔍 검색..." style={{...sel, flex:1, minWidth:100}}/>
         <span style={{ fontSize:11, color:T.mu, flexShrink:0 }}>총 {visible.length}건</span>
         <button onClick={()=>{ if(!window.confirm("감사 로그를 초기화하시겠습니까?")) return;
-            try { localStorage.removeItem("gjf_audit_log"); } catch{}
+            safeLocal.remove("gjf_audit_log");
             window.location.reload(); }}
           style={{ fontSize:10, color:T.danger, background:"transparent",
             border:`1px solid #FECACA`, borderRadius:6, padding:"4px 10px", cursor:"pointer" }}>
@@ -5050,7 +5099,14 @@ const MobileCheckin = () => {
 
         // 해당 과정 학생 목록 로드
         const { data: sData, error: sErr } = await sbGet("students", `select=*&cid=eq.${c.id}&order=name`);
-        if (sErr) throw sErr;
+        if (sErr) {
+          // cid 컬럼 스키마 캐시 오류 — 더 구체적인 안내 제공
+          const msg = sErr?.message || String(sErr);
+          if (msg.includes("schema cache") && msg.includes("cid")) {
+            throw new Error("DB 설정 오류: Supabase 대시보드 → Settings → API → Schema Cache → Reload 버튼을 클릭한 후 다시 시도하세요.");
+          }
+          throw sErr;
+        }
         setStudents((sData || []).map(toStudent));
         setStatus("ready");
       } catch (e) {
@@ -5427,7 +5483,7 @@ function App() {
   // == 모든 훅은 조건문 전에 선언 (Rules of Hooks) ==
   const [accounts,    setAccounts]   = useState(INIT_ACCOUNTS);
   const [currentUser, setCurrentUser] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem("gjf_user") || "null"); } catch (e) { console.warn("세션 복원 실패:", e); return null; }
+    try { return JSON.parse(safeSession.get("gjf_user") || "null"); } catch (e) { console.warn("세션 복원 실패:", e); return null; }
   });
   const [showAccMgr,  setShowAccMgr] = useState(false);
   const [piDismissed, setPiDismissed] = useState(false);
@@ -5443,7 +5499,7 @@ function App() {
 
   // ── 감사 로그 (Audit Log) — localStorage 영구 보관 ──
   const [auditLog, setAuditLog] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("gjf_audit_log") || "[]"); } catch { return []; }
+    try { return JSON.parse(safeLocal.get("gjf_audit_log") || "[]"); } catch { return []; }
   });
   const addAudit = useCallback((action, detail, user) => {
     const entry = {
@@ -5455,7 +5511,7 @@ function App() {
     };
     setAuditLog(prev => {
       const next = [entry, ...prev].slice(0, 300);
-      try { localStorage.setItem("gjf_audit_log", JSON.stringify(next)); } catch {}
+      try { safeLocal.set("gjf_audit_log", JSON.stringify(next)); } catch {}
       return next;
     });
   }, []);
@@ -5707,7 +5763,7 @@ function App() {
       <>
         <GStyle/>
         <LoginScreen accounts={accounts} onLogin={user => {
-          try { sessionStorage.setItem("gjf_user", JSON.stringify(user)); } catch {}
+          try { safeSession.set("gjf_user", JSON.stringify(user)); } catch {}
           setCurrentUser(user); setPiDismissed(false); addAudit("로그인", `${user.name} 로그인`, user.name);
         }}/>
       </>
@@ -5931,7 +5987,7 @@ function App() {
                     👤 계정 관리
                   </button>
                 )}
-                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) { try { sessionStorage.removeItem("gjf_user"); } catch {} addAudit("로그아웃", `${currentUser.name} 로그아웃`, currentUser.name); setCurrentUser(null); } }}
+                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) { safeSession.remove("gjf_user"); addAudit("로그아웃", `${currentUser.name} 로그아웃`, currentUser.name); setCurrentUser(null); } }}
                   style={{ width:"100%", padding:"7px 0", borderRadius:8,
                     border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)",
                     color:"rgba(255,255,255,.75)", cursor:"pointer", fontSize:11, fontWeight:600 }}>

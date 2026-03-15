@@ -11,6 +11,8 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- XLSX (Excel 처리) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <!-- QR Code (로컬 생성 — Tracking Prevention 회피) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -67,20 +69,38 @@ const sbDelete = async (table, filter) => {
   return { error: null };
 };
 
+/* ── Supabase Storage — PDF 업로드 (Base64 대신 URL 저장) ── */
+const sbStorageUpload = async (bucket, path, file) => {
+  const res = await fetch(`${SB_URL}/storage/v1/object/${bucket}/${path}`, {
+    method: "POST",
+    headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` },
+    body: file,
+  });
+  if (!res.ok) { const e = await res.json(); return { url: null, error: e }; }
+  const publicUrl = `${SB_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return { url: publicUrl, error: null };
+};
+
 /* ── DB 컬럼(snake_case) ↔ 앱(camelCase) 변환 ── */
 const toStudent = r => r ? ({
   id: r.id, cid: r.cid, name: r.name, gender: r.gender||"",
   birth: r.birth||"", idBack: r.id_back||"", phone: r.phone||"",
-  addrCity: r.addr_city||"", itvDate: r.itv_date||"",
-  itvScore: r.itv_score||"", itvGrade: r.itv_grade||"",
+  phone2: r.phone2||"", addrCity: r.addr_city||"", addrDetail: r.addr_detail||"",
+  edu: r.edu||"", major: r.major||"", career: r.career||"", cert: r.cert||"",
+  status: r.status||"미취업", unemp: r.unemp||false,
+  disabled: r.disabled||false, veteran: r.veteran||false,
+  itvDate: r.itv_date||"", itvScore: r.itv_score||"", itvGrade: r.itv_grade||"",
   itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
 }) : null;
 
 const fromStudent = s => ({
   cid: s.cid, name: s.name, gender: s.gender||"",
   birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
-  addr_city: s.addrCity||"", itv_date: s.itvDate||null,
-  itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
+  phone2: s.phone2||"", addr_city: s.addrCity||"", addr_detail: s.addrDetail||"",
+  edu: s.edu||"", major: s.major||"", career: s.career||"", cert: s.cert||"",
+  status: s.status||"미취업", unemp: s.unemp||false,
+  disabled: s.disabled||false, veteran: s.veteran||false,
+  itv_date: s.itvDate||null, itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
   itv_pass: s.itvPass||false, memo: s.memo||"", rate: s.rate||0,
 });
 
@@ -154,7 +174,56 @@ const GStyle = () => (
 );
 
 /* ═══════════════════════════════════════════════════════════
-   THEME
+   QR CODE (로컬 생성 — api.qrserver.com 대신 qrcode-generator CDN 사용)
+   Tracking Prevention 오류를 방지하기 위해 canvas에 직접 렌더링
+═══════════════════════════════════════════════════════════ */
+const QRCanvas = ({ data, size = 200, color = "#000000", bgColor = "#ffffff", style = {} }) => {
+  const canvasRef = useRef(null);
+  const [libMissing, setLibMissing] = useState(false);
+  useEffect(() => {
+    if (!canvasRef.current || !data) return;
+    if (typeof window.qrcode !== "function") {
+      console.warn("QRCanvas: qrcode-generator 라이브러리를 로드할 수 없습니다. CDN을 확인하세요.");
+      setLibMissing(true);
+      return;
+    }
+    try {
+      const qr = window.qrcode(0, "M");
+      qr.addData(data);
+      qr.make();
+      const cells = qr.getModuleCount();
+      const canvas = canvasRef.current;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width  = size * dpr;
+      canvas.height = size * dpr;
+      canvas.style.width  = size + "px";
+      canvas.style.height = size + "px";
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+      const cellSize = size / cells;
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = color;
+      for (let r = 0; r < cells; r++) {
+        for (let c = 0; c < cells; c++) {
+          if (qr.isDark(r, c)) ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+        }
+      }
+    } catch (e) {
+      console.error("QR 생성 오류:", e);
+      setLibMissing(true);
+    }
+  }, [data, size, color, bgColor]);
+  if (libMissing) return (
+    <div style={{ width:size, height:size, display:"flex", flexDirection:"column",
+      alignItems:"center", justifyContent:"center", background:"#F1F5F9",
+      borderRadius:8, fontSize:11, color:"#64748B", textAlign:"center", padding:8, ...style }}>
+      <div style={{ fontSize:28, marginBottom:4 }}>⚠️</div>
+      QR 라이브러리 로드 실패<br/>페이지를 새로고침 하세요
+    </div>
+  );
+  return <canvas ref={canvasRef} style={{ display:"block", borderRadius:8, ...style }} />;
+};
 ═══════════════════════════════════════════════════════════ */
 const T = {
   p: "#EA580C", pm: "#F97316", pl: "#FB923C", pbg: "#FFF7ED",
@@ -246,8 +315,39 @@ const SEED_STUDENTS = [
     memo:"HACCP 실무 경험 있음. 결석 주의.", rate:55 },
 ];
 
-const DATES = ["2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06",
-               "2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13"];
+// 과정 날짜 범위 내 날짜 배열 생성 (주말 포함, dateFrom~min(dateTo, 오늘))
+const buildCourseDates = (course) => {
+  if (!course?.dateFrom) return [new Date().toISOString().slice(0, 10)];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(course.dateFrom);
+  // 과정이 아직 시작 전이면 오늘 날짜만 반환
+  if (start > today) return [course.dateFrom];
+  const end = course.dateTo
+    ? new Date(Math.min(new Date(course.dateTo).getTime(), today.getTime()))
+    : today;
+  const dates = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    dates.push(new Date(d).toISOString().slice(0, 10));
+  }
+  return dates.length ? dates : [today.toISOString().slice(0, 10)];
+};
+
+// 과정명 한글 요약 (드롭다운 등에서 간결하게 표시)
+const shortCourseName = (name = "", maxLen = 13) => {
+  if (!name) return "";
+  // 기수 정보 추출 (1기, 2기 등)
+  const kiMatch = name.match(/\((\d+기)\)/);
+  const ki = kiMatch ? ` (${kiMatch[1]})` : "";
+  // 불필요한 단어 제거
+  let short = name
+    .replace(/\([^)]*\)/g, "")                    // 괄호 내용 제거
+    .replace(/전문강사 양성|강사 양성|양성과정|양성|실무자|교육|과정/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (short.length > maxLen) short = short.slice(0, maxLen) + "…";
+  return short + ki;
+};
 
 /* ═══════════════════════════════════════════════════════════
    TINY COMPONENTS
@@ -538,14 +638,30 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
   const updLink   = (i,k,v) => set("links", form.links.map((l,idx)=>idx===i?{...l,[k]:v}:l));
   const delLink   = i => set("links", form.links.filter((_,idx)=>idx!==i));
 
-  // PDF 업로드
-  const onPdfUpload = e => {
+  // PDF 업로드 — Supabase Storage에 파일 저장 후 URL만 form에 저장
+  const PDF_MAX_BYTES = 10 * 1024 * 1024; // 10MB
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const onPdfUpload = async e => {
     const f = e.target.files[0];
     if(!f) return;
-    if(f.size > 5*1024*1024) { alert("PDF 용량이 5MB를 초과합니다."); return; }
-    const r = new FileReader();
-    r.onload = ev => { set("pdfData", ev.target.result); set("pdfName", f.name); };
-    r.readAsDataURL(f);
+    if(f.size > PDF_MAX_BYTES) { alert("PDF 용량이 10MB를 초과합니다."); return; }
+    setPdfUploading(true);
+    // 랜덤 UUID 기반 경로로 path traversal 방지
+    const ext = f.name.split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
+    const uid = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString(36);
+    const path = `syllabi/${uid}.${ext}`;
+    const { url, error } = await sbStorageUpload("course-pdfs", path, f);
+    setPdfUploading(false);
+    if (error) {
+      // Storage 업로드 실패 시 Base64 폴백 (로컬 미리보기용)
+      console.warn("Storage 업로드 실패 — Base64 폴백:", error);
+      const r = new FileReader();
+      r.onload = ev => { set("pdfData", ev.target.result); set("pdfName", f.name); };
+      r.readAsDataURL(f);
+      return;
+    }
+    set("pdfData", url);
+    set("pdfName", f.name);
   };
 
   return (
@@ -757,11 +873,11 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
                   display:"flex",alignItems:"center",justifyContent:"center"}}><Icon n="x" s={12}/></button>
               </div>
             ) : (
-              <button type="button" onClick={()=>pdfRef.current.click()} style={{
+              <button type="button" onClick={()=>!pdfUploading && pdfRef.current.click()} style={{
                 width:"100%", padding:"14px", borderRadius:8, border:`2px dashed ${T.bd}`,
-                background:T.s2, cursor:"pointer", fontSize:12, color:T.mu,
+                background:T.s2, cursor: pdfUploading ? "not-allowed" : "pointer", fontSize:12, color:T.mu,
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                <Icon n="upload" s={16}/> PDF 파일 선택 (강의계획서 / 수업일정표)
+                <Icon n="upload" s={16}/> {pdfUploading ? "업로드 중…" : "PDF 파일 선택 (강의계획서 / 수업일정표)"}
               </button>
             )}
           </div>
@@ -963,22 +1079,42 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 
   const confirmImport = () => {
     if(!preview) return;
+    const yn = v => String(v||"").trim().toUpperCase() === "Y";
     const toAdd = [];
     const toUpdate = [];
     preview.forEach((r,i) => {
       const code = r["과정코드"] || "";
       const c = courses.find(x=>x.code===code) || courses[0];
-      const phone = String(r["연락처"] || "").trim();
+      const phone = String(r["연락처"] || "").replace(/[^0-9]/g, ""); // 숫자만 정규화
       const base = {
-        cid:c.id, name:r["이름"]||"", birth:r["생년월일"]||"",
-        phone, status:r["취업여부"]||"미취업",
+        cid:        c.id,
+        name:       r["이름"]              || "",
+        gender:     r["성별"]              || "",
+        birth:      r["생년월일"]           || "",
+        idBack:     String(r["주민번호뒷자리"]||""),
+        phone,
+        phone2:     String(r["비상연락처"]  ||""),
+        addrCity:   r["거주시"]            || "",
+        addrDetail: r["상세주소"]           || "",
+        edu:        r["최종학력"]           || "",
+        major:      r["전공"]              || "",
+        career:     r["경력"]              || "",
+        cert:       r["자격증"]            || "",
+        status:     r["취업형태"]           || "미취업",
+        unemp:      yn(r["실업급여수급"]),
+        disabled:   yn(r["장애여부"]),
+        veteran:    yn(r["보훈여부"]),
+        itvDate:    r["면접일자"]           || "",
+        itvScore:   r["면접점수"]           || "",
+        itvGrade:   r["면접등급"]           || "",
+        itvPass:    yn(r["합격여부"]),
+        memo:       r["특이사항"]           || "",
       };
-      // ── Upsert: 연락처 일치 시 기존 훈련생 정보 업데이트 ──
       const existing = phone ? students.find(s => s.phone && s.phone === phone) : null;
       if (existing) {
         toUpdate.push({ ...existing, ...base });
       } else {
-        toAdd.push({ id: Date.now()+i, ...base, rate: Math.round(60+Math.random()*40) });
+        toAdd.push({ ...base, rate: 0 }); // ID는 DB 자동 생성
       }
     });
     if (toAdd.length > 0) onAdd(toAdd);
@@ -1091,7 +1227,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                           ))}
                           <td style={{ padding:"10px 14px" }}>
                             {c
-                              ? <Chip label={c.name.length>14?c.name.slice(0,14)+"…":c.name} bg={`${c.cc}12`} color={c.cc}/>
+                              ? <Chip label={shortCourseName(c.name)} bg={`${c.cc}12`} color={c.cc}/>
                               : <Chip label="과정코드 오류" bg="#FEF2F2" color={T.danger}/>
                             }
                           </td>
@@ -1122,7 +1258,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
               padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
               fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer" }}>
               <option value={0}>전체 과정</option>
-              {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
             </select>
             <button onClick={()=>setRisk(!riskOnly)} style={{
               display:"flex", alignItems:"center", gap:5, padding:"7px 13px",
@@ -1320,8 +1456,10 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
    QR ATTENDANCE  ★ QR 출석 체크
 ═══════════════════════════════════════════════════════════ */
 const AttendanceMgmt = ({ students, courses }) => {
-  const [course, setCourse]   = useState(courses[3] || courses[0]);
-  const [date, setDate]       = useState(DATES[DATES.length-1]);
+  const initCourse = courses[3] || courses[0];
+  const initDates  = buildCourseDates(initCourse);
+  const [course, setCourse]   = useState(initCourse);
+  const [date, setDate]       = useState(initDates[initDates.length-1] || new Date().toISOString().slice(0,10));
   const [mode, setMode]       = useState("qr");
   const [qrType, setQrType]   = useState("in");
   const [simRunning, setSimRunning] = useState(false);
@@ -1357,6 +1495,8 @@ const AttendanceMgmt = ({ students, courses }) => {
   const handleCourseChange = (c) => {
     setCourse(c);
     setRecords({});
+    const newDates = buildCourseDates(c);
+    setDate(newDates[newDates.length-1] || new Date().toISOString().slice(0,10));
     if(!timeCustomized) {
       const t = initTimes(c);
       setStartH(t.sh); setStartM(t.sm);
@@ -1376,8 +1516,8 @@ const AttendanceMgmt = ({ students, courses }) => {
   const qrToken   = `${course.code}-${date}-${qrType.toUpperCase()}-2026GJF`;
   const pageBase  = window.location.origin + window.location.pathname;
   const qrData    = `${pageBase}?mode=checkin&cid=${course.id}&date=${date}&type=${qrType}&t=${encodeURIComponent(qrToken)}`;
-  const qrColor   = qrType === "in" ? "2563EB" : "9A3412";
-  const qrUrl     = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}&bgcolor=ffffff&color=${qrColor}&margin=12`;
+  const qrColor   = qrType === "in" ? "#2563EB" : "#9A3412";
+  // qrUrl 제거 — QRCanvas 컴포넌트로 로컬 생성 (Tracking Prevention 대응)
 
   // ── 출결 기록 (입실/퇴실 분리) ──
   const [records, setRecords] = useState({}); // { studentId: { in:{time,status}, out:{time} } }
@@ -1417,63 +1557,84 @@ const AttendanceMgmt = ({ students, courses }) => {
     loadAttendance();
   }, [course, date]);
 
-  // ── 실시간 출결 업데이트 구독 ──
+  // ── 실시간 출결 업데이트 구독 (안정화 버전) ──
   useEffect(() => {
     if (!course || !date) return;
 
     let intentionallyClosed = false;
-    let heartbeatId = null;
-    let currentWs = null;
+    let heartbeatId         = null;
+    let currentWs           = null;
+    let retryDelay          = 2000;
+    let refCount            = 0;
     const channel = `realtime:public:attendance`;
+    const joinRef = String(++refCount);
+    let   subIds  = [];
+
+    const send = (obj) => {
+      if (currentWs?.readyState === WebSocket.OPEN) currentWs.send(JSON.stringify(obj));
+    };
 
     const connect = () => {
       if (intentionallyClosed) return;
 
       const ws = new WebSocket(
-        `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+        `wss://${SB_URL.replace("https://","")}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
       );
       currentWs = ws;
 
       ws.onopen = () => {
-        console.log(`🔔 출결 실시간 구독 시작 (${date})`);
-        ws.send(JSON.stringify({
-          topic: channel,
-          event: "phx_join",
-          payload: {
+        retryDelay = 2000;
+        console.log(`🔔 [출결 Realtime] ${date} 구독 시작`);
+        send({
+          topic:    channel,
+          event:    "phx_join",
+          payload:  {
             config: {
+              broadcast:        { self: false },
+              presence:         { key: "" },
               postgres_changes: [{
-                event: "*",
+                event:  "*",
                 schema: "public",
-                table: "attendance",
+                table:  "attendance",
                 filter: `date=eq.${date}`
               }]
-            }
+            },
+            access_token: SB_KEY
           },
-          ref: Date.now().toString()
-        }));
+          ref:      joinRef,
+          join_ref: joinRef
+        });
 
         heartbeatId = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              topic: "phoenix",
-              event: "heartbeat",
-              payload: {},
-              ref: Date.now().toString()
-            }));
-          } else {
-            clearInterval(heartbeatId);
-            heartbeatId = null;
-          }
-        }, 30000);
+          send({ topic: "phoenix", event: "heartbeat", payload: {}, ref: String(++refCount) });
+        }, 25000);
       };
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.event === "postgres_changes") {
-            const { eventType, new: newRecord } = msg.payload.data;
+
+          // phx_reply 확인
+          if (msg.event === "phx_reply" && msg.ref === joinRef) {
+            if (msg.payload?.status === "ok") {
+              subIds = (msg.payload.response?.postgres_changes || []).map(c => c.id);
+              console.log(`✅ [출결 Realtime] 구독 확인 (${date}) IDs:`, subIds);
+            } else {
+              console.error(`❌ [출결 Realtime] 구독 실패:`, msg.payload?.response);
+            }
+            return;
+          }
+
+          // CDC 이벤트
+          if (msg.event === "postgres_changes" && msg.payload?.data) {
+            const ids = msg.payload.ids || [];
+            if (subIds.length > 0 && !ids.some(id => subIds.includes(id))) return;
+
+            const { type: eventType, record: newRecord } = msg.payload.data;
             if (eventType === "INSERT" || eventType === "UPDATE") {
-              const [h, m] = newRecord.time.split(":").map(Number);
+              // 현재 날짜 필터 (서버 필터와 함께 클라이언트 이중 확인)
+              if (newRecord?.date !== date) return;
+              const [h, m] = (newRecord?.time || "00:00").split(":").map(Number);
               const mins = h * 60 + m;
               setRecords(prev => ({
                 ...prev,
@@ -1484,21 +1645,22 @@ const AttendanceMgmt = ({ students, courses }) => {
                     : { time: newRecord.time }
                 }
               }));
-              console.log(`🔔 실시간 출결: ${newRecord.type} - 학생 ID ${newRecord.student_id}`);
+              console.log(`📌 [출결 Realtime] ${newRecord.type} ← 학생 ID ${newRecord.student_id}`);
             }
           }
         } catch (err) {
-          console.error("실시간 메시지 파싱 오류:", err);
+          console.error("[출결 Realtime] 메시지 파싱 오류:", err);
         }
       };
 
-      ws.onerror = (err) => console.error("❌ 출결 구독 오류:", err);
-      ws.onclose = () => {
+      ws.onerror = () => console.warn("⚠️ [출결 Realtime] 소켓 오류");
+      ws.onclose = (ev) => {
         clearInterval(heartbeatId);
         heartbeatId = null;
         if (!intentionallyClosed) {
-          console.warn("🔌 출결 구독 종료 - 5초 후 재연결");
-          setTimeout(connect, 5000);
+          console.warn(`🔌 [출결 Realtime] 연결 끊김 (code:${ev.code}) — ${retryDelay/1000}초 후 재연결`);
+          setTimeout(connect, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 30000);
         }
       };
     };
@@ -1677,7 +1839,7 @@ const AttendanceMgmt = ({ students, courses }) => {
           <select value={course.id} onChange={e=>handleCourseChange(courses.find(c=>c.id===+e.target.value)||courses[0])}
             style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
               fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
           </select>
         </div>
         <div>
@@ -1685,7 +1847,7 @@ const AttendanceMgmt = ({ students, courses }) => {
           <select value={date} onChange={e=>setDate(e.target.value)}
             style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
               fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {DATES.map(d=><option key={d} value={d}>{d}</option>)}
+            {buildCourseDates(course).map(d=><option key={d} value={d}>{d}</option>)}
           </select>
         </div>
         <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
@@ -1701,6 +1863,35 @@ const AttendanceMgmt = ({ students, courses }) => {
             </div>
           ))}
           <div style={{ fontSize:13, color:T.mu }}>/ {courseStudents.length}명</div>
+          {/* 결석 일괄 마감 버튼 */}
+          <button onClick={async () => {
+            const absentStudents = courseStudents.filter(s => !records[s.id]?.in);
+            if (absentStudents.length === 0) { alert("미확인 인원이 없습니다."); return; }
+            if (!window.confirm(`미확인 ${absentStudents.length}명을 결석으로 일괄 처리하시겠습니까?`)) return;
+            try {
+              const now = new Date();
+              const toInsert = absentStudents.map(s => ({
+                student_id: s.id, date, type: "absent",
+                time: "00:00", status: "A", created_at: now.toISOString()
+              }));
+              const { error } = await sbInsert("attendance", toInsert);
+              if (error) throw error;
+              // 로컬 records 업데이트
+              setRecords(prev => {
+                const next = { ...prev };
+                absentStudents.forEach(s => { next[s.id] = { ...(next[s.id]||{}), in: { time:"결석", mins:null, status:"A" } }; });
+                return next;
+              });
+              alert(`✅ ${absentStudents.length}명 결석 일괄 처리 완료`);
+            } catch(err) {
+              alert("마감 오류: " + (err.message || JSON.stringify(err)));
+            }
+          }} style={{ padding:"8px 12px", borderRadius:9, border:`1.5px solid ${T.danger}`,
+            background:"#FEF2F2", color:T.danger, cursor:"pointer",
+            fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:5,
+            whiteSpace:"nowrap" }}>
+            🚩 결석 일괄 마감
+          </button>
         </div>
       </Card>
 
@@ -1729,11 +1920,11 @@ const AttendanceMgmt = ({ students, courses }) => {
               ))}
             </div>
 
-            {/* QR 이미지 */}
+            {/* QR 이미지 — 로컬 canvas 렌더링 (Tracking Prevention 대응) */}
             <div style={{ position:"relative", display:"inline-block", marginBottom:12 }}>
-              <img src={qrUrl} alt="QR" style={{ width:200, height:200, display:"block",
-                border:`2px solid ${qrType==="in"?"#2563EB":T.pl}`, borderRadius:10 }}
-                onError={e=>{ e.target.style.display="none"; }}/>
+              <div style={{ border:`2px solid ${qrType==="in"?"#2563EB":T.pl}`, borderRadius:10, overflow:"hidden", lineHeight:0 }}>
+                <QRCanvas data={qrData} size={200} color={qrColor} bgColor="#ffffff" />
+              </div>
               <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0, pointerEvents:"none",
                 overflow:"hidden", borderRadius:10 }}>
                 <div style={{ position:"absolute", left:0, right:0, height:2,
@@ -1970,7 +2161,7 @@ const CompletionMgmt = ({ students, courses }) => {
             fontSize:11, fontWeight:600, whiteSpace:"nowrap",
             background: course.id===c.id ? c.cc : T.s3,
             color: course.id===c.id ? "#fff" : T.mu }}>
-            {c.name.length>14?c.name.slice(0,14)+"…":c.name}
+            {shortCourseName(c.name)}
           </button>
         ))}
       </div>
@@ -2349,7 +2540,7 @@ const CertMgmt = ({ students, courses }) => {
             fontSize:11, fontWeight:600, whiteSpace:"nowrap",
             background: course.id===c.id ? c.cc : T.s3,
             color: course.id===c.id ? "#fff" : T.mu }}>
-            {c.name.length>14 ? c.name.slice(0,14)+"…" : c.name}
+            {shortCourseName(c.name)}
           </button>
         ))}
       </div>
@@ -2958,13 +3149,36 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const isEdit = !!(init?.id);
 
+  // ── 요일 겹침 검사 헬퍼 ──
+  const daysOverlap = (daysA, daysB) => {
+    if (!daysA || !daysB) return true; // 정보 없으면 겹친다고 가정
+    const setA = new Set(daysA.split(/[,\s]+/).map(d=>d.trim()).filter(Boolean));
+    return daysB.split(/[,\s]+/).map(d=>d.trim()).filter(Boolean).some(d => setA.has(d));
+  };
+  // ── 시간대 겹침 검사 헬퍼 ──
+  const timesOverlap = (fromA, toA, fromB, toB) => {
+    if (!fromA || !toA || !fromB || !toB) return true;
+    const toMins = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+    return toMins(fromA) < toMins(toB) && toMins(toA) > toMins(fromB);
+  };
+
+  const getCourseSchedule = (courseId) => courses.find(c=>c.id===courseId) || {};
+
   const conflicts = (form.start && form.end && form.roomId)
-    ? bookings.filter(b =>
-        b.roomId === form.roomId &&
-        b.id !== init?.id &&
-        b.start <= form.end &&
-        b.end   >= form.start
-      )
+    ? bookings.filter(b => {
+        if (b.roomId !== form.roomId) return false;
+        if (b.id === init?.id) return false;
+        // 1단계: 날짜 범위 겹침
+        if (b.start > form.end || b.end < form.start) return false;
+        // 2단계: 수업 요일 겹침
+        const bCourse   = getCourseSchedule(b.courseId);
+        const fCourse   = getCourseSchedule(form.courseId);
+        if (!daysOverlap(bCourse.schedDays, fCourse.schedDays)) return false;
+        // 3단계: 시간대 겹침
+        if (!timesOverlap(bCourse.schedTimeFrom, bCourse.schedTimeTo,
+                          fCourse.schedTimeFrom, fCourse.schedTimeTo)) return false;
+        return true;
+      })
     : [];
   const hasConflict = conflicts.length > 0;
 
@@ -2997,8 +3211,7 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings }) => 
           <FLD label="과정">
             <select value={form.courseId} onChange={e=>{ const c=courses.find(x=>x.id===+e.target.value); set("courseId",+e.target.value); set("label",c?.name||""); }}
               style={{...inp,cursor:"pointer"}}>
-              {courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-              <option value={0}>직접 입력</option>
+              {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
             </select>
           </FLD>
           <FLD label="표시 이름">
@@ -3154,14 +3367,37 @@ const RoomMgmt = ({ courses }) => {
     );
   };
 
-  // 특정 날 특정 강의실에서 중복 있는지 검사 (같은 강의실에 2개 이상 일정)
+  // 특정 날 특정 강의실에서 중복 있는지 검사 (요일/시간 3단계)
   const hasConflictOnDay = d => {
     if(!d) return false;
     const ds = dateStr(d);
+    const dayOfWeek = ["일","월","화","수","목","금","토"][new Date(ds).getDay()];
+    const daysOverlapLocal = (daysA, daysB) => {
+      if (!daysA || !daysB) return true;
+      const setA = new Set(daysA.split(/[,\s]+/).map(x=>x.trim()).filter(Boolean));
+      return daysB.split(/[,\s]+/).map(x=>x.trim()).filter(Boolean).some(x => setA.has(x));
+    };
+    const timesOverlapLocal = (fA, tA, fB, tB) => {
+      if (!fA || !tA || !fB || !tB) return true;
+      const m = t => { const [h,mn] = t.split(":").map(Number); return h*60+mn; };
+      return m(fA) < m(tB) && m(tA) > m(fB);
+    };
     const roomIds = [...new Set(bookings.map(b=>b.roomId))];
     return roomIds.some(rid => {
-      const cnt = bookings.filter(b => b.roomId===rid && b.start<=ds && b.end>=ds).length;
-      return cnt >= 2;
+      const dayBkgs = bookings.filter(b => b.roomId===rid && b.start<=ds && b.end>=ds);
+      if (dayBkgs.length < 2) return false;
+      // 같은 강의실 예약 중 요일+시간이 겹치는 쌍이 있는지
+      for (let i = 0; i < dayBkgs.length; i++) {
+        for (let j = i+1; j < dayBkgs.length; j++) {
+          const cA = courses.find(c=>c.id===dayBkgs[i].courseId)||{};
+          const cB = courses.find(c=>c.id===dayBkgs[j].courseId)||{};
+          if (daysOverlapLocal(cA.schedDays, cB.schedDays) &&
+              (daysOverlapLocal(dayOfWeek, cA.schedDays) || !cA.schedDays) &&
+              timesOverlapLocal(cA.schedTimeFrom, cA.schedTimeTo,
+                                cB.schedTimeFrom, cB.schedTimeTo)) return true;
+        }
+      }
+      return false;
     });
   };
 
@@ -4220,9 +4456,23 @@ const MobileCheckin = () => {
 
   const [course,   setCourse]   = useState(null);
   const [students, setStudents] = useState([]);
-  const [status,   setStatus]   = useState("loading"); // loading | ready | success | error | expired
+  const [status,   setStatus]   = useState("loading"); // loading | ready | success | error | expired | duplicate
   const [checkedId, setCheckedId] = useState(null);
+  const [checkedTime, setCheckedTime] = useState("");
   const [errMsg,   setErrMsg]   = useState("");
+  const [nowStr,   setNowStr]   = useState("");
+  const [searchQ,  setSearchQ]  = useState("");
+
+  // 현재 시각 표시 (매초 갱신)
+  useEffect(() => {
+    const tick = () => {
+      const n = new Date();
+      setNowStr(`${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}:${String(n.getSeconds()).padStart(2,"0")}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -4256,6 +4506,17 @@ const MobileCheckin = () => {
   const handleCheckin = async (student) => {
     setStatus("loading");
     try {
+      // 중복 체크: 이미 해당 타입으로 출결 기록이 있는지 확인
+      const { data: existing } = await sbGet(
+        "attendance",
+        `select=id,time&student_id=eq.${student.id}&date=eq.${date}&type=eq.${type}&limit=1`
+      );
+      if (existing?.[0]) {
+        setCheckedId(student.id);
+        setCheckedTime(existing[0].time);
+        setStatus("duplicate");
+        return;
+      }
       const now  = new Date();
       const time = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
       const { error } = await sbInsert("attendance", [{
@@ -4267,6 +4528,7 @@ const MobileCheckin = () => {
       }]);
       if (error) throw error;
       setCheckedId(student.id);
+      setCheckedTime(time);
       setStatus("success");
     } catch (e) {
       setStatus("error"); setErrMsg(e.message || "저장 오류");
@@ -4279,114 +4541,183 @@ const MobileCheckin = () => {
 
   const containerStyle = {
     minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center",
-    background:`linear-gradient(160deg,${typeColor}22 0%,#FFF7ED 60%)`,
-    fontFamily:"'Pretendard',-apple-system,sans-serif", padding:"24px 20px",
+    background:`linear-gradient(160deg,${typeColor}18 0%,#F8FAFC 50%,#FFF7ED 100%)`,
+    fontFamily:"'Pretendard',-apple-system,sans-serif", padding:"20px 16px",
   };
 
   if (status === "loading") return (
     <div style={containerStyle}>
-      <div style={{ marginTop:80, fontSize:40 }}>⏳</div>
-      <div style={{ marginTop:16, fontSize:14, color:"#64748B" }}>잠시만 기다려 주세요…</div>
+      <div style={{ marginTop:100, textAlign:"center" }}>
+        <div style={{ fontSize:48, animation:"fadeIn .5s ease" }}>⏳</div>
+        <div style={{ marginTop:16, fontSize:14, color:"#64748B", fontWeight:600 }}>잠시만 기다려 주세요…</div>
+        <div style={{ marginTop:8, fontSize:11, color:"#94A3B8" }}>Supabase와 연결 중입니다</div>
+      </div>
     </div>
   );
 
   if (status === "expired") return (
     <div style={containerStyle}>
-      <div style={{ marginTop:60, textAlign:"center" }}>
-        <div style={{ fontSize:56 }}>⏰</div>
-        <div style={{ fontSize:18, fontWeight:800, color:"#1E293B", marginTop:14 }}>QR 코드가 만료되었습니다</div>
-        <div style={{ fontSize:13, color:"#64748B", marginTop:8 }}>담당자에게 새 QR 코드를 요청하세요.</div>
+      <div style={{ marginTop:80, textAlign:"center", maxWidth:320 }}>
+        <div style={{ fontSize:64 }}>⏰</div>
+        <div style={{ fontSize:20, fontWeight:900, color:"#1E293B", marginTop:16 }}>QR 코드가 만료되었습니다</div>
+        <div style={{ fontSize:13, color:"#64748B", marginTop:10, lineHeight:1.6 }}>
+          담당자에게 새 QR 코드를 요청하세요.
+        </div>
       </div>
     </div>
   );
 
   if (status === "error") return (
     <div style={containerStyle}>
-      <div style={{ marginTop:60, textAlign:"center" }}>
-        <div style={{ fontSize:56 }}>❌</div>
-        <div style={{ fontSize:18, fontWeight:800, color:"#1E293B", marginTop:14 }}>오류가 발생했습니다</div>
-        <div style={{ fontSize:13, color:"#64748B", marginTop:8 }}>{errMsg}</div>
+      <div style={{ marginTop:80, textAlign:"center", maxWidth:320 }}>
+        <div style={{ fontSize:64 }}>❌</div>
+        <div style={{ fontSize:20, fontWeight:900, color:"#1E293B", marginTop:16 }}>오류가 발생했습니다</div>
+        <div style={{ fontSize:13, color:"#64748B", marginTop:10 }}>{errMsg}</div>
+        <button onClick={()=>window.location.reload()}
+          style={{ marginTop:20, padding:"12px 24px", borderRadius:12, border:"none",
+            background:typeColor, color:"#fff", fontWeight:700, fontSize:14, cursor:"pointer" }}>
+          다시 시도
+        </button>
       </div>
     </div>
   );
 
-  if (status === "success") {
+  if (status === "success" || status === "duplicate") {
     const s = students.find(x => x.id === checkedId);
+    const isDup = status === "duplicate";
     return (
       <div style={containerStyle}>
-        <div style={{ width:"100%", maxWidth:380, marginTop:40, textAlign:"center",
-          background:"#fff", borderRadius:20, padding:"32px 28px",
-          boxShadow:"0 8px 40px rgba(0,0,0,.12)" }}>
-          <div style={{ fontSize:56 }}>✅</div>
-          <div style={{ fontSize:22, fontWeight:900, color:"#1E293B", marginTop:12 }}>
-            {typeLabel} 완료!
+        {/* 상단 기관 로고 영역 */}
+        <div style={{ width:"100%", maxWidth:400, textAlign:"center", marginBottom:20, marginTop:20 }}>
+          <div style={{ fontSize:11, color:"#94A3B8", letterSpacing:1 }}>경기도일자리재단 북부사업본부</div>
+        </div>
+        <div style={{ width:"100%", maxWidth:400, textAlign:"center",
+          background:"#fff", borderRadius:24, padding:"36px 28px",
+          boxShadow:"0 12px 48px rgba(0,0,0,.10)", border:`1px solid ${typeColor}20` }}>
+          <div style={{ fontSize:64, marginBottom:8 }}>{isDup ? "🔔" : "✅"}</div>
+          <div style={{ fontSize:24, fontWeight:900, color:"#1E293B" }}>
+            {isDup ? "이미 체크되었습니다" : `${typeLabel} 완료!`}
           </div>
-          <div style={{ fontSize:15, fontWeight:700, color:typeColor, marginTop:6 }}>
+          <div style={{ fontSize:18, fontWeight:800, color:typeColor, marginTop:10 }}>
             {s?.name}
           </div>
-          <div style={{ fontSize:12, color:"#64748B", marginTop:8 }}>
+          <div style={{ fontSize:13, color:"#64748B", marginTop:8, lineHeight:1.8 }}>
             {course?.name}<br/>
-            {fmtDate(date)} · {typeLabel} 기록 완료
+            {fmtDate(date)} · {typeLabel}
           </div>
-          <div style={{ marginTop:18, padding:"10px 14px", borderRadius:10,
-            background:`${typeColor}12`, border:`1px solid ${typeColor}30`,
-            fontSize:11, color:typeColor, fontWeight:700 }}>
-            📡 담당자 화면에 실시간 반영됩니다
+          <div style={{ marginTop:6, fontSize:22, fontWeight:900, color:typeColor, letterSpacing:2 }}>
+            {checkedTime}
           </div>
+          <div style={{ marginTop:16, padding:"10px 16px", borderRadius:12,
+            background: isDup ? "#FFF7ED" : `${typeColor}12`,
+            border:`1px solid ${isDup ? "#FED7AA" : typeColor+"30"}`,
+            fontSize:12, color: isDup ? "#9A3412" : typeColor, fontWeight:700, lineHeight:1.6 }}>
+            {isDup
+              ? <span>⚠️ {checkedTime}에 이미 {typeLabel} 처리되었습니다.<br/>중복 기록은 생성되지 않습니다.</span>
+              : "📡 담당자 화면에 실시간 반영됩니다"}
+          </div>
+          {isDup && (
+            <button onClick={()=>setStatus("ready")}
+              style={{ marginTop:16, padding:"10px 22px", borderRadius:10, border:"none",
+                background:"#F1F5F9", color:"#64748B", fontWeight:600, fontSize:13, cursor:"pointer" }}>
+              ← 목록으로 돌아가기
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
   // status === "ready"
+  const filtered = searchQ
+    ? students.filter(s => s.name.includes(searchQ) || (s.phone||"").includes(searchQ))
+    : students;
+
   return (
     <div style={containerStyle}>
-      {/* 헤더 */}
-      <div style={{ width:"100%", maxWidth:420, marginBottom:20 }}>
-        <div style={{ fontSize:11, color:"#64748B", marginBottom:4 }}>경기도일자리재단 북부사업본부</div>
-        <div style={{ fontSize:18, fontWeight:900, color:"#1E293B", display:"flex", alignItems:"center", gap:8 }}>
-          {type === "in" ? "📥" : "📤"}
+      {/* 상단 헤더 */}
+      <div style={{ width:"100%", maxWidth:440, marginBottom:16 }}>
+        {/* 기관명 */}
+        <div style={{ fontSize:11, color:"#94A3B8", letterSpacing:1, marginBottom:4 }}>
+          경기도일자리재단 북부사업본부
+        </div>
+        {/* 타이틀 */}
+        <div style={{ fontSize:22, fontWeight:900, color:"#1E293B",
+          display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:28 }}>{type === "in" ? "📥" : "📤"}</span>
           {typeLabel} 출석 체크
         </div>
-        <div style={{ fontSize:12, color:"#64748B", marginTop:3 }}>
-          {course?.name} · {fmtDate(date)}
+        {/* 과정명 + 날짜 */}
+        <div style={{ fontSize:13, color:"#64748B", marginTop:4, fontWeight:500 }}>
+          {course?.name}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:4 }}>
+          <div style={{ fontSize:12, color:"#94A3B8" }}>{fmtDate(date)}</div>
+          {/* 현재 시각 */}
+          <div style={{ fontSize:15, fontWeight:900, color:typeColor, letterSpacing:2,
+            background:`${typeColor}10`, padding:"3px 10px", borderRadius:8 }}>
+            🕐 {nowStr}
+          </div>
         </div>
       </div>
 
-      {/* 안내 */}
-      <div style={{ width:"100%", maxWidth:420, padding:"11px 14px", borderRadius:10,
-        background:`${typeColor}10`, border:`1px solid ${typeColor}30`,
-        fontSize:12, color:typeColor, fontWeight:600, marginBottom:18 }}>
-        👇 아래 목록에서 본인 이름을 터치하세요
+      {/* 안내 배너 */}
+      <div style={{ width:"100%", maxWidth:440, padding:"12px 16px", borderRadius:12,
+        background:`${typeColor}12`, border:`1px solid ${typeColor}30`,
+        fontSize:13, color:typeColor, fontWeight:700, marginBottom:14,
+        display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ fontSize:18 }}>👇</span>
+        <span>아래 목록에서 본인 이름을 터치하세요</span>
       </div>
 
-      {/* 학생 목록 */}
-      <div style={{ width:"100%", maxWidth:420, display:"flex", flexDirection:"column", gap:8 }}>
-        {students.length === 0 ? (
+      {/* 검색 입력 */}
+      {students.length > 5 && (
+        <div style={{ width:"100%", maxWidth:440, marginBottom:12 }}>
+          <input
+            value={searchQ}
+            onChange={e=>setSearchQ(e.target.value)}
+            placeholder="🔍  이름 또는 전화번호 검색"
+            style={{ width:"100%", padding:"12px 16px", borderRadius:12,
+              border:`1.5px solid ${typeColor}30`, fontSize:14, outline:"none",
+              background:"#fff", boxSizing:"border-box",
+              fontFamily:"inherit", color:"#1E293B" }}
+          />
+        </div>
+      )}
+
+      {/* 학생 카드 목록 */}
+      <div style={{ width:"100%", maxWidth:440, display:"flex", flexDirection:"column", gap:10 }}>
+        {filtered.length === 0 ? (
           <div style={{ textAlign:"center", color:"#94A3B8", padding:"40px 0", fontSize:14 }}>
-            등록된 훈련생이 없습니다
+            {searchQ ? "검색 결과가 없습니다" : "등록된 훈련생이 없습니다"}
           </div>
-        ) : students.map(s => (
+        ) : filtered.map(s => (
           <button key={s.id} onClick={()=>handleCheckin(s)}
-            style={{ padding:"16px 20px", borderRadius:14, border:`1.5px solid ${typeColor}30`,
+            style={{ padding:"18px 20px", borderRadius:16, border:`1.5px solid ${typeColor}25`,
               background:"#fff", cursor:"pointer", textAlign:"left",
-              boxShadow:"0 2px 8px rgba(0,0,0,.06)", transition:"all .15s",
-              display:"flex", alignItems:"center", gap:14 }}>
-            <div style={{ width:42, height:42, borderRadius:12, flexShrink:0,
-              background:`${typeColor}15`, display:"flex", alignItems:"center",
-              justifyContent:"center", fontSize:18, fontWeight:900, color:typeColor }}>
+              boxShadow:"0 2px 12px rgba(0,0,0,.06)", transition:"all .15s",
+              display:"flex", alignItems:"center", gap:14, WebkitTapHighlightColor:"transparent" }}>
+            {/* 아바타 */}
+            <div style={{ width:48, height:48, borderRadius:14, flexShrink:0,
+              background:`${typeColor}18`, display:"flex", alignItems:"center",
+              justifyContent:"center", fontSize:20, fontWeight:900, color:typeColor }}>
               {s.name[0]}
             </div>
-            <div>
-              <div style={{ fontSize:16, fontWeight:800, color:"#1E293B" }}>{s.name}</div>
-              <div style={{ fontSize:11, color:"#94A3B8", marginTop:2 }}>{s.phone || "연락처 없음"}</div>
+            {/* 이름 / 연락처 */}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:17, fontWeight:800, color:"#1E293B" }}>{s.name}</div>
+              <div style={{ fontSize:12, color:"#94A3B8", marginTop:2 }}>
+                {s.phone ? s.phone.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3") : "연락처 없음"}
+              </div>
             </div>
-            <div style={{ marginLeft:"auto", fontSize:22, color:`${typeColor}80` }}>›</div>
+            {/* 화살표 */}
+            <div style={{ fontSize:24, color:`${typeColor}60`, fontWeight:900 }}>›</div>
           </button>
         ))}
       </div>
 
-      <div style={{ marginTop:24, fontSize:10, color:"#CBD5E1", textAlign:"center" }}>
+      <div style={{ marginTop:28, fontSize:10, color:"#CBD5E1", textAlign:"center", lineHeight:1.8 }}>
+        총 {students.length}명 등록 · {filtered.length}명 표시<br/>
         © 2026 경기도일자리재단 북부사업본부 · 학사관리시스템
       </div>
     </div>
@@ -4395,80 +4726,109 @@ const MobileCheckin = () => {
 
 class RealtimeManager {
   constructor() {
-    this.subscriptions = new Map(); // table -> { ws, intentionallyClosed }
+    this.subscriptions = new Map(); // table -> state object
+    this._refCount = 0;
   }
+
+  _nextRef() { return String(++this._refCount); }
 
   subscribe(table, callbacks = {}) {
     if (this.subscriptions.has(table)) return;
 
     const { onInsert, onUpdate, onDelete } = callbacks;
     const channel = `realtime:public:${table}`;
-    const state = { intentionallyClosed: false, heartbeatId: null, ws: null };
+    const joinRef  = this._nextRef();
+    const state = {
+      intentionallyClosed: false,
+      heartbeatId:         null,
+      ws:                  null,
+      retryDelay:          2000,   // 지수 backoff 초기값
+      subIds:              [],     // phx_reply에서 받은 subscription IDs
+    };
     this.subscriptions.set(table, state);
+
+    const send = (obj) => {
+      if (state.ws?.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify(obj));
+      }
+    };
 
     const connect = () => {
       if (state.intentionallyClosed) return;
 
       const ws = new WebSocket(
-        `wss://vqkjakgbrsnsererwmma.supabase.co/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+        `wss://${SB_URL.replace("https://","")}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
       );
       state.ws = ws;
 
       ws.onopen = () => {
-        console.log(`✅ ${table} 실시간 구독 시작`);
-        ws.send(JSON.stringify({
-          topic: channel,
-          event: "phx_join",
-          payload: {
-            config: {
-              postgres_changes: [{
-                event: "*",
-                schema: "public",
-                table: table
-              }]
-            }
-          },
-          ref: Date.now().toString()
-        }));
+        state.retryDelay = 2000; // 성공 시 backoff 리셋
+        console.log(`✅ [Realtime] ${table} 연결됨`);
 
+        // phx_join
+        send({
+          topic:    channel,
+          event:    "phx_join",
+          payload:  {
+            config: {
+              broadcast:        { self: false },
+              presence:         { key: "" },
+              postgres_changes: [{ event: "*", schema: "public", table }]
+            },
+            access_token: SB_KEY
+          },
+          ref:      joinRef,
+          join_ref: joinRef
+        });
+
+        // Heartbeat 30초마다
         state.heartbeatId = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              topic: "phoenix",
-              event: "heartbeat",
-              payload: {},
-              ref: Date.now().toString()
-            }));
-          } else {
-            clearInterval(state.heartbeatId);
-            state.heartbeatId = null;
-          }
-        }, 30000);
+          send({ topic: "phoenix", event: "heartbeat", payload: {}, ref: this._nextRef() });
+        }, 25000);
       };
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.event === "postgres_changes") {
-            const { eventType, new: newRecord, old: oldRecord } = msg.payload.data;
-            switch(eventType) {
-              case "INSERT": onInsert?.(newRecord); break;
+
+          // phx_reply — join 확인 및 subscription ID 저장
+          if (msg.event === "phx_reply" && msg.ref === joinRef) {
+            if (msg.payload?.status === "ok") {
+              state.subIds = (msg.payload.response?.postgres_changes || []).map(c => c.id);
+              console.log(`🔔 [Realtime] ${table} 구독 확인 IDs:`, state.subIds);
+            } else {
+              console.error(`❌ [Realtime] ${table} 구독 실패:`, msg.payload?.response);
+            }
+            return;
+          }
+
+          // postgres_changes CDC 이벤트
+          if (msg.event === "postgres_changes" && msg.payload?.data) {
+            // IDs 필터: subIds가 비어있으면 모두 통과 (폴백)
+            const ids = msg.payload.ids || [];
+            if (state.subIds.length > 0 && !ids.some(id => state.subIds.includes(id))) return;
+
+            const { type: eventType, record: newRecord, old_record: oldRecord } = msg.payload.data;
+            switch (eventType) {
+              case "INSERT": onInsert?.(newRecord);            break;
               case "UPDATE": onUpdate?.(newRecord, oldRecord); break;
-              case "DELETE": onDelete?.(oldRecord); break;
+              case "DELETE": onDelete?.(oldRecord);            break;
             }
           }
         } catch (err) {
-          console.error(`${table} 메시지 파싱 오류:`, err);
+          console.error(`[Realtime] ${table} 파싱 오류:`, err);
         }
       };
 
-      ws.onerror = (err) => console.error(`❌ ${table} 구독 오류:`, err);
-      ws.onclose = () => {
+      ws.onerror = () => console.warn(`⚠️ [Realtime] ${table} 소켓 오류`);
+
+      ws.onclose = (ev) => {
         clearInterval(state.heartbeatId);
         state.heartbeatId = null;
         if (!state.intentionallyClosed) {
-          console.warn(`🔌 ${table} 구독 종료 - 5초 후 재연결`);
-          setTimeout(connect, 5000);
+          console.warn(`🔌 [Realtime] ${table} 연결 끊김 (code:${ev.code}) — ${state.retryDelay/1000}초 후 재연결`);
+          setTimeout(connect, state.retryDelay);
+          state.retryDelay = Math.min(state.retryDelay * 2, 30000); // 최대 30초
         }
       };
     };
@@ -4495,7 +4855,9 @@ const realtimeManager = new RealtimeManager();
 function App() {
   // ══ 모든 훅은 조건문 전에 선언 (Rules of Hooks) ══
   const [accounts,    setAccounts]   = useState(INIT_ACCOUNTS);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("gjf_user") || "null"); } catch (e) { console.warn("세션 복원 실패:", e); return null; }
+  });
   const [showAccMgr,  setShowAccMgr] = useState(false);
   const [piDismissed, setPiDismissed] = useState(false);
 
@@ -4635,8 +4997,16 @@ function App() {
       console.error("❌ 학생 저장 실패:", error);
       return; 
     }
+    // Realtime이 응답하기 전에 로컬 state에 즉시 반영 (중복 방지는 onInsert 핸들러에서)
+    if (data && data.length > 0) {
+      setStudents(prev => {
+        const newIds = new Set(data.map(r => r.id));
+        const filtered = prev.filter(s => !newIds.has(s.id));
+        return [...filtered, ...data.map(toStudent)];
+      });
+    }
     addAudit("훈련생 등록", `${newOnes.length}명 등록 (${newOnes.map(s=>s.name).join(", ")})`, currentUser?.name);
-    console.log("✅ 학생 저장 완료:", (data||[]).length, "명 - 실시간 구독이 자동 반영");
+    console.log("✅ 학생 저장 완료:", (data||[]).length, "명");
   }, [addAudit, currentUser]);
 
   const updateStudent = useCallback(async (updated) => {
@@ -4677,8 +5047,16 @@ function App() {
       console.error("❌ 과정 저장 실패:", error);
       return; 
     }
+    // 로컬 state 즉시 반영
+    if (data && data.length > 0) {
+      setCourses(prev => {
+        const newId = data[0].id;
+        const filtered = prev.filter(x => x.id !== newId);
+        return [...filtered, toCourse(data[0])];
+      });
+    }
     addAudit("과정 등록", `${c.name} (${c.code}) 추가`, currentUser?.name);
-    console.log("✅ 과정 저장 완료:", data?.name, "- 실시간 구독이 자동 반영");
+    console.log("✅ 과정 저장 완료:", data?.[0]?.name);
   }, [addAudit, currentUser]);
 
   const updateCourse = useCallback(async (c) => {
@@ -4717,7 +5095,10 @@ function App() {
     return (
       <>
         <GStyle/>
-        <LoginScreen accounts={accounts} onLogin={user => { setCurrentUser(user); setPiDismissed(false); addAudit("로그인", `${user.name} 로그인`, user.name); }}/>
+        <LoginScreen accounts={accounts} onLogin={user => {
+          try { sessionStorage.setItem("gjf_user", JSON.stringify(user)); } catch {}
+          setCurrentUser(user); setPiDismissed(false); addAudit("로그인", `${user.name} 로그인`, user.name);
+        }}/>
       </>
     );
   }
@@ -4920,7 +5301,7 @@ function App() {
                     👤 계정 관리
                   </button>
                 )}
-                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) setCurrentUser(null); }}
+                <button onClick={()=>{ if(window.confirm("로그아웃 하시겠습니까?")) { try { sessionStorage.removeItem("gjf_user"); } catch {} addAudit("로그아웃", `${currentUser.name} 로그아웃`, currentUser.name); setCurrentUser(null); } }}
                   style={{ width:"100%", padding:"6px 0", borderRadius:7,
                     border:"1px solid rgba(255,255,255,.2)", background:"rgba(255,255,255,.08)",
                     color:"rgba(255,255,255,.7)", cursor:"pointer", fontSize:11, fontWeight:600 }}>

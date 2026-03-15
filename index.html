@@ -4762,7 +4762,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                           fontSize:11, fontWeight:700, transition:"all .15s",
                           background: selCid===c.id ? T.p : T.s3,
                           color: selCid===c.id ? "#fff" : T.mu }}>
-                        {c.code} {form.cids.includes(c.id) && " ✓"}
+                        {c.code}
                         <span style={{ marginLeft:5, fontSize:10,
                           opacity:.75 }}>({cnt}명)</span>
                       </button>

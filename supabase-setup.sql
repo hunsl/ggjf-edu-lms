@@ -90,6 +90,10 @@ ALTER TABLE attendance ADD COLUMN IF NOT EXISTS method    TEXT DEFAULT 'manual';
 -- status 컬럼이 없으면 추가 (기존 DB는 있음)
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'U';
 
+-- 컬럼 추가 직후 스키마 캐시 갱신 (check_in/check_out 추가 인식)
+-- "Could not find the '...' column ... in the schema cache" 오류 즉시 해결
+NOTIFY pgrst, 'reload schema';
+
 -- 3) 기존 type/time 방식 데이터를 check_in/check_out 방식으로 마이그레이션
 DO $$
 BEGIN
@@ -143,11 +147,27 @@ END $$;
 -- 4) 이전 유니크 제약 제거 (있는 경우)
 DO $$
 BEGIN
+  -- attendance_student_date_type_key: 매우 오래된 이름
   IF EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'attendance_student_date_type_key'
   ) THEN
     ALTER TABLE attendance DROP CONSTRAINT attendance_student_date_type_key;
+  END IF;
+  -- attendance_student_date_course_unique: 일부 환경에서 사용된 이전 이름
+  -- 새 이름(attendance_student_date_course_key)으로 통일하기 위해 제거
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'attendance_student_date_course_unique'
+  ) THEN
+    ALTER TABLE attendance DROP CONSTRAINT attendance_student_date_course_unique;
+  END IF;
+  -- 동일 이름의 인덱스가 있을 경우에도 제거 (constraint가 아닌 index로 생성된 경우 대비)
+  IF EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE tablename = 'attendance' AND indexname = 'attendance_student_date_course_unique'
+  ) THEN
+    DROP INDEX IF EXISTS attendance_student_date_course_unique;
   END IF;
 END $$;
 
@@ -172,6 +192,10 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'attendance_student_date_course_key'
+  ) AND NOT EXISTS (
+    -- 인덱스로만 존재하는 경우도 체크 (CREATE UNIQUE INDEX로 생성된 경우 pg_constraint에 없음)
+    SELECT 1 FROM pg_indexes
+    WHERE tablename = 'attendance' AND indexname = 'attendance_student_date_course_key'
   ) THEN
     IF pg_major >= 15 THEN
       -- PostgreSQL 15+: NULLS NOT DISTINCT 지원

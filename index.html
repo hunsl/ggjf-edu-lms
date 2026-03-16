@@ -108,6 +108,15 @@ const sbInsert = async (table, body) => {
   if (!res.ok) return { data: null, error: data };
   return { data: Array.isArray(body) ? data : data[0], error: null };
 };
+const sbUpsert = async (table, body) => {
+  const H2 = { ...H, "Prefer": "resolution=merge-duplicates,return=minimal" };
+  const res = await fetch(`${API}/${table}`, {
+    method: "POST", headers: H2,
+    body: JSON.stringify(Array.isArray(body) ? body : [body]),
+  });
+  if (!res.ok) { const data = await res.json(); return { data: null, error: data }; }
+  return { data: null, error: null };
+};
 const sbUpdate = async (table, filter, body) => {
   const res = await fetch(`${API}/${table}?${filter}`, {
     method: "PATCH", headers: H,
@@ -2268,7 +2277,6 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
     O: { label:"출석", bg:"#ECFDF5", color:T.ok    },
     L: { label:"지각", bg:"#FFFBEB", color:T.warn   },
     A: { label:"결석", bg:"#FEF2F2", color:T.danger },
-    E: { label:"외출", bg:"#F5F3FF", color:"#7C3AED" },
   };
 
   const inpSel = {
@@ -2446,10 +2454,10 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             try {
               const now = new Date();
               const toInsert = absentStudents.map(s => ({
-                student_id: s.id, date, type: "in",
+                course_id: course.id, student_id: s.id, date, type: "in",
                 time: "00:00", status: "A", created_at: now.toISOString()
               }));
-              const { error } = await sbInsert("attendance", toInsert);
+              const { error } = await sbUpsert("attendance", toInsert);
               if (error) throw error;
               // 로컬 records 업데이트
               setRecords(prev => {
@@ -2656,7 +2664,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     const rows = [];
                     if (curIn || curStatus) {
                       rows.push({
-                        student_id: s.id, date, type: "in",
+                        course_id: course.id, student_id: s.id, date, type: "in",
                         time: curIn || defaultTime,
                         status: curStatus || "O",
                         created_at: now.toISOString()
@@ -2664,13 +2672,14 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     }
                     if (curOut) {
                       rows.push({
-                        student_id: s.id, date, type: "out",
+                        course_id: course.id, student_id: s.id, date, type: "out",
                         time: curOut,
+                        status: null,
                         created_at: now.toISOString()
                       });
                     }
                     if (rows.length === 0) { alert("입실 시간 또는 상태를 먼저 입력하세요."); return; }
-                    const { error } = await sbInsert("attendance", rows);
+                    const { error } = await sbUpsert("attendance", rows);
                     if (error) throw error;
                     setManualAtt(p => ({ ...p, [s.id]: { ...(p[s.id]||{}), saved: true } }));
                     // records 상태 동기화 → QR 모드와 수동 모드 연동
@@ -2767,16 +2776,16 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 unsaved.forEach(s => {
                   const row = manualAtt[s.id]||{};
                   if (row.inTime || row.status) {
-                    attRows.push({ student_id:s.id, date, type:"in",
+                    attRows.push({ course_id: course.id, student_id:s.id, date, type:"in",
                       time: row.inTime || defaultTime, status: row.status||"O",
                       created_at: now.toISOString() });
                   }
                   if (row.outTime) {
-                    attRows.push({ student_id:s.id, date, type:"out",
-                      time: row.outTime, created_at: now.toISOString() });
+                    attRows.push({ course_id: course.id, student_id:s.id, date, type:"out",
+                      time: row.outTime, status: null, created_at: now.toISOString() });
                   }
                 });
-                const { error } = await sbInsert("attendance", attRows);
+                const { error } = await sbUpsert("attendance", attRows);
                 if (error) throw error;
                 setManualAtt(p => {
                   const next = {...p};
@@ -5824,11 +5833,15 @@ const MobileCheckin = () => {
       }
       const now  = new Date();
       const time = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
-      const { error } = await sbInsert("attendance", [{
+      // QR 입실: 출석/지각 자동 판별; 퇴실은 status null
+      const attStatus = type === "out" ? null : null; // status는 관리자가 수동 조정
+      const { error } = await sbUpsert("attendance", [{
+        course_id: cidNum || null,
         student_id: student.id,
         date,
         type,
         time,
+        status: attStatus,
         created_at: now.toISOString(),
       }]);
       if (error) throw error;

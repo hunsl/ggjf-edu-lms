@@ -156,6 +156,7 @@ END $$;
 --    PG14 이하 환경에서는 부분 인덱스로 대체
 DO $$
 DECLARE
+  -- server_version_num 형식: 150001 = PG 15.0.1 → 10000으로 나누면 메이저 버전(15)
   pg_major INT := current_setting('server_version_num')::INT / 10000;
 BEGIN
   IF NOT EXISTS (
@@ -326,6 +327,7 @@ BEGIN
   INTO attended_days
   FROM attendance
   WHERE student_id = v_student_id
+    -- 출석(O)·지각(L)만 출석일로 집계; 결석(A)·미확인(U)은 미출석 처리
     AND status IN ('O', 'L');
 
   new_rate := ROUND(LEAST((attended_days::NUMERIC / total_days) * 100, 100), 1);

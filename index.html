@@ -2063,7 +2063,8 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
   const endTotal   = endH   * 60 + endM;
 
   const fmtTime = (h, m) => `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
-
+  // HH:MM 문자열 → 분 변환 헬퍼 (여러 곳에서 재사용)
+  const timeToMins = (t) => { const [h, m] = (t || "00:00").split(":").map(Number); return h * 60 + m; };
   // ── QR 데이터 ──
   // 현재 페이지 URL에 ?mode=checkin 파라미터를 붙여 실제 모바일 출석 페이지로 라우팅
   const qrToken   = `${course.code}-${date}-${qrType.toUpperCase()}-${QR_TOKEN_SUFFIX}`;
@@ -2686,7 +2687,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
                     if (!curIn && !curStatus && !curOut) { alert("입실 시간 또는 상태를 먼저 입력하세요."); return; }
                     const inTime = curIn || (curStatus ? defaultTime : null);
-                    const calcMins = inTime ? (() => { const [h,m]=inTime.split(":").map(Number); return h*60+m; })() : null;
+                    const calcMins = inTime ? timeToMins(inTime) : null;
                     const rowStatus = curStatus || (inTime ? (calcMins <= lateTotal ? "O" : "L") : "U");
                     const rowData = {
                       course_id: course.id, student_id: s.id, date,
@@ -2790,7 +2791,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 const attRows = unsaved.map(s => {
                   const row = manualAtt[s.id]||{};
                   const inTime = row.inTime || (row.status ? defaultTime : null);
-                  const calcMins = inTime ? (() => { const [h,m]=inTime.split(":").map(Number); return h*60+m; })() : null;
+                  const calcMins = inTime ? timeToMins(inTime) : null;
                   const rowStatus = row.status || (inTime ? (calcMins <= lateTotal ? "O" : "L") : "U");
                   return {
                     course_id: course.id, student_id: s.id, date,
@@ -2813,7 +2814,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                   const next = { ...prev };
                   attRows.forEach(r => {
                     const upd = { ...(next[r.student_id]||{}), status: r.status };
-                    if (r.check_in)  { const [h,m]=r.check_in.split(":").map(Number); upd.checkIn=r.check_in; upd.checkInMins=h*60+m; }
+                    if (r.check_in)  { upd.checkIn = r.check_in; upd.checkInMins = timeToMins(r.check_in); }
                     if (r.check_out) upd.checkOut = r.check_out;
                     next[r.student_id] = upd;
                   });
@@ -5858,12 +5859,19 @@ const MobileCheckin = () => {
       // QR 입실: 과정 시작 시각 기준으로 출석/지각 자동 판별
       let attStatus = existing?.status || "U";
       if (type === "in") {
-        if (course?.schedTimeFrom) {
-          const [sh, sm] = course.schedTimeFrom.split(":").map(Number);
-          const [ah, am] = time.split(":").map(Number);
-          attStatus = (ah * 60 + am) <= (sh * 60 + sm) ? "O" : "L";
-        } else {
-          attStatus = "O"; // 스케줄 정보 없으면 출석으로 처리
+        try {
+          const schedFrom = course?.schedTimeFrom || "";
+          const schedParts = schedFrom.match(/^(\d{1,2}):(\d{2})$/);
+          const timeParts  = time.match(/^(\d{1,2}):(\d{2})$/);
+          if (schedParts && timeParts) {
+            const schedMins  = parseInt(schedParts[1]) * 60 + parseInt(schedParts[2]);
+            const actualMins = parseInt(timeParts[1])  * 60 + parseInt(timeParts[2]);
+            attStatus = actualMins <= schedMins ? "O" : "L";
+          } else {
+            attStatus = "O"; // 스케줄 정보 없거나 형식 오류 → 출석 처리
+          }
+        } catch (_e) {
+          attStatus = "O";
         }
       }
       // QR 입실: 시간 기준 출석/지각 자동 판별; 퇴실은 check_out 기록

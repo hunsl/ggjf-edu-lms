@@ -108,9 +108,10 @@ const sbInsert = async (table, body) => {
   if (!res.ok) return { data: null, error: data };
   return { data: Array.isArray(body) ? data : data[0], error: null };
 };
-const sbUpsert = async (table, body) => {
+const sbUpsert = async (table, body, conflictCols = "") => {
   const H2 = { ...H, "Prefer": "resolution=merge-duplicates,return=minimal" };
-  const res = await fetch(`${API}/${table}`, {
+  const qp = conflictCols ? `?on_conflict=${conflictCols}` : "";
+  const res = await fetch(`${API}/${table}${qp}`, {
     method: "POST", headers: H2,
     body: JSON.stringify(Array.isArray(body) ? body : [body]),
   });
@@ -2481,7 +2482,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 status: "A", check_in: null, check_out: null, method: "manual",
                 created_at: now.toISOString()
               }));
-              const { error } = await sbUpsert("attendance", toInsert);
+              const { error } = await sbUpsert("attendance", toInsert, "student_id,date,course_id");
               if (error) throw error;
               // 로컬 records 업데이트
               setRecords(prev => {
@@ -2697,7 +2698,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                       method:    "manual",
                       created_at: now.toISOString()
                     };
-                    const { error } = await sbUpsert("attendance", [rowData]);
+                    const { error } = await sbUpsert("attendance", [rowData], "student_id,date,course_id");
                     if (error) throw error;
                     setManualAtt(p => ({ ...p, [s.id]: { ...(p[s.id]||{}), saved: true } }));
                     // records 상태 동기화 → QR 모드와 수동 모드 연동
@@ -2802,7 +2803,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     created_at: now.toISOString()
                   };
                 });
-                const { error } = await sbUpsert("attendance", attRows);
+                const { error } = await sbUpsert("attendance", attRows, "student_id,date,course_id");
                 if (error) throw error;
                 setManualAtt(p => {
                   const next = {...p};
@@ -5884,7 +5885,7 @@ const MobileCheckin = () => {
         check_out: type === "out" ? time : (existing?.check_out || null),
         method:    "qr",
         created_at: now.toISOString(),
-      }]);
+      }], "student_id,date,course_id");
       if (error) throw error;
       setCheckedId(student.id);
       setCheckedTime(time);

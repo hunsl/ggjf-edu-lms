@@ -151,6 +151,16 @@ BEGIN
   END IF;
 END $$;
 
+-- 4b) (student_id, date, course_id) 기준 중복 행 무조건 제거
+--     type 컬럼 유무와 무관하게 실행 -- 새 유니크 제약 추가 전 데이터 정합성 보장
+DELETE FROM attendance a
+WHERE a.id NOT IN (
+  SELECT DISTINCT ON (student_id, date, COALESCE(course_id::TEXT, 'null'))
+         id
+  FROM attendance
+  ORDER BY student_id, date, COALESCE(course_id::TEXT, 'null'), created_at DESC
+);
+
 -- 5) 새 유니크 제약 추가: 학생+날짜+과정 기준 UPSERT 지원
 --    course_id=NULL 허용 환경을 위해 NULLS NOT DISTINCT 사용 (PG15+)
 --    PG14 이하 환경에서는 부분 인덱스로 대체

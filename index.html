@@ -108,6 +108,15 @@ const sbInsert = async (table, body) => {
   if (!res.ok) return { data: null, error: data };
   return { data: Array.isArray(body) ? data : data[0], error: null };
 };
+const sbUpsert = async (table, body) => {
+  const H2 = { ...H, "Prefer": "resolution=merge-duplicates,return=minimal" };
+  const res = await fetch(`${API}/${table}`, {
+    method: "POST", headers: H2,
+    body: JSON.stringify(Array.isArray(body) ? body : [body]),
+  });
+  if (!res.ok) { const data = await res.json(); return { data: null, error: data }; }
+  return { data: null, error: null };
+};
 const sbUpdate = async (table, filter, body) => {
   const res = await fetch(`${API}/${table}?${filter}`, {
     method: "PATCH", headers: H,
@@ -538,14 +547,25 @@ const buildCourseDates = (course) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const start = new Date(course.dateFrom);
-  // 과정이 아직 시작 전이면 오늘 날짜만 반환
+  // 과정이 아직 시작 전이면 시작일만 반환
   if (start > today) return [course.dateFrom];
   const end = course.dateTo
     ? new Date(Math.min(new Date(course.dateTo).getTime(), today.getTime()))
     : today;
+
+  // schedDays 파싱: "월, 화, 목" → Set<요일번호> (0=일,1=월,...,6=토)
+  const DAY_MAP = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
+  const allowedDows = course.schedDays
+    ? new Set(course.schedDays.split(",").map(s => DAY_MAP[s.trim()]).filter(d => d !== undefined))
+    : null; // null이면 평일 전체 (schedDays 미지정 과정 하위 호환)
+
   const dates = [];
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    dates.push(new Date(d).toISOString().slice(0, 10));
+    const dow = d.getDay();
+    const include = allowedDows
+      ? allowedDows.has(dow)
+      : (dow !== 0 && dow !== 6); // schedDays 없으면 주말 제외
+    if (include) dates.push(new Date(d).toISOString().slice(0, 10));
   }
   return dates.length ? dates : [today.toISOString().slice(0, 10)];
 };
@@ -714,34 +734,103 @@ const downloadTemplate = (courses) => {
 const Dashboard = ({ students, courses }) => {
   const today    = new Date();
   const todayStr = today.toISOString().slice(0,10);
-  const ym       = todayStr.slice(0,7); // "2026-03"
+  const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().slice(0,10);
+
+  // ── 내부 데이터 (강사, 강의실, 예약, 오늘 출결) ──
+  const [instructors, setInstructors] = useState(SEED_INSTRUCTORS);
+  const [dashRooms,    setDashRooms]    = useState(SEED_ROOMS);
+  const [bookings,    setBookings2]   = useState([]);
+  const [todayAtt,    setTodayAtt]    = useState({}); // { courseId: { present, late, absent, total } }
+  const [loadTick,    setLoadTick]    = useState(0);  // 1분마다 재로드
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [iRes, rRes, bRes] = await Promise.all([
+          sbGet("instructors",  "select=*&order=id"),
+          sbGet("rooms",        "select=*&order=id"),
+          sbGet("room_bookings","select=*&order=id"),
+        ]);
+        if (!cancelled) {
+          if (!iRes.error && iRes.data?.length) setInstructors(iRes.data.map(toInstructor));
+          if (!rRes.error && rRes.data?.length) setDashRooms(rRes.data.map(toRoom));
+          if (!bRes.error && bRes.data?.length) setBookings2(bRes.data.map(toBooking));
+        }
+      } catch {}
+      // 오늘 출결 로드 (attendance 테이블은 student_id만 가짐 → students prop으로 cid 매핑)
+      try {
+        const attRes = await sbGet("attendance", `select=student_id,status&date=eq.${todayStr}`);
+        if (!cancelled && !attRes.error && attRes.data) {
+          const sidToCid = {};
+          students.forEach(s => { sidToCid[s.id] = s.cid; });
+          const map = {};
+          attRes.data.forEach(r => {
+            const cid = sidToCid[r.student_id];
+            if (!cid) return;
+            if (!map[cid]) map[cid] = { present:0, late:0, absent:0 };
+            if (r.status === "O") map[cid].present++;
+            else if (r.status === "L") map[cid].late++;
+            else if (r.status === "A") map[cid].absent++;
+          });
+          if (!cancelled) setTodayAtt(map);
+        }
+      } catch {}
+    };
+    load();
+    const timer = setInterval(() => setLoadTick(t => t+1), 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [loadTick, students]);
+
+  // ── 파생 데이터 ──
+  const DAY_MAP2 = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
+  const isTodayClass = (c) => {
+    if (!c.dateFrom) return false;
+    if (c.dateFrom > todayStr || (c.dateTo && c.dateTo < todayStr)) return false;
+    if (!c.schedDays) return today.getDay()>0 && today.getDay()<6;
+    const allowed = new Set(c.schedDays.split(",").map(s=>DAY_MAP2[s.trim()]).filter(d=>d!==undefined));
+    return allowed.has(today.getDay());
+  };
+  const liveCourses = courses.filter(isTodayClass);
 
   const totalTgt = courses.reduce((a,b)=>a+b.tgt,0);
-  const totalCG  = courses.reduce((a,b)=>a+b.cGoal,0);
-  const totalEG  = courses.reduce((a,b)=>a+b.eGoal,0);
   const avgRate  = students.length ? (students.reduce((a,b)=>a+b.rate,0)/students.length).toFixed(1) : 0;
   const atRisk   = students.filter(s=>s.rate<80);
 
-  const catMap = {};
-  courses.forEach(c=>{ if(!catMap[c.cat]) catMap[c.cat]={color:c.cc,cnt:0,tgt:0}; catMap[c.cat].cnt++; catMap[c.cat].tgt+=c.tgt; });
-
-  // 과정별 진행현황 계산
-  const formatPeriod = (from, to) => {
-    if (!from) return "기간 미정";
-    const formatDate = d => { const parts = (d||"").split("-"); return parts.length===3 ? `${parts[0]}.${parts[1]}.${parts[2]}` : `${parts[0]}.${parts[1]}`; };
-    return to ? `${formatDate(from)} ~ ${formatDate(to)}` : `${formatDate(from)} ~`;
-  };
   const courseProgress = courses.map(c => {
     const cs       = students.filter(s => s.cid === c.id);
     const enrolled = cs.length;
     const avgR     = cs.length ? Math.round(cs.reduce((a,b)=>a+b.rate,0)/cs.length) : 0;
-    const from     = c.dateFrom || "";
-    const to       = c.dateTo   || "";
-    const isActive = from.slice(0,7) <= ym && ym <= (to ? to.slice(0,7) : ym);
-    return { ...c, enrolled, avgR, isActive, periodStr: formatPeriod(from, to) };
+    const isActive = c.dateFrom && c.dateFrom <= todayStr && (!c.dateTo || c.dateTo >= todayStr);
+    const status   = isActive ? "진행중" : (c.dateTo && c.dateTo < todayStr) ? "종료" : "예정";
+    return { ...c, enrolled, avgR, isActive, status };
   }).sort((a,b) => (a.dateFrom||"9").localeCompare(b.dateFrom||"9") || a.name.localeCompare(b.name));
 
   const activeCnt = courseProgress.filter(c=>c.isActive).length;
+
+  // ── 요주의 알림 생성 ──
+  const alerts = [];
+  // 내일 개강하는 과정 중 강의실 배정 없는 과정
+  courses.filter(c => c.dateFrom === tomorrowStr).forEach(c => {
+    const hasRoom = bookings.some(b => b.courseId===c.id && b.start <= tomorrowStr && b.end >= tomorrowStr);
+    if (!hasRoom) alerts.push({ level:"warn", msg:`내일 개강 [${c.name}] 과정에 배정된 강의실이 없습니다.` });
+  });
+  // 오늘 진행 중인 과정 중 출석률 50% 미만
+  liveCourses.forEach(c => {
+    const cs = students.filter(s=>s.cid===c.id);
+    const att = todayAtt[c.id] || {};
+    const confirmed = (att.present||0) + (att.late||0) + (att.absent||0);
+    if (confirmed > 0 && cs.length > 0) {
+      const presentPct = Math.round(((att.present||0)+(att.late||0)) / cs.length * 100);
+      if (presentPct < 50) {
+        alerts.push({ level:"danger", msg:`[${c.name}] 오늘 출석률 미달(${presentPct}%) — 미출석 ${cs.length-(att.present||0)-(att.late||0)}명` });
+      }
+    }
+  });
+  // 위험 훈련생 수
+  if (atRisk.length > 0) {
+    alerts.push({ level:"info", msg:`누적 출석률 80% 미만 수료 위험 훈련생 ${atRisk.length}명` });
+  }
 
   return (
     <div className="page">
@@ -752,60 +841,202 @@ const Dashboard = ({ students, courses }) => {
         overflow:"hidden", color:"#fff",
         boxShadow:"0 8px 32px rgba(234,88,12,.35)",
         animation:"heroGlow 4s ease-in-out infinite" }}>
-        {/* 장식 원 */}
         <div style={{ position:"absolute",top:-40,right:-40,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,.07)",pointerEvents:"none" }}/>
         <div style={{ position:"absolute",bottom:-50,right:100,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.05)",pointerEvents:"none" }}/>
-        <div style={{ position:"absolute",top:10,right:200,width:60,height:60,borderRadius:"50%",background:"rgba(255,255,255,.06)",pointerEvents:"none" }}/>
         <div style={{ position:"relative" }}>
           <div style={{ fontSize:10,fontWeight:700,letterSpacing:2.5,opacity:.7,marginBottom:5,textTransform:"uppercase" }}>
             경기도일자리재단 경기북부 인력개발원
           </div>
-          <div style={{ fontSize:22,fontWeight:900,letterSpacing:"-.5px" }}>학사관리 현황판</div>
+          <div style={{ fontSize:22,fontWeight:900,letterSpacing:"-.5px" }}>일일 운영 컨트롤 타워</div>
           <div style={{ display:"flex",gap:16,marginTop:8,flexWrap:"wrap" }}>
             <span style={{ fontSize:11,opacity:.8 }}>📅 {todayStr} 기준</span>
             <span style={{ fontSize:11,opacity:.8 }}>📚 {courses.length}개 과정 운영</span>
             <span style={{ fontSize:11,opacity:.8 }}>👥 훈련생 {students.length}명</span>
-            {activeCnt > 0 && <span style={{ fontSize:11,background:"rgba(255,255,255,.2)",borderRadius:20,padding:"1px 10px",fontWeight:700 }}>이번달 {activeCnt}개 진행중</span>}
+            {liveCourses.length > 0 && <span style={{ fontSize:11,background:"rgba(255,255,255,.2)",borderRadius:20,padding:"1px 10px",fontWeight:700 }}>오늘 {liveCourses.length}개 강의 진행중</span>}
           </div>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:12, marginBottom:20 }}>
+      {/* ══════════════════════════════════════════
+          🟢 1구역: 오늘의 라이브 강의 현황
+      ══════════════════════════════════════════ */}
+      <Card style={{ padding:22, marginBottom:16 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:14, display:"flex", gap:8, alignItems:"center" }}>
+          <span style={{ width:10, height:10, borderRadius:"50%", background:"#22C55E",
+            boxShadow:"0 0 0 3px #22C55E40", display:"inline-block", animation:"heroGlow 2s infinite" }}/>
+          오늘의 라이브 강의 현황
+          <span style={{ marginLeft:"auto", fontSize:10, color:T.mu }}>실시간 · 1분마다 갱신</span>
+        </div>
+        {liveCourses.length === 0 ? (
+          <div style={{ textAlign:"center", color:T.mu, padding:"32px 0", fontSize:13 }}>
+            오늘({todayStr}) 진행 중인 강의가 없습니다.
+          </div>
+        ) : (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:14 }}>
+            {liveCourses.map(c => {
+              const cs        = students.filter(s=>s.cid===c.id);
+              const total     = cs.length;
+              const att       = todayAtt[c.id] || {};
+              const present   = att.present  || 0;
+              const late      = att.late     || 0;
+              const absent    = att.absent   || 0;
+              const unconfirmed = Math.max(0, total - present - late - absent);
+              const pPct = total > 0 ? Math.round((present+late) / total * 100) : 0;
+              // 담당 강사
+              const courseInst = instructors.filter(i => (i.cids||[]).includes(c.id));
+              // 배정 강의실
+              const booking = bookings.find(b => b.courseId===c.id && b.start <= todayStr && b.end >= todayStr);
+              const room    = booking ? dashRooms.find(r=>r.id===booking.roomId) : null;
+              return (
+                <div key={c.id} style={{
+                  border:`1.5px solid ${c.cc}30`, borderRadius:14,
+                  background:`linear-gradient(145deg,#fff,${c.cc}08)`,
+                  padding:"16px 18px", position:"relative", overflow:"hidden" }}>
+                  <div style={{ position:"absolute", top:0, left:0, width:4, height:"100%",
+                    background:c.cc, borderRadius:"14px 0 0 14px" }}/>
+                  <div style={{ marginLeft:8 }}>
+                    {/* 과정명 + 시간 */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:800, color:T.tx }}>{c.name}</div>
+                        <div style={{ fontSize:11, color:T.mu, marginTop:1 }}>{c.code}</div>
+                      </div>
+                      {c.schedTimeFrom && (
+                        <span style={{ fontSize:11, fontWeight:700, color:c.cc,
+                          background:`${c.cc}15`, borderRadius:8, padding:"3px 9px", whiteSpace:"nowrap", marginLeft:8 }}>
+                          {c.schedTimeFrom} ~ {c.schedTimeTo||""}
+                        </span>
+                      )}
+                    </div>
+                    {/* 강사 · 강의실 */}
+                    <div style={{ display:"flex", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11, color:T.mu, display:"flex", alignItems:"center", gap:3 }}>
+                        <Icon n="people" s={11}/>
+                        {courseInst.length > 0
+                          ? courseInst.map(i=>`${i.name} ${i.type}`).join(", ")
+                          : "강사 미배정"}
+                      </span>
+                      <span style={{ fontSize:11, color:T.mu, display:"flex", alignItems:"center", gap:3 }}>
+                        <Icon n="book" s={11}/>
+                        {room ? room.name : "강의실 미배정"}
+                      </span>
+                    </div>
+                    {/* 출결 프로그레스 바 */}
+                    <div style={{ fontSize:10, color:T.mu, marginBottom:5, display:"flex", justifyContent:"space-between" }}>
+                      <span>오늘 출결 현황 ({total}명)</span>
+                      <span style={{ fontWeight:700, color: pPct>=80?T.ok:pPct>=60?T.warn:T.danger }}>{pPct}% 출석</span>
+                    </div>
+                    <div style={{ display:"flex", height:8, borderRadius:6, overflow:"hidden", background:T.bd, marginBottom:6 }}>
+                      {present > 0 && <div style={{ width:`${present/total*100}%`, background:T.ok, transition:"width .4s" }} title={`출석 ${present}명`}/>}
+                      {late    > 0 && <div style={{ width:`${late/total*100}%`,    background:T.warn, transition:"width .4s" }} title={`지각 ${late}명`}/>}
+                      {absent  > 0 && <div style={{ width:`${absent/total*100}%`,  background:T.danger, transition:"width .4s" }} title={`결석 ${absent}명`}/>}
+                      {unconfirmed > 0 && <div style={{ width:`${unconfirmed/total*100}%`, background:T.bd, transition:"width .4s" }} title={`미확인 ${unconfirmed}명`}/>}
+                    </div>
+                    <div style={{ display:"flex", gap:10, fontSize:10 }}>
+                      {[{l:"출석",v:present,c:T.ok},{l:"지각",v:late,c:T.warn},{l:"결석",v:absent,c:T.danger},{l:"미확인",v:unconfirmed,c:T.mu}].map(({l,v,c:col})=>(
+                        <span key={l} style={{ color:col, fontWeight:700 }}>{l} {v}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* ══════════════════════════════════════════
+          🟡 2구역: 통합 KPI + 요주의 알림
+      ══════════════════════════════════════════ */}
+
+      {/* 요주의 알림 */}
+      {alerts.length > 0 && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+          {alerts.map((al, i) => {
+            const bg    = al.level==="danger"?"#FEF2F2":al.level==="warn"?"#FFFBEB":"#EFF6FF";
+            const border= al.level==="danger"?"#FECACA":al.level==="warn"?"#FDE68A":"#BFDBFE";
+            const col   = al.level==="danger"?T.danger:al.level==="warn"?"#D97706":T.info;
+            const icon  = al.level==="danger"?"alert":al.level==="warn"?"alert":"info";
+            return (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
+                padding:"11px 16px", borderRadius:10, background:bg, border:`1px solid ${border}` }}>
+                <Icon n={icon} s={15} style={{ color:col, flexShrink:0 }}/>
+                <span style={{ fontSize:12, color:col, fontWeight:600 }}>⚠ {al.msg}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* KPI 카드 */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:10, marginBottom:16 }}>
         {[
           { label:"총 모집 목표", val:`${totalTgt}명`, sub:`${courses.length}개 과정`, icon:"people", color:T.p },
-          { label:"수료 목표 (90%)", val:`${totalCG}명`, sub:"연간 목표", icon:"check", color:T.ok },
-          { label:"취업 목표 (65%)", val:`${totalEG}명`, sub:"수료자 기준", icon:"award", color:"#D97706" },
-          { label:"현재 위험 훈련생", val:`${atRisk.length}명`, sub:"출석률 80% 미만", icon:"alert", color:T.danger },
-          { label:"평균 출석률", val:`${avgRate}%`, sub:"전체 훈련생", icon:"cal", color:T.info },
+          { label:"이번달 진행중", val:`${activeCnt}개`, sub:"운영 과정 수", icon:"cal", color:T.ok },
+          { label:"평균 출석률", val:`${avgRate}%`, sub:"전체 훈련생", icon:"check", color:T.info },
+          { label:"수료 위험", val:`${atRisk.length}명`, sub:"출석률 80% 미만", icon:"alert", color:T.danger },
         ].map((k,i) => (
-          <div key={i} className="kpi-card" style={{
-            background:T.s, borderRadius:14, border:`1.5px solid ${k.color}20`,
-            boxShadow:`0 2px 12px ${k.color}12,0 1px 3px rgba(0,0,0,.04)`,
-            padding:"20px 22px", display:"flex", gap:14, alignItems:"flex-start",
-            backgroundImage:`linear-gradient(145deg,#fff 0%,${k.color}08 100%)` }}>
-            <div style={{ width:46,height:46,borderRadius:13,
-              background:`linear-gradient(135deg,${k.color}28,${k.color}15)`,color:k.color,
-              display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-              boxShadow:`0 4px 12px ${k.color}22` }}>
-              <Icon n={k.icon} s={22}/>
+          <div key={i} style={{
+            background:T.s, borderRadius:12, border:`1.5px solid ${k.color}20`,
+            boxShadow:`0 2px 8px ${k.color}12`, padding:"16px 18px",
+            display:"flex", gap:12, alignItems:"center",
+            backgroundImage:`linear-gradient(145deg,#fff,${k.color}08)` }}>
+            <div style={{ width:40, height:40, borderRadius:11, flexShrink:0,
+              background:`linear-gradient(135deg,${k.color}28,${k.color}15)`, color:k.color,
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <Icon n={k.icon} s={20}/>
             </div>
             <div>
-              <div style={{ fontSize:26,fontWeight:900,color:T.tx,lineHeight:1 }}>{k.val}</div>
-              <div style={{ fontSize:11,color:T.mu,marginTop:4 }}>{k.label}</div>
-              {k.sub && <div style={{ fontSize:10,color:k.color,marginTop:2,fontWeight:700 }}>{k.sub}</div>}
+              <div style={{ fontSize:22, fontWeight:900, color:T.tx, lineHeight:1 }}>{k.val}</div>
+              <div style={{ fontSize:10, color:T.mu, marginTop:3 }}>{k.label}</div>
+              {k.sub && <div style={{ fontSize:9, color:k.color, fontWeight:700 }}>{k.sub}</div>}
             </div>
           </div>
         ))}
       </div>
 
-      {/* 과정별 진행현황 (전체 너비) */}
+      {/* 위험 훈련생 */}
+      {atRisk.length > 0 && (
+        <Card style={{ padding:20, marginBottom:16 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:12, display:"flex", gap:8, alignItems:"center" }}>
+            <Icon n="alert" s={15}/> 수료 위험 훈련생
+            <span style={{ marginLeft:"auto", fontSize:10, color:T.mu }}>출석률 80% 미만</span>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:8 }}>
+            {atRisk.sort((a,b)=>a.rate-b.rate).map(s => {
+              const c = courses.find(x=>x.id===s.cid);
+              return (
+                <div key={s.id} style={{ display:"flex", gap:10, alignItems:"center",
+                  padding:"9px 11px", borderRadius:8,
+                  background: s.rate<70?"#FEF2F2":"#FFFBEB",
+                  border:`1px solid ${s.rate<70?"#FECACA":"#FDE68A"}` }}>
+                  <div style={{ width:36, height:36, borderRadius:8, flexShrink:0,
+                    background: s.rate<70?"#FEE2E2":"#FEF3C7",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:12, fontWeight:900, color:s.rate<70?T.danger:T.warn }}>
+                    {s.rate}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.tx }}>{s.name}</div>
+                    <div style={{ fontSize:10, color:T.mu, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c?.name}</div>
+                  </div>
+                  <Chip label={s.rate<70?"위험":"주의"} bg={s.rate<70?"#FEE2E2":"#FEF3C7"} color={s.rate<70?T.danger:T.warn}/>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* ══════════════════════════════════════════
+          🔵 3구역: 전체 개설 과정 진행률
+      ══════════════════════════════════════════ */}
       <Card style={{ padding:22, marginBottom:14 }}>
         <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:14, display:"flex", gap:8, alignItems:"center" }}>
-          <Icon n="cal" s={15}/> 과정별 진행현황
+          <Icon n="cal" s={15}/> 전체 개설 과정 진행률
           <span style={{ marginLeft:6, fontSize:11, fontWeight:600, color:T.p,
             background:T.pbg, border:`1px solid #FDBA74`, borderRadius:10, padding:"2px 8px" }}>
-            이번달 진행 {activeCnt}개
+            진행중 {activeCnt}개
           </span>
           <span style={{ marginLeft:"auto", fontSize:10, color:T.mu }}>교육기간 · 모집/훈련생 수</span>
         </div>
@@ -816,68 +1047,69 @@ const Dashboard = ({ students, courses }) => {
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                 <thead>
                   <tr style={{ borderBottom:`2px solid ${T.bd}` }}>
-                    {["분야","과정명","교육기간","모집목표","등록","출석률","진행상태"].map(h => (
+                    {["분야","과정명","교육기간","모집목표","등록","출석률","강사","강의실","상태"].map(h => (
                       <th key={h} style={{ padding:"7px 10px", textAlign:"left", fontSize:10,
                         color:T.mu, fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {courseProgress.map((c, idx) => {
-                    const fillPct = c.tgt > 0 ? Math.min(100, Math.round(c.enrolled/c.tgt*100)) : 0;
-                    const status  = c.isActive ? "진행중" : (c.dateTo && c.dateTo < todayStr) ? "종료" : "예정";
-                    const stColor = status==="진행중" ? T.ok : status==="종료" ? T.mu : T.info;
-                    const stBg    = status==="진행중" ? "#F0FDF4" : status==="종료" ? T.s2 : "#EFF6FF";
+                  {courseProgress.map((c) => {
+                    const fillPct   = c.tgt > 0 ? Math.min(100, Math.round(c.enrolled/c.tgt*100)) : 0;
+                    const stColor   = c.status==="진행중"?T.ok:c.status==="종료"?T.mu:T.info;
+                    const stBg      = c.status==="진행중"?"#F0FDF4":c.status==="종료"?T.s2:"#EFF6FF";
+                    const courseInst= instructors.filter(i=>(i.cids||[]).includes(c.id));
+                    const bk        = bookings.find(b=>b.courseId===c.id && b.start<=todayStr && b.end>=todayStr);
+                    const roomName  = bk ? (dashRooms.find(r=>r.id===bk.roomId)?.name||"") : "";
                     return (
                       <tr key={c.id} style={{ borderBottom:`1px solid ${T.bd}`,
-                        background: c.isActive ? `${T.pbg}60` : "transparent",
-                        transition:"background .15s" }}>
+                        background: c.isActive ? `${T.pbg}60` : "transparent" }}>
                         <td style={{ padding:"9px 10px" }}>
                           <span style={{ display:"inline-block", width:8, height:8, borderRadius:2,
-                            background:c.cc, marginRight:5, flexShrink:0 }}/>
+                            background:c.cc, marginRight:5 }}/>
                           <span style={{ fontSize:10, color:T.mu }}>{c.cat}</span>
                         </td>
-                        <td style={{ padding:"9px 10px", fontWeight:700, color:T.tx, maxWidth:200,
+                        <td style={{ padding:"9px 10px", fontWeight:700, color:T.tx, maxWidth:180,
                           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                           {c.name}
                           {c.code && <span style={{ marginLeft:5, fontSize:10, color:T.mu,
                             background:T.s3, borderRadius:4, padding:"1px 4px" }}>{c.code}</span>}
                         </td>
                         <td style={{ padding:"9px 10px", color:T.mu, whiteSpace:"nowrap", fontSize:11 }}>
-                          {c.periodStr}
+                          {formatCoursePeriod(c)}
                           {c.schedTimeFrom && (
-                            <span style={{ display:"block", fontSize:10, color:T.mu, marginTop:1 }}>
+                            <span style={{ display:"block", fontSize:10, color:T.mu }}>
                               {c.schedDays} {c.schedTimeFrom}~{c.schedTimeTo}
                             </span>
                           )}
                         </td>
-                        <td style={{ padding:"9px 10px", textAlign:"center", color:T.tx }}>{c.tgt}명</td>
+                        <td style={{ padding:"9px 10px", textAlign:"center" }}>{c.tgt}명</td>
                         <td style={{ padding:"9px 10px" }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                            <span style={{ fontWeight:700, color: fillPct>=80?T.ok:fillPct>=50?T.warn:T.danger }}>
-                              {c.enrolled}명
-                            </span>
-                            <div style={{ flex:1, height:5, background:T.bd, borderRadius:3, overflow:"hidden", minWidth:40 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                            <span style={{ fontWeight:700, color:fillPct>=80?T.ok:fillPct>=50?T.warn:T.danger }}>{c.enrolled}명</span>
+                            <div style={{ flex:1, height:5, background:T.bd, borderRadius:3, overflow:"hidden", minWidth:36 }}>
                               <div style={{ height:"100%", width:`${fillPct}%`,
-                                background: fillPct>=80?T.ok:fillPct>=50?T.warn:T.danger,
-                                borderRadius:3, transition:"width .3s" }}/>
+                                background:fillPct>=80?T.ok:fillPct>=50?T.warn:T.danger, borderRadius:3 }}/>
                             </div>
                             <span style={{ fontSize:10, color:T.mu }}>{fillPct}%</span>
                           </div>
                         </td>
                         <td style={{ padding:"9px 10px", textAlign:"center" }}>
                           {c.enrolled > 0
-                            ? <span style={{ fontWeight:700, color: c.avgR>=80?T.ok:c.avgR>=70?T.warn:T.danger }}>
-                                {c.avgR}%
-                              </span>
-                            : <span style={{ color:T.mu, fontSize:10 }}>—</span>
-                          }
+                            ? <span style={{ fontWeight:700, color:c.avgR>=80?T.ok:c.avgR>=70?T.warn:T.danger }}>{c.avgR}%</span>
+                            : <span style={{ color:T.mu }}>—</span>}
+                        </td>
+                        <td style={{ padding:"9px 10px", fontSize:11, color:T.mu, whiteSpace:"nowrap" }}>
+                          {courseInst.length>0 ? courseInst.map(i=>i.name).join(", ") : "—"}
+                        </td>
+                        <td style={{ padding:"9px 10px", fontSize:11, color:T.mu, whiteSpace:"nowrap" }}>
+                          {roomName || "—"}
                         </td>
                         <td style={{ padding:"9px 10px" }}>
                           <span style={{ display:"inline-block", padding:"2px 8px", borderRadius:10,
                             fontSize:10, fontWeight:700, color:stColor, background:stBg,
                             border:`1px solid ${stColor}30` }}>
-                            {status}
+                            {c.status}
                           </span>
                         </td>
                       </tr>
@@ -888,87 +1120,6 @@ const Dashboard = ({ students, courses }) => {
             </div>
           )
         }
-      </Card>
-
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:14, marginBottom:14 }}>
-        {/* 분야별 현황 */}
-        <Card style={{ padding:22 }}>
-          <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:16, display:"flex", gap:8 }}>
-            <Icon n="book" s={15}/> 분야별 과정 현황
-          </div>
-          {Object.entries(catMap).map(([cat,info]) => (
-            <div key={cat} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-              <div style={{ width:3, height:36, background:info.color, borderRadius:2, flexShrink:0 }}/>
-              <div style={{ flex:1 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                  <span style={{ fontSize:12, fontWeight:600, color:T.tx }}>{cat}</span>
-                  <span style={{ fontSize:10, color:T.mu }}>{info.cnt}과정 · {info.tgt}명</span>
-                </div>
-                <div style={{ height:5, background:T.bd, borderRadius:3, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${info.tgt/totalTgt*100}%`, background:info.color, borderRadius:3 }}/>
-                </div>
-              </div>
-            </div>
-          ))}
-          <div style={{ marginTop:14, padding:"12px 14px", background:T.pbg, borderRadius:8, border:`1px solid #FDBA74` }}>
-            <div style={{ fontSize:10, color:T.mu }}>2026 총 사업 예산 (출연금 100%)</div>
-            <div style={{ fontSize:20, fontWeight:800, color:T.p, marginTop:2 }}>278,500천원</div>
-          </div>
-        </Card>
-
-        {/* 위험 훈련생 */}
-        <Card style={{ padding:22 }}>
-          <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:14, display:"flex", gap:8, alignItems:"center" }}>
-            <Icon n="alert" s={15}/> 수료 위험 훈련생
-            <span style={{ marginLeft:"auto", fontSize:10, color:T.mu }}>출석률 80% 미만</span>
-          </div>
-          {atRisk.length === 0
-            ? <div style={{ textAlign:"center", color:T.mu, padding:"28px 0", fontSize:13 }}>위험 훈련생 없음 🎉</div>
-            : atRisk.sort((a,b)=>a.rate-b.rate).map(s => {
-                const c = courses.find(x=>x.id===s.cid);
-                return (
-                  <div key={s.id} style={{ display:"flex", gap:10, alignItems:"center",
-                    padding:"9px 11px", borderRadius:8, marginBottom:6,
-                    background: s.rate<70?"#FEF2F2":"#FFFBEB",
-                    border:`1px solid ${s.rate<70?"#FECACA":"#FDE68A"}` }}>
-                    <div style={{ width:36, height:36, borderRadius:8, flexShrink:0,
-                      background: s.rate<70?"#FEE2E2":"#FEF3C7",
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:12, fontWeight:900, color:s.rate<70?T.danger:T.warn }}>
-                      {s.rate}
-                    </div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:T.tx }}>{s.name}</div>
-                      <div style={{ fontSize:10, color:T.mu, marginTop:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c?.name}</div>
-                    </div>
-                    <Chip label={s.rate<70?"위험":"주의"} bg={s.rate<70?"#FEE2E2":"#FEF3C7"} color={s.rate<70?T.danger:T.warn}/>
-                  </div>
-                );
-              })
-          }
-        </Card>
-      </div>
-
-      {/* 사업 개요 */}
-      <Card style={{ padding:20 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:14, display:"flex", gap:8 }}>
-          <Icon n="info" s={15}/> 2026년 사업 개요
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:10 }}>
-          {[
-            {l:"사업기간",v:"2026.01 ~ 12월"},
-            {l:"사업대상",v:"만 18세↑ 미취업 경기도민"},
-            {l:"총 사업량",v:"13개 과정 / 240명"},
-            {l:"수료율 목표",v:"90% 이상"},
-            {l:"취업률 목표",v:"65% 이상"},
-            {l:"만족도 목표",v:"PCSI 90점 이상"},
-          ].map(({l,v})=>(
-            <div key={l} style={{ padding:"11px 13px", background:T.s2, borderRadius:8, border:`1px solid ${T.bd}` }}>
-              <div style={{ fontSize:10, color:T.mu }}>{l}</div>
-              <div style={{ fontSize:12, fontWeight:700, color:T.tx, marginTop:3 }}>{v}</div>
-            </div>
-          ))}
-        </div>
       </Card>
     </div>
   );
@@ -1878,12 +2029,42 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
     }
   };
 
+  // ── courses prop 변경 시 현재 선택 과정 갱신 (과정 수정 후 날짜/요일/시간 즉시 반영) ──
+  // course를 ref로 추적해 stale closure 방지 (courses 의존성만으로 충분)
+  const courseRef = React.useRef(course);
+  useEffect(() => { courseRef.current = course; });
+  useEffect(() => {
+    if (!courses.length) return;
+    const cur = courseRef.current;
+    const updated = courses.find(c => c.id === cur?.id);
+    if (!updated) {
+      // 현재 선택된 과정이 삭제된 경우 첫 번째 과정으로 fallback
+      handleCourseChange(courses[0]);
+    } else if (
+      updated.dateFrom      !== cur.dateFrom      ||
+      updated.dateTo        !== cur.dateTo        ||
+      updated.schedDays     !== cur.schedDays     ||
+      updated.schedTimeFrom !== cur.schedTimeFrom ||
+      updated.schedTimeTo   !== cur.schedTimeTo
+    ) {
+      // 일정/시간 변경 → 날짜 목록·시간 설정 재계산
+      handleCourseChange(updated);
+    } else if (
+      updated.name !== cur.name ||
+      updated.code !== cur.code
+    ) {
+      // 이름·코드만 변경 → 출결 기록 유지하며 course 객체만 교체
+      setCourse(updated);
+    }
+  }, [courses]); // courses 변경 시에만 실행; handleCourseChange는 항상 최신 closure 참조
+
   const startTotal = startH * 60 + startM;  // 총 분
   const lateTotal  = lateH  * 60 + lateM;
   const endTotal   = endH   * 60 + endM;
 
   const fmtTime = (h, m) => `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
-
+  // HH:MM 문자열 → 분 변환 헬퍼 (여러 곳에서 재사용)
+  const timeToMins = (t) => { const [h, m] = (t || "00:00").split(":").map(Number); return h * 60 + m; };
   // ── QR 데이터 ──
   // 현재 페이지 URL에 ?mode=checkin 파라미터를 붙여 실제 모바일 출석 페이지로 라우팅
   const qrToken   = `${course.code}-${date}-${qrType.toUpperCase()}-${QR_TOKEN_SUFFIX}`;
@@ -1909,17 +2090,17 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
         );
         if (error) throw error;
 
-        // 데이터를 records 형태로 변환
+        // 데이터를 records 형태로 변환 (신규 스키마: check_in / check_out / status)
         const newRecords = {};
         (data || []).forEach(att => {
-          if (!newRecords[att.student_id]) newRecords[att.student_id] = {};
-          const [h, m] = att.time.split(":").map(Number);
-          const mins = h * 60 + m;
-          if (att.type === "in") {
-            newRecords[att.student_id].in = { time: att.time, mins };
-          } else if (att.type === "out") {
-            newRecords[att.student_id].out = { time: att.time };
+          const rec = { status: att.status || "U" };
+          if (att.check_in) {
+            const [h, m] = att.check_in.split(":").map(Number);
+            rec.checkIn     = att.check_in;
+            rec.checkInMins = h * 60 + m;
           }
+          if (att.check_out) rec.checkOut = att.check_out;
+          newRecords[att.student_id] = rec;
         });
         setRecords(newRecords);
         console.log(`✅ ${date} 출결 데이터 로드 완료:`, Object.keys(newRecords).length, "명");
@@ -1929,6 +2110,25 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
     };
     loadAttendance();
   }, [course, date]);
+
+  // ── DB 로드 데이터를 수동 입력 행에 미리 반영 (최초 1회만, 사용자 미편집 행에만 적용) ──
+  useEffect(() => {
+    if (Object.keys(records).length === 0) return;
+    setManualAtt(prev => {
+      const next = { ...prev };
+      Object.entries(records).forEach(([sid, rec]) => {
+        if (!next[sid]) { // 사용자가 아직 편집하지 않은 행에만 적용
+          next[sid] = {
+            status:  rec.status !== "U" ? rec.status : "",
+            inTime:  rec.checkIn  || "",
+            outTime: rec.checkOut || "",
+            saved:   true  // DB에서 로드된 값
+          };
+        }
+      });
+      return next;
+    });
+  }, [records]);
 
   // ── 실시간 출결 업데이트 구독 (안정화 버전) ──
   useEffect(() => {
@@ -2007,18 +2207,18 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             if (eventType === "INSERT" || eventType === "UPDATE") {
               // 현재 날짜 필터 (서버 필터와 함께 클라이언트 이중 확인)
               if (newRecord?.date !== date) return;
-              const [h, m] = (newRecord?.time || "00:00").split(":").map(Number);
-              const mins = h * 60 + m;
-              setRecords(prev => ({
-                ...prev,
-                [newRecord.student_id]: {
-                  ...(prev[newRecord.student_id] || {}),
-                  [newRecord.type]: newRecord.type === "in"
-                    ? { time: newRecord.time, mins }
-                    : { time: newRecord.time }
+              setRecords(prev => {
+                const existing = prev[newRecord.student_id] || {};
+                const upd = { ...existing, status: newRecord.status || existing.status || "U" };
+                if (newRecord.check_in) {
+                  const [h, m] = newRecord.check_in.split(":").map(Number);
+                  upd.checkIn     = newRecord.check_in;
+                  upd.checkInMins = h * 60 + m;
                 }
-              }));
-              console.log(`📌 [출결 Realtime] ${newRecord.type} ← 학생 ID ${newRecord.student_id}`);
+                if (newRecord.check_out) upd.checkOut = newRecord.check_out;
+                return { ...prev, [newRecord.student_id]: upd };
+              });
+              console.log(`📌 [출결 Realtime] ← 학생 ID ${newRecord.student_id} status=${newRecord.status}`);
             }
           }
         } catch (err) {
@@ -2055,12 +2255,13 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
     return "L";
   };
 
-  const checkedInCnt  = Object.values(records).filter(r=>r.in).length;
-  const checkedOutCnt = Object.values(records).filter(r=>r.out).length;
-  const presentCnt    = Object.values(records).filter(r=>r.in && calcStatus(r.in.mins)==="O").length;
-  const lateCnt       = Object.values(records).filter(r=>r.in && calcStatus(r.in.mins)==="L").length;
+  const checkedInCnt   = Object.values(records).filter(r=>r.checkIn).length;
+  const checkedOutCnt  = Object.values(records).filter(r=>r.checkOut).length;
+  const presentCnt     = Object.values(records).filter(r=>r.status==="O").length;
+  const lateCnt        = Object.values(records).filter(r=>r.status==="L").length;
+  const absentCnt      = Object.values(records).filter(r=>r.status==="A").length;
   const courseStudents = students.filter(s=>s.cid===course.id);
-  const absentCnt = courseStudents.length - checkedInCnt;
+  const unconfirmedCnt = courseStudents.filter(s=>!records[s.id] || records[s.id].status==="U").length;
 
   // ── 시뮬레이션 ──
   const startSim = () => {
@@ -2078,11 +2279,12 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
       const m = mins % 60;
       const time = fmtTime(Math.max(0,h), Math.max(0,m));
       if(qrType === "in") {
-        setRecords(prev => ({...prev, [s.id]: { in: { time, mins } }}));
+        const simStatus = mins <= lateTotal ? "O" : "L";
+        setRecords(prev => ({...prev, [s.id]: { ...(prev[s.id]||{}), checkIn: time, checkInMins: mins, status: simStatus }}));
       } else {
         const outOffset = endTotal + Math.floor(Math.random()*20) - 5;
         const oh = Math.floor(outOffset/60), om = outOffset%60;
-        setRecords(prev => ({...prev, [s.id]: { ...(prev[s.id]||{}), out: { time: fmtTime(oh,om) } }}));
+        setRecords(prev => ({...prev, [s.id]: { ...(prev[s.id]||{}), checkOut: fmtTime(oh,om) }}));
       }
       i++;
     }, 500);
@@ -2090,11 +2292,14 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
 
   useEffect(() => () => clearInterval(simRef.current), []);
 
+  // 모든 hooks 이후: course가 없을 때(transitions/삭제) crash 방지
+  if (!course) return null;
+
   const ATT_MAP = {
     O: { label:"출석", bg:"#ECFDF5", color:T.ok    },
     L: { label:"지각", bg:"#FFFBEB", color:T.warn   },
     A: { label:"결석", bg:"#FEF2F2", color:T.danger },
-    E: { label:"외출", bg:"#F5F3FF", color:"#7C3AED" },
+    U: { label:"미확인", bg:T.s2,    color:T.mu     },
   };
 
   const inpSel = {
@@ -2253,10 +2458,10 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
           )}
           <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
           {[
-            {v:presentCnt,   l:"출석",   c:T.ok      },
-            {v:lateCnt,      l:"지각",   c:T.warn     },
-            {v:absentCnt,    l:"미확인", c:T.danger   },
-            {v:checkedOutCnt,l:"퇴실",   c:T.info     },
+            {v:presentCnt,      l:"출석",   c:T.ok      },
+            {v:lateCnt,         l:"지각",   c:T.warn     },
+            {v:absentCnt,       l:"결석",   c:T.danger   },
+            {v:unconfirmedCnt,  l:"미확인", c:T.mu       },
           ].map(({v,l,c})=>(
             <div key={l} style={{ textAlign:"center" }}>
               <div style={{ fontSize:18, fontWeight:800, color:c }}>{v}</div>
@@ -2266,21 +2471,22 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
           <div style={{ fontSize:13, color:T.mu }}>/ {courseStudents.length}명</div>
           {/* 결석 일괄 마감 버튼 */}
           <button onClick={async () => {
-            const absentStudents = courseStudents.filter(s => !records[s.id]?.in);
+            const absentStudents = courseStudents.filter(s => !records[s.id]?.checkIn && records[s.id]?.status !== "A");
             if (absentStudents.length === 0) { alert("미확인 인원이 없습니다."); return; }
             if (!window.confirm(`미확인 ${absentStudents.length}명을 결석으로 일괄 처리하시겠습니까?`)) return;
             try {
               const now = new Date();
               const toInsert = absentStudents.map(s => ({
-                student_id: s.id, date, type: "in",
-                time: "00:00", status: "A", created_at: now.toISOString()
+                course_id: course.id, student_id: s.id, date,
+                status: "A", check_in: null, check_out: null, method: "manual",
+                created_at: now.toISOString()
               }));
-              const { error } = await sbInsert("attendance", toInsert);
+              const { error } = await sbUpsert("attendance", toInsert);
               if (error) throw error;
               // 로컬 records 업데이트
               setRecords(prev => {
                 const next = { ...prev };
-                absentStudents.forEach(s => { next[s.id] = { ...(next[s.id]||{}), in: { time:"결석", mins:null, status:"A" } }; });
+                absentStudents.forEach(s => { next[s.id] = { ...(next[s.id]||{}), status: "A" }; });
                 return next;
               });
               alert(`✅ ${absentStudents.length}명 결석 일괄 처리 완료`);
@@ -2399,10 +2605,10 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
               )}
               {courseStudents.map(s => {
                 const rec    = records[s.id] || {};
-                const inRec  = rec.in;
-                const outRec = rec.out;
-                const status = inRec ? calcStatus(inRec.mins) : "A";
-                const att    = ATT_MAP[inRec ? status : "A"];
+                const inRec  = rec.checkIn  ? { time: rec.checkIn  } : null;
+                const outRec = rec.checkOut ? { time: rec.checkOut } : null;
+                const status = rec.status || (inRec ? (rec.checkInMins <= lateTotal ? "O" : "L") : "U");
+                const att    = ATT_MAP[status] || ATT_MAP["U"];
                 return (
                   <div key={s.id} className={inRec?"checkin-row":""} style={{
                     display:"flex", alignItems:"center", gap:12,
@@ -2479,26 +2685,30 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                   try {
                     const now = new Date();
                     const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-                    const rows = [];
-                    if (curIn || curStatus) {
-                      rows.push({
-                        student_id: s.id, date, type: "in",
-                        time: curIn || defaultTime,
-                        status: curStatus || "O",
-                        created_at: now.toISOString()
-                      });
-                    }
-                    if (curOut) {
-                      rows.push({
-                        student_id: s.id, date, type: "out",
-                        time: curOut,
-                        created_at: now.toISOString()
-                      });
-                    }
-                    if (rows.length === 0) { alert("입실 시간 또는 상태를 먼저 입력하세요."); return; }
-                    const { error } = await sbInsert("attendance", rows);
+                    if (!curIn && !curStatus && !curOut) { alert("입실 시간 또는 상태를 먼저 입력하세요."); return; }
+                    const inTime = curIn || (curStatus ? defaultTime : null);
+                    const calcMins = inTime ? timeToMins(inTime) : null;
+                    const rowStatus = curStatus || (inTime ? (calcMins <= lateTotal ? "O" : "L") : "U");
+                    const rowData = {
+                      course_id: course.id, student_id: s.id, date,
+                      status: rowStatus,
+                      check_in:  inTime  || null,
+                      check_out: curOut  || null,
+                      method:    "manual",
+                      created_at: now.toISOString()
+                    };
+                    const { error } = await sbUpsert("attendance", [rowData]);
                     if (error) throw error;
                     setManualAtt(p => ({ ...p, [s.id]: { ...(p[s.id]||{}), saved: true } }));
+                    // records 상태 동기화 → QR 모드와 수동 모드 연동
+                    setRecords(prev => {
+                      const next = { ...prev };
+                      const upd  = { ...(next[s.id]||{}), status: rowStatus };
+                      if (inTime) { upd.checkIn = inTime; upd.checkInMins = calcMins; }
+                      if (curOut) upd.checkOut = curOut;
+                      next[s.id] = upd;
+                      return next;
+                    });
                     if (onRatesUpdated) onRatesUpdated(course.id);
                   } catch(err) {
                     alert("저장 오류: " + (err.message || JSON.stringify(err)));
@@ -2578,24 +2788,36 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
               try {
                 const now = new Date();
                 const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-                const records = [];
-                unsaved.forEach(s => {
+                const attRows = unsaved.map(s => {
                   const row = manualAtt[s.id]||{};
-                  if (row.inTime || row.status) {
-                    records.push({ student_id:s.id, date, type:"in",
-                      time: row.inTime || defaultTime, status: row.status||"O",
-                      created_at: now.toISOString() });
-                  }
-                  if (row.outTime) {
-                    records.push({ student_id:s.id, date, type:"out",
-                      time: row.outTime, created_at: now.toISOString() });
-                  }
+                  const inTime = row.inTime || (row.status ? defaultTime : null);
+                  const calcMins = inTime ? timeToMins(inTime) : null;
+                  const rowStatus = row.status || (inTime ? (calcMins <= lateTotal ? "O" : "L") : "U");
+                  return {
+                    course_id: course.id, student_id: s.id, date,
+                    status:    rowStatus,
+                    check_in:  inTime     || null,
+                    check_out: row.outTime || null,
+                    method:    "manual",
+                    created_at: now.toISOString()
+                  };
                 });
-                const { error } = await sbInsert("attendance", records);
+                const { error } = await sbUpsert("attendance", attRows);
                 if (error) throw error;
                 setManualAtt(p => {
                   const next = {...p};
                   unsaved.forEach(s => { next[s.id] = {...(next[s.id]||{}), saved:true}; });
+                  return next;
+                });
+                // records 상태 동기화 → QR 모드와 수동 모드 연동
+                setRecords(prev => {
+                  const next = { ...prev };
+                  attRows.forEach(r => {
+                    const upd = { ...(next[r.student_id]||{}), status: r.status };
+                    if (r.check_in)  { upd.checkIn = r.check_in; upd.checkInMins = timeToMins(r.check_in); }
+                    if (r.check_out) upd.checkOut = r.check_out;
+                    next[r.student_id] = upd;
+                  });
                   return next;
                 });
                 alert(`✅ ${unsaved.length}명 출결 일괄 저장 완료`);
@@ -2621,6 +2843,18 @@ const CompletionMgmt = ({ students, courses }) => {
   const [course, setCourse] = useState(courses[3] || courses[0]);
   const [threshold, setThr] = useState(80);
   const [overrides, setOvr] = useState({});
+
+  // courses prop 변경(실시간 업데이트/편집) 시 선택 과정 최신 데이터로 동기화
+  useEffect(() => {
+    if (!courses.length) return;
+    setCourse(prev => {
+      if (!prev) return courses[0];
+      const updated = courses.find(c => c.id === prev.id);
+      return updated || courses[0];
+    });
+  }, [courses]);
+
+  if (!course) return null;
   const list = students.filter(s=>s.cid===course.id);
   const get  = s => overrides[s.id] ?? (s.rate>=threshold?"수료":"미수료");
   const completed = list.filter(s=>get(s)==="수료").length;
@@ -2953,16 +3187,28 @@ const CertMgmt = ({ students, courses }) => {
   const [issueDate, setIssueDate] = useState("2026년　　월　　일");
   const [customDate, setCustomDate] = useState("");
 
+  // courses prop 변경(실시간 업데이트/편집) 시 선택 과정 최신 데이터로 동기화
+  useEffect(() => {
+    if (!courses.length) return;
+    setCourse(prev => {
+      if (!prev) return courses[0];
+      const updated = courses.find(c => c.id === prev.id);
+      return updated || courses[0];
+    });
+  }, [courses]);
+
+  if (!course) return null;
   // 수료증: 출석률 80% 이상
-  // 수강증명서: 해당 과정 수강자 전체 (출석 1% 이상)
+  // 수강증명서: 해당 과정 수강자 전체 (출석률 무관 — 등록 자체가 기준)
   const certEligible   = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>=80);
-  const attendEligible = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>0);
+  const attendEligible = students.filter(s => Number(s.cid)===Number(course.id));
   const eligible = docType==="cert" ? certEligible : attendEligible;
 
   const getCertNo = (s, idx) => {
     if (issued[s.id+docType]?.no) return issued[s.id+docType].no;
-    const suffix = docType === "cert" ? "수료" : "수강";
-    return `제 2026-북부-${suffix}-${String(idx+1).padStart(3,"0")}호`;
+    // 순번 숫자만 반환 — 전체 번호는 템플릿에서 조합
+    // 수료증: "2026-북부교육팀-{no}호" / 수강증명서: "제 2026-북부-수강-{no} 호"
+    return String(idx+1).padStart(3, "0");
   };
 
   const handleIssue = (s, idx) => {
@@ -3270,18 +3516,44 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
             </FLD>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10 }}>
-            <FLD label="생년월일" required>
-              <input type="date" value={form.birth||""} onChange={e=>set("birth",e.target.value)} style={inpStyle}/>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:10 }}>
+            <FLD label="주민등록번호" required>
+              <input
+                value={(() => {
+                  const b = (form.birth||"").replace(/-/g,"");
+                  const front = b.length >= 8 ? b.slice(2,4)+b.slice(4,6)+b.slice(6,8) : "";
+                  const back  = form.idBack || "";
+                  if (!front && !back) return "";
+                  return front ? `${front}-${back}` : back;
+                })()}
+                onChange={e => {
+                  const raw = e.target.value.replace(/[^0-9]/g, "");
+                  const front6 = raw.slice(0,6);
+                  const back7  = raw.slice(6,13);
+                  if (front6.length === 6) {
+                    const yy = front6.slice(0,2), mm = front6.slice(2,4), dd = front6.slice(4,6);
+                    const f1  = back7[0] || "";
+                    // 1/2=내국인 1900s, 3/4=내국인 2000s, 5/6=외국인 1900s, 7/8=외국인 2000s
+                    const yyyy = (f1==="3"||f1==="4"||f1==="7"||f1==="8") ? `20${yy}` : `19${yy}`;
+                    const candidate = `${yyyy}-${mm}-${dd}`;
+                    const d = new Date(candidate);
+                    if (!isNaN(d.getTime()) &&
+                        d.getFullYear()===+yyyy && d.getMonth()===+mm-1 && d.getDate()===+dd) {
+                      set("birth", candidate);
+                    }
+                  }
+                  if (back7) set("idBack", back7);
+                }}
+                placeholder="YYMMDD-XXXXXXX"
+                maxLength={14}
+                style={{ ...inpStyle, letterSpacing:"3px", fontFamily:"monospace" }}
+              />
             </FLD>
-            <FLD label="만 나이">
+            <FLD label="생년월일 · 나이">
               <div style={{ padding:"8px 10px", background:T.s3, borderRadius:8,
-                fontSize:13, fontWeight:800, color:T.tx, lineHeight:"20px" }}>{age || "—"}</div>
-            </FLD>
-            <FLD label="주민번호 뒷자리">
-              <input value={form.idBack||""} onChange={e=>set("idBack",e.target.value)}
-                placeholder="1234567" maxLength={7}
-                style={{ ...inpStyle, letterSpacing:"4px", fontFamily:"monospace" }}/>
+                fontSize:12, color:T.tx, lineHeight:"20px" }}>
+                {form.birth ? `${form.birth}  (${age})` : "—"}
+              </div>
             </FLD>
           </div>
 
@@ -3360,7 +3632,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
           <Btn onClick={async ()=>{
             if(!form.name||!form.name.trim()) return alert("이름은 필수 입력 항목입니다.");
-            if(!form.birth) return alert("생년월일은 필수 입력 항목입니다.");
+            if(!form.birth) return alert("주민등록번호(또는 생년월일)는 필수 입력 항목입니다.");
             await onSave({ ...form, id: form.id||undefined });
             onClose();
           }}>
@@ -4709,7 +4981,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                           fontSize:11, fontWeight:700, transition:"all .15s",
                           background: selCid===c.id ? T.p : T.s3,
                           color: selCid===c.id ? "#fff" : T.mu }}>
-                        {c.code} {form.cids.includes(c.id) && " ✓"}
+                        {c.code}
                         <span style={{ marginLeft:5, fontSize:10,
                           opacity:.75 }}>({cnt}명)</span>
                       </button>
@@ -5562,24 +5834,55 @@ const MobileCheckin = () => {
   const handleCheckin = async (student) => {
     setStatus("loading");
     try {
-      // 중복 체크: 이미 해당 타입으로 출결 기록이 있는지 확인
-      const { data: existing } = await sbGet(
+      // 기존 출결 기록 조회 (UPSERT를 위해 현재 데이터 로드)
+      const { data: existingData } = await sbGet(
         "attendance",
-        `select=id,time&student_id=eq.${student.id}&date=eq.${date}&type=eq.${type}&limit=1`
+        `select=id,check_in,check_out,status&student_id=eq.${student.id}&date=eq.${date}&limit=1`
       );
-      if (existing?.[0]) {
+      const existing = existingData?.[0] || null;
+      // 중복 체크: 입실 QR인데 이미 check_in 기록이 있는 경우
+      if (type === "in" && existing?.check_in) {
         setCheckedId(student.id);
-        setCheckedTime(existing[0].time);
+        setCheckedTime(existing.check_in);
+        setStatus("duplicate");
+        return;
+      }
+      // 중복 체크: 퇴실 QR인데 이미 check_out 기록이 있는 경우
+      if (type === "out" && existing?.check_out) {
+        setCheckedId(student.id);
+        setCheckedTime(existing.check_out);
         setStatus("duplicate");
         return;
       }
       const now  = new Date();
       const time = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
-      const { error } = await sbInsert("attendance", [{
+      // QR 입실: 과정 시작 시각 기준으로 출석/지각 자동 판별
+      let attStatus = existing?.status || "U";
+      if (type === "in") {
+        try {
+          const schedFrom = course?.schedTimeFrom || "";
+          const schedParts = schedFrom.match(/^(\d{1,2}):(\d{2})$/);
+          const timeParts  = time.match(/^(\d{1,2}):(\d{2})$/);
+          if (schedParts && timeParts) {
+            const schedMins  = parseInt(schedParts[1]) * 60 + parseInt(schedParts[2]);
+            const actualMins = parseInt(timeParts[1])  * 60 + parseInt(timeParts[2]);
+            attStatus = actualMins <= schedMins ? "O" : "L";
+          } else {
+            attStatus = "O"; // 스케줄 정보 없거나 형식 오류 → 출석 처리
+          }
+        } catch (_e) {
+          attStatus = "O";
+        }
+      }
+      // QR 입실: 시간 기준 출석/지각 자동 판별; 퇴실은 check_out 기록
+      const { error } = await sbUpsert("attendance", [{
+        course_id:  cidNum || null,
         student_id: student.id,
         date,
-        type,
-        time,
+        status:    attStatus,
+        check_in:  type === "in"  ? time : (existing?.check_in  || null),
+        check_out: type === "out" ? time : (existing?.check_out || null),
+        method:    "qr",
         created_at: now.toISOString(),
       }]);
       if (error) throw error;
@@ -6369,7 +6672,7 @@ function App() {
       const ids = courseStuds.map(s => s.id).join(",");
       const { data: att, error } = await sbGet(
         "attendance",
-        `select=student_id,date,status&type=eq.in&student_id=in.(${ids})`
+        `select=student_id,date,status&student_id=in.(${ids})`
       );
       if (error) throw error;
       // 학생별로 그룹핑

@@ -108,9 +108,10 @@ const sbInsert = async (table, body) => {
   if (!res.ok) return { data: null, error: data };
   return { data: Array.isArray(body) ? data : data[0], error: null };
 };
-const sbUpsert = async (table, body) => {
+const sbUpsert = async (table, body, conflictCols = "") => {
   const H2 = { ...H, "Prefer": "resolution=merge-duplicates,return=minimal" };
-  const res = await fetch(`${API}/${table}`, {
+  const qp = conflictCols ? `?on_conflict=${encodeURIComponent(conflictCols)}` : "";
+  const res = await fetch(`${API}/${table}${qp}`, {
     method: "POST", headers: H2,
     body: JSON.stringify(Array.isArray(body) ? body : [body]),
   });
@@ -2475,13 +2476,11 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             if (absentStudents.length === 0) { alert("미확인 인원이 없습니다."); return; }
             if (!window.confirm(`미확인 ${absentStudents.length}명을 결석으로 일괄 처리하시겠습니까?`)) return;
             try {
-              const now = new Date();
               const toInsert = absentStudents.map(s => ({
                 course_id: course.id, student_id: s.id, date,
                 status: "A", check_in: null, check_out: null, method: "manual",
-                created_at: now.toISOString()
               }));
-              const { error } = await sbUpsert("attendance", toInsert);
+              const { error } = await sbUpsert("attendance", toInsert, "student_id,date,course_id");
               if (error) throw error;
               // 로컬 records 업데이트
               setRecords(prev => {
@@ -2686,18 +2685,18 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     const now = new Date();
                     const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
                     if (!curIn && !curStatus && !curOut) { alert("입실 시간 또는 상태를 먼저 입력하세요."); return; }
-                    const inTime = curIn || (curStatus ? defaultTime : null);
+                    // 결석(A)은 명시적 입실 시간이 없으면 null 유지 (phantom check-in 방지)
+                    const inTime = curIn || (curStatus && curStatus !== "A" ? defaultTime : null);
                     const calcMins = inTime ? timeToMins(inTime) : null;
                     const rowStatus = curStatus || (inTime ? (calcMins <= lateTotal ? "O" : "L") : "U");
                     const rowData = {
                       course_id: course.id, student_id: s.id, date,
-                      status: rowStatus,
+                      status:    rowStatus,
                       check_in:  inTime  || null,
                       check_out: curOut  || null,
                       method:    "manual",
-                      created_at: now.toISOString()
                     };
-                    const { error } = await sbUpsert("attendance", [rowData]);
+                    const { error } = await sbUpsert("attendance", [rowData], "student_id,date,course_id");
                     if (error) throw error;
                     setManualAtt(p => ({ ...p, [s.id]: { ...(p[s.id]||{}), saved: true } }));
                     // records 상태 동기화 → QR 모드와 수동 모드 연동
@@ -2790,7 +2789,8 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
                 const attRows = unsaved.map(s => {
                   const row = manualAtt[s.id]||{};
-                  const inTime = row.inTime || (row.status ? defaultTime : null);
+                  // 결석(A)은 명시적 입실 시간이 없으면 null 유지 (phantom check-in 방지)
+                  const inTime = row.inTime || (row.status && row.status !== "A" ? defaultTime : null);
                   const calcMins = inTime ? timeToMins(inTime) : null;
                   const rowStatus = row.status || (inTime ? (calcMins <= lateTotal ? "O" : "L") : "U");
                   return {
@@ -2799,10 +2799,9 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     check_in:  inTime     || null,
                     check_out: row.outTime || null,
                     method:    "manual",
-                    created_at: now.toISOString()
                   };
                 });
-                const { error } = await sbUpsert("attendance", attRows);
+                const { error } = await sbUpsert("attendance", attRows, "student_id,date,course_id");
                 if (error) throw error;
                 setManualAtt(p => {
                   const next = {...p};
@@ -5725,9 +5724,307 @@ const AccountMgmt = ({ accounts, onSave, onClose, currentUser, auditLog = [] }) 
 };
 
 
+/* ===========================================================
+   진행경과 (PROGRESS TRACKING)
+=========================================================== */
+const ProgressMgmt = ({ students, courses }) => {
+  const today    = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const [filterStatus, setFilterStatus] = useState("전체"); // 전체 | 진행중 | 예정 | 종료
+
+  // ── 과정별 진행률 계산 ──
+  const courseData = courses.map(c => {
+    const cs       = students.filter(s => s.cid === c.id);
+    const enrolled = cs.length;
+    const avgRate  = enrolled ? Math.round(cs.reduce((a, b) => a + b.rate, 0) / enrolled) : 0;
+    const isActive = c.dateFrom && c.dateFrom <= todayStr && (!c.dateTo || c.dateTo >= todayStr);
+    const isEnded  = c.dateTo && c.dateTo < todayStr;
+    const status   = isActive ? "진행중" : isEnded ? "종료" : "예정";
+
+    // 기간 진행률 (날짜 기준 %)
+    let datePct = 0;
+    if (c.dateFrom && c.dateTo) {
+      const start  = new Date(c.dateFrom).getTime();
+      const end    = new Date(c.dateTo).getTime();
+      const cur    = Math.min(today.getTime(), end);
+      datePct = start < end ? Math.round(Math.max(0, (cur - start) / (end - start) * 100)) : 0;
+    } else if (isActive) {
+      datePct = 50;
+    } else if (isEnded) {
+      datePct = 100;
+    }
+
+    // 잔여일 (영업일 기준 아닌 달력일)
+    let daysLeft = null;
+    if (c.dateTo && !isEnded) {
+      daysLeft = Math.max(0, Math.round((new Date(c.dateTo) - today) / 86400000));
+    }
+
+    return { ...c, enrolled, avgRate, isActive, isEnded, status, datePct, daysLeft };
+  }).sort((a, b) => (a.dateFrom || "9").localeCompare(b.dateFrom || "9") || a.name.localeCompare(b.name));
+
+  const filtered = filterStatus === "전체" ? courseData : courseData.filter(c => c.status === filterStatus);
+
+  // ── KPI ──
+  const activeCnt   = courseData.filter(c => c.isActive).length;
+  const endedCnt    = courseData.filter(c => c.isEnded).length;
+  const upcomingCnt = courseData.filter(c => !c.isActive && !c.isEnded && c.dateFrom).length;
+  const noDateCnt   = courseData.filter(c => !c.dateFrom).length;
+
+  // ── 연도 Gantt: 2026년 1~12월 ──
+  const GANTT_YEAR  = 2026;
+  const MONTHS      = ["1","2","3","4","5","6","7","8","9","10","11","12"];
+  const yearStart   = new Date(`${GANTT_YEAR}-01-01`).getTime();
+  const yearEnd     = new Date(`${GANTT_YEAR}-12-31`).getTime();
+  const yearSpan    = yearEnd - yearStart;
+
+  const todayPct = ((Math.min(today.getTime(), yearEnd) - yearStart) / yearSpan * 100).toFixed(2);
+
+  const ganttPct = (dateStr) => {
+    if (!dateStr) return null;
+    return ((new Date(dateStr).getTime() - yearStart) / yearSpan * 100).toFixed(2);
+  };
+
+  const STATUS_COLORS = { "진행중": T.ok, "예정": T.info, "종료": T.mu };
+  const STATUS_BG     = { "진행중": "#F0FDF4", "예정": "#EFF6FF", "종료": T.s3 };
+
+  return (
+    <div className="page">
+      <SectionHead title="진행경과" sub="과정별 교육 진행 현황 및 Gantt 타임라인"/>
+
+      {/* ── KPI 카드 ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:10, marginBottom:18 }}>
+        {[
+          { label:"전체 과정",  val:`${courseData.length}개`,  sub:"총 개설 과정",   color:T.p   },
+          { label:"진행중",     val:`${activeCnt}개`,           sub:"현재 운영 중",   color:T.ok  },
+          { label:"예정",       val:`${upcomingCnt}개`,         sub:"개강 예정",      color:T.info},
+          { label:"종료",       val:`${endedCnt}개`,            sub:"교육 완료",      color:T.mu  },
+          { label:"미지정",     val:`${noDateCnt}개`,           sub:"기간 미확정",    color:T.warn},
+        ].map((k, i) => (
+          <div key={i} style={{
+            background: T.s, borderRadius:12, border:`1.5px solid ${k.color}20`,
+            padding:"14px 16px", display:"flex", gap:10, alignItems:"center",
+            backgroundImage:`linear-gradient(145deg,#fff,${k.color}08)` }}>
+            <div>
+              <div style={{ fontSize:20, fontWeight:900, color:T.tx, lineHeight:1 }}>{k.val}</div>
+              <div style={{ fontSize:10, color:T.mu, marginTop:3 }}>{k.label}</div>
+              {k.sub && <div style={{ fontSize:9, color:k.color, fontWeight:700 }}>{k.sub}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── 연도 타임라인 Gantt ── */}
+      <Card style={{ padding:"18px 20px", marginBottom:16, overflow:"auto" }}>
+        <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:14 }}>
+          📅 {GANTT_YEAR}년 과정 타임라인
+          <span style={{ marginLeft:8, fontSize:10, color:T.mu, fontWeight:400 }}>오늘 기준 진행 현황</span>
+        </div>
+        <div style={{ minWidth:600 }}>
+          {/* 월 헤더 */}
+          <div style={{ display:"flex", marginBottom:6, paddingLeft:150 }}>
+            {MONTHS.map((m, i) => (
+              <div key={i} style={{
+                flex: new Date(GANTT_YEAR, i+1, 0).getDate(),
+                textAlign:"center", fontSize:10, fontWeight:700, color:T.mu,
+                borderLeft:`1px solid ${T.bd}`, paddingTop:2 }}>
+                {m}월
+              </div>
+            ))}
+          </div>
+
+          {/* 과정 행 */}
+          <div style={{ position:"relative" }}>
+            {/* 오늘 세로선 */}
+            {today.getFullYear() === GANTT_YEAR && (
+              <div style={{
+                position:"absolute", top:0, bottom:0, left:`calc(150px + ${todayPct}%)`,
+                width:2, background:"#EF4444", zIndex:3, pointerEvents:"none" }}>
+                <div style={{ position:"absolute", top:-18, left:-16,
+                  fontSize:9, fontWeight:800, color:"#EF4444",
+                  background:"#FEE2E2", border:"1px solid #FECACA",
+                  borderRadius:4, padding:"1px 4px", whiteSpace:"nowrap" }}>오늘</div>
+              </div>
+            )}
+
+            {courseData.filter(c => c.dateFrom).map((c, idx) => {
+              const left  = ganttPct(c.dateFrom);
+              const right = c.dateTo ? ganttPct(c.dateTo) : null;
+              const width = right !== null ? Math.max(0, right - left) : 3;
+              const stColor = STATUS_COLORS[c.status] || T.mu;
+              return (
+                <div key={c.id} style={{ display:"flex", alignItems:"center", marginBottom:5 }}>
+                  {/* 과정명 */}
+                  <div style={{ width:150, flexShrink:0, paddingRight:8,
+                    fontSize:10, fontWeight:600, color:T.tx,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}
+                    title={c.name}>
+                    <span style={{ display:"inline-block", width:7, height:7,
+                      borderRadius:2, background:c.cc||stColor, marginRight:4, flexShrink:0 }}/>
+                    {c.name.length > 14 ? c.name.slice(0,14)+"…" : c.name}
+                  </div>
+                  {/* Gantt 바 영역 */}
+                  <div style={{ flex:1, position:"relative", height:22,
+                    background:T.s3, borderRadius:4, overflow:"visible" }}>
+                    {/* 월 구분선 */}
+                    {MONTHS.map((_, mi) => {
+                      const firstDay = new Date(GANTT_YEAR, mi, 1);
+                      const pct = ((firstDay.getTime() - yearStart) / yearSpan * 100).toFixed(2);
+                      return mi === 0 ? null : (
+                        <div key={mi} style={{ position:"absolute", top:0, bottom:0,
+                          left:`${pct}%`, width:1, background:T.bd, zIndex:1 }}/>
+                      );
+                    })}
+                    {/* 과정 바 */}
+                    <div style={{
+                      position:"absolute", top:3, bottom:3,
+                      left:`${left}%`, width:`${width}%`,
+                      minWidth:4,
+                      background: c.isEnded ? `${stColor}80` : `linear-gradient(90deg,${c.cc||stColor},${c.cc||stColor}cc)`,
+                      borderRadius:4, zIndex:2, overflow:"hidden",
+                      boxShadow: c.isActive ? `0 0 0 1.5px ${c.cc||stColor}` : "none" }}
+                      title={`${c.name}\n${formatCoursePeriod(c)}\n진행률: ${c.datePct}%`}>
+                      {width > 5 && (
+                        <div style={{ position:"absolute", inset:0, display:"flex",
+                          alignItems:"center", paddingLeft:5, overflow:"hidden" }}>
+                          <span style={{ fontSize:8, color:"#fff", fontWeight:700, whiteSpace:"nowrap" }}>
+                            {c.datePct}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {courseData.filter(c => !c.dateFrom).length > 0 && (
+              <div style={{ marginTop:6, fontSize:10, color:T.mu, paddingLeft:150 }}>
+                ※ 기간 미지정 과정 {courseData.filter(c => !c.dateFrom).length}개 제외
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* ── 상태 필터 ── */}
+      <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+        {["전체","진행중","예정","종료"].map(s => (
+          <button key={s} onClick={() => setFilterStatus(s)} style={{
+            padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer",
+            fontSize:11, fontWeight:600, transition:"all .15s",
+            background: filterStatus===s ? T.p : T.s3,
+            color: filterStatus===s ? "#fff" : T.mu }}>
+            {s}
+            <span style={{ marginLeft:5, fontSize:10,
+              color: filterStatus===s ? "rgba(255,255,255,.8)" : T.mu }}>
+              {s==="전체" ? courseData.length
+                : s==="진행중" ? activeCnt
+                : s==="예정" ? upcomingCnt
+                : endedCnt}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── 과정별 상세 목록 ── */}
+      <Card style={{ overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+          <thead>
+            <tr style={{ borderBottom:`2px solid ${T.bd}` }}>
+              {["과정명","교육기간","기간 진행률","훈련생","평균 출석률","잔여일","상태"].map(h => (
+                <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontSize:10,
+                  color:T.mu, fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign:"center", color:T.mu, padding:"32px 0", fontSize:13 }}>
+                  해당하는 과정이 없습니다.
+                </td>
+              </tr>
+            ) : filtered.map(c => {
+              const stColor = STATUS_COLORS[c.status] || T.mu;
+              const stBg    = STATUS_BG[c.status]    || T.s3;
+              return (
+                <tr key={c.id} style={{ borderBottom:`1px solid ${T.bd}`,
+                  background: c.isActive ? `${T.pbg}60` : "transparent" }}>
+                  <td style={{ padding:"10px 12px" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ width:8, height:8, borderRadius:2, flexShrink:0,
+                        background:c.cc, display:"inline-block" }}/>
+                      <div>
+                        <div style={{ fontWeight:700, color:T.tx }}>{c.name}</div>
+                        <div style={{ fontSize:10, color:T.mu }}>{c.code} · {c.cat}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding:"10px 12px", color:T.mu, whiteSpace:"nowrap", fontSize:11 }}>
+                    {formatCoursePeriod(c)}
+                    {c.hours > 0 && <span style={{ display:"block", fontSize:10 }}>{c.hours}시간</span>}
+                  </td>
+                  <td style={{ padding:"10px 12px", minWidth:120 }}>
+                    {c.dateFrom ? (
+                      <div>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                          <span style={{ fontSize:10, color:T.mu }}>기간 진행률</span>
+                          <span style={{ fontSize:11, fontWeight:800,
+                            color: c.datePct>=80?T.ok:c.datePct>=40?T.warn:T.info }}>{c.datePct}%</span>
+                        </div>
+                        <div style={{ height:6, background:T.bd, borderRadius:3, overflow:"hidden" }}>
+                          <div style={{ height:"100%", width:`${c.datePct}%`,
+                            background: c.datePct>=80?T.ok:c.datePct>=40?T.warn:T.info,
+                            borderRadius:3, transition:"width .4s" }}/>
+                        </div>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize:10, color:T.mu }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ padding:"10px 12px", textAlign:"center" }}>
+                    <span style={{ fontWeight:700, color:T.tx }}>{c.enrolled}명</span>
+                    <span style={{ fontSize:10, color:T.mu }}>/{c.tgt}명</span>
+                  </td>
+                  <td style={{ padding:"10px 12px", textAlign:"center" }}>
+                    {c.enrolled > 0
+                      ? <span style={{ fontWeight:700,
+                          color:c.avgRate>=80?T.ok:c.avgRate>=70?T.warn:T.danger }}>{c.avgRate}%</span>
+                      : <span style={{ color:T.mu }}>—</span>}
+                  </td>
+                  <td style={{ padding:"10px 12px", textAlign:"center", fontSize:11 }}>
+                    {c.isEnded ? (
+                      <span style={{ color:T.mu }}>완료</span>
+                    ) : c.daysLeft !== null ? (
+                      <span style={{ fontWeight:700,
+                        color: c.daysLeft<=7?T.danger:c.daysLeft<=30?T.warn:T.ok }}>
+                        D-{c.daysLeft}
+                      </span>
+                    ) : (
+                      <span style={{ color:T.mu }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <span style={{ display:"inline-block", padding:"2px 9px", borderRadius:10,
+                      fontSize:10, fontWeight:700, color:stColor, background:stBg,
+                      border:`1px solid ${stColor}30` }}>
+                      {c.status}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+};
+
 const NAV_ITEMS = [
   { id:"dash",        label:"대시보드",    icon:"dash"   },
   { id:"courses",     label:"과정 현황",   icon:"book"   },
+  { id:"progress",    label:"진행경과",    icon:"cal"    },
   { id:"students",    label:"훈련생 관리", icon:"people" },
   { id:"instructors", label:"강사 관리",   icon:"award"  },
   { id:"rooms",       label:"강의실 관리", icon:"cal"    },
@@ -5883,8 +6180,7 @@ const MobileCheckin = () => {
         check_in:  type === "in"  ? time : (existing?.check_in  || null),
         check_out: type === "out" ? time : (existing?.check_out || null),
         method:    "qr",
-        created_at: now.toISOString(),
-      }]);
+      }], "student_id,date,course_id");
       if (error) throw error;
       setCheckedId(student.id);
       setCheckedTime(time);
@@ -6778,6 +7074,7 @@ function App() {
     switch(page) {
       case "dash":        return <Dashboard students={students} courses={courses}/>;
       case "courses":     return <CourseList courses={courses} onAdd={addCourse} onUpdate={updateCourse} onDelete={deleteCourse}/>;
+      case "progress":    return <ProgressMgmt students={students} courses={courses}/>;
       case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
       case "instructors": return <InstructorMgmt courses={courses}/>;
       case "rooms":       return <RoomMgmt courses={courses}/>;

@@ -118,6 +118,14 @@ const sbUpsert = async (table, body, conflictCols = "") => {
   if (!res.ok) { const data = await res.json(); return { data: null, error: data }; }
   return { data: null, error: null };
 };
+// 스키마 캐시 오류를 감지하여 더 친절한 안내 메시지로 변환
+const fmtSaveError = (err) => {
+  const msg = err?.message || JSON.stringify(err);
+  if (msg.includes("schema cache") || msg.includes("Could not find")) {
+    return `${msg}\n\n💡 해결 방법:\n1. supabase-setup.sql을 Supabase SQL Editor에서 다시 실행하세요.\n2. 그래도 안 되면 Supabase 대시보드 → 설정(Settings) → API → Reload schema 클릭`;
+  }
+  return msg;
+};
 const sbUpdate = async (table, filter, body) => {
   const res = await fetch(`${API}/${table}?${filter}`, {
     method: "PATCH", headers: H,
@@ -846,7 +854,7 @@ const Dashboard = ({ students, courses }) => {
         <div style={{ position:"absolute",bottom:-50,right:100,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.05)",pointerEvents:"none" }}/>
         <div style={{ position:"relative" }}>
           <div style={{ fontSize:10,fontWeight:700,letterSpacing:2.5,opacity:.7,marginBottom:5,textTransform:"uppercase" }}>
-            경기도일자리재단 경기북부 인력개발원
+            경기도일자리재단 경기북부사업본부 북부교육팀
           </div>
           <div style={{ fontSize:22,fontWeight:900,letterSpacing:"-.5px" }}>일일 운영 컨트롤 타워</div>
           <div style={{ display:"flex",gap:16,marginTop:8,flexWrap:"wrap" }}>
@@ -2491,7 +2499,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
               alert(`✅ ${absentStudents.length}명 결석 일괄 처리 완료`);
               if (onRatesUpdated) onRatesUpdated(course.id);
             } catch(err) {
-              alert("마감 오류: " + (err.message || JSON.stringify(err)));
+              alert("마감 오류: " + fmtSaveError(err));
             }
           }} style={{ padding:"8px 12px", borderRadius:9, border:`1.5px solid ${T.danger}`,
             background:"#FEF2F2", color:T.danger, cursor:"pointer",
@@ -2710,7 +2718,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     });
                     if (onRatesUpdated) onRatesUpdated(course.id);
                   } catch(err) {
-                    alert("저장 오류: " + (err.message || JSON.stringify(err)));
+                    alert("저장 오류: " + fmtSaveError(err));
                   }
                 };
                 return (
@@ -2822,7 +2830,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 alert(`✅ ${unsaved.length}명 출결 일괄 저장 완료`);
                 if (onRatesUpdated) onRatesUpdated(course.id);
               } catch(err) {
-                alert("저장 오류: " + (err.message || JSON.stringify(err)));
+                alert("저장 오류: " + fmtSaveError(err));
               }
             }}>
               <Icon n="check" s={13}/>

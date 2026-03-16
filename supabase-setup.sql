@@ -92,6 +92,7 @@ ALTER TABLE attendance ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'U';
 
 -- 컬럼 추가 직후 스키마 캐시 갱신 (check_in/check_out 추가 인식)
 -- "Could not find the '...' column ... in the schema cache" 오류 즉시 해결
+-- ※ NOTIFY가 즉시 반영되지 않는 경우: Supabase 대시보드 Settings → API → Reload schema 클릭
 NOTIFY pgrst, 'reload schema';
 
 -- 3) 기존 type/time 방식 데이터를 check_in/check_out 방식으로 마이그레이션
@@ -415,6 +416,8 @@ ALTER TABLE instructors ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
 -- 9. PostgREST 스키마 캐시 강제 갱신
 -- 새 컬럼 추가 후 PostgREST가 즉시 인식하도록 알림을 전송합니다.
 -- "Could not find the '...' column ... in the schema cache" 오류 해결
+-- ※ NOTIFY가 즉시 반영되지 않는 경우:
+--   Supabase 대시보드 → 설정(Settings) → API → "Reload schema" 버튼 클릭
 -- ==========================================
 NOTIFY pgrst, 'reload schema';
 

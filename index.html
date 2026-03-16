@@ -2020,19 +2020,32 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
     }
   };
 
-  // ── courses prop 변경 시 현재 선택 과정 갱신 (과정 수정 후 날짜/요일 즉시 반영) ──
+  // ── courses prop 변경 시 현재 선택 과정 갱신 (과정 수정 후 날짜/요일/시간 즉시 반영) ──
   // course를 ref로 추적해 stale closure 방지 (courses 의존성만으로 충분)
   const courseRef = React.useRef(course);
   useEffect(() => { courseRef.current = course; });
   useEffect(() => {
+    if (!courses.length) return;
     const cur = courseRef.current;
-    const updated = courses.find(c => c.id === cur.id);
-    if (updated && (
-      updated.dateFrom  !== cur.dateFrom  ||
-      updated.dateTo    !== cur.dateTo    ||
-      updated.schedDays !== cur.schedDays
-    )) {
+    const updated = courses.find(c => c.id === cur?.id);
+    if (!updated) {
+      // 현재 선택된 과정이 삭제된 경우 첫 번째 과정으로 fallback
+      handleCourseChange(courses[0]);
+    } else if (
+      updated.dateFrom      !== cur.dateFrom      ||
+      updated.dateTo        !== cur.dateTo        ||
+      updated.schedDays     !== cur.schedDays     ||
+      updated.schedTimeFrom !== cur.schedTimeFrom ||
+      updated.schedTimeTo   !== cur.schedTimeTo
+    ) {
+      // 일정/시간 변경 → 날짜 목록·시간 설정 재계산
       handleCourseChange(updated);
+    } else if (
+      updated.name !== cur.name ||
+      updated.code !== cur.code
+    ) {
+      // 이름·코드만 변경 → 출결 기록 유지하며 course 객체만 교체
+      setCourse(updated);
     }
   }, [courses]); // courses 변경 시에만 실행; handleCourseChange는 항상 최신 closure 참조
 
@@ -2247,6 +2260,9 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
   };
 
   useEffect(() => () => clearInterval(simRef.current), []);
+
+  // 모든 hooks 이후: course가 없을 때(transitions/삭제) crash 방지
+  if (!course) return null;
 
   const ATT_MAP = {
     O: { label:"출석", bg:"#ECFDF5", color:T.ok    },
@@ -2804,6 +2820,18 @@ const CompletionMgmt = ({ students, courses }) => {
   const [course, setCourse] = useState(courses[3] || courses[0]);
   const [threshold, setThr] = useState(80);
   const [overrides, setOvr] = useState({});
+
+  // courses prop 변경(실시간 업데이트/편집) 시 선택 과정 최신 데이터로 동기화
+  useEffect(() => {
+    if (!courses.length) return;
+    setCourse(prev => {
+      if (!prev) return courses[0];
+      const updated = courses.find(c => c.id === prev.id);
+      return updated || courses[0];
+    });
+  }, [courses]);
+
+  if (!course) return null;
   const list = students.filter(s=>s.cid===course.id);
   const get  = s => overrides[s.id] ?? (s.rate>=threshold?"수료":"미수료");
   const completed = list.filter(s=>get(s)==="수료").length;
@@ -3136,6 +3164,17 @@ const CertMgmt = ({ students, courses }) => {
   const [issueDate, setIssueDate] = useState("2026년　　월　　일");
   const [customDate, setCustomDate] = useState("");
 
+  // courses prop 변경(실시간 업데이트/편집) 시 선택 과정 최신 데이터로 동기화
+  useEffect(() => {
+    if (!courses.length) return;
+    setCourse(prev => {
+      if (!prev) return courses[0];
+      const updated = courses.find(c => c.id === prev.id);
+      return updated || courses[0];
+    });
+  }, [courses]);
+
+  if (!course) return null;
   // 수료증: 출석률 80% 이상
   // 수강증명서: 해당 과정 수강자 전체 (출석률 무관 — 등록 자체가 기준)
   const certEligible   = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>=80);

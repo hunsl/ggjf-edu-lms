@@ -3323,18 +3323,44 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
             </FLD>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10 }}>
-            <FLD label="생년월일" required>
-              <input type="date" value={form.birth||""} onChange={e=>set("birth",e.target.value)} style={inpStyle}/>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:10 }}>
+            <FLD label="주민등록번호" required>
+              <input
+                value={(() => {
+                  const b = (form.birth||"").replace(/-/g,"");
+                  const front = b.length >= 8 ? b.slice(2,4)+b.slice(4,6)+b.slice(6,8) : "";
+                  const back  = form.idBack || "";
+                  if (!front && !back) return "";
+                  return front ? `${front}-${back}` : back;
+                })()}
+                onChange={e => {
+                  const raw = e.target.value.replace(/[^0-9]/g, "");
+                  const front6 = raw.slice(0,6);
+                  const back7  = raw.slice(6,13);
+                  if (front6.length === 6) {
+                    const yy = front6.slice(0,2), mm = front6.slice(2,4), dd = front6.slice(4,6);
+                    const f1  = back7[0] || "";
+                    // 1/2=내국인 1900s, 3/4=내국인 2000s, 5/6=외국인 1900s, 7/8=외국인 2000s
+                    const yyyy = (f1==="3"||f1==="4"||f1==="7"||f1==="8") ? `20${yy}` : `19${yy}`;
+                    const candidate = `${yyyy}-${mm}-${dd}`;
+                    const d = new Date(candidate);
+                    if (!isNaN(d.getTime()) &&
+                        d.getFullYear()===+yyyy && d.getMonth()===+mm-1 && d.getDate()===+dd) {
+                      set("birth", candidate);
+                    }
+                  }
+                  if (back7) set("idBack", back7);
+                }}
+                placeholder="YYMMDD-XXXXXXX"
+                maxLength={14}
+                style={{ ...inpStyle, letterSpacing:"3px", fontFamily:"monospace" }}
+              />
             </FLD>
-            <FLD label="만 나이">
+            <FLD label="생년월일 · 나이">
               <div style={{ padding:"8px 10px", background:T.s3, borderRadius:8,
-                fontSize:13, fontWeight:800, color:T.tx, lineHeight:"20px" }}>{age || "—"}</div>
-            </FLD>
-            <FLD label="주민번호 뒷자리">
-              <input value={form.idBack||""} onChange={e=>set("idBack",e.target.value)}
-                placeholder="1234567" maxLength={7}
-                style={{ ...inpStyle, letterSpacing:"4px", fontFamily:"monospace" }}/>
+                fontSize:12, color:T.tx, lineHeight:"20px" }}>
+                {form.birth ? `${form.birth}  (${age})` : "—"}
+              </div>
             </FLD>
           </div>
 
@@ -3413,7 +3439,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
           <Btn onClick={async ()=>{
             if(!form.name||!form.name.trim()) return alert("이름은 필수 입력 항목입니다.");
-            if(!form.birth) return alert("생년월일은 필수 입력 항목입니다.");
+            if(!form.birth) return alert("주민등록번호(또는 생년월일)는 필수 입력 항목입니다.");
             await onSave({ ...form, id: form.id||undefined });
             onClose();
           }}>

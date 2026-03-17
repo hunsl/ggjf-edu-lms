@@ -486,6 +486,17 @@ const T = {
   bd: "#E2E8F0", tx: "#1E293B", mu: "#64748B",
 };
 
+// 과정별 “무한 자동 색” (id 기반 고정)
+const courseColor = (course, { sat = 70, light = 45 } = {}) => {
+  const id = Number(course?.id);
+  const base = Number.isFinite(id) ? id : 0;
+
+  const h = (base * 2654435761) >>> 0;
+  const hue = (h % 360 + base * 137.508) % 360;
+
+  return `hsl(${hue.toFixed(1)} ${sat}% ${light}%)`;
+};
+
 /* ===========================================================
    DATA
 =========================================================== */
@@ -568,47 +579,54 @@ const SEED_STUDENTS = [
     memo:"HACCP 실무 경험 있음. 결석 주의.", rate:55 },
 ];
 
-// 과정 날짜 범위 내 날짜 배열 생성 (주말 포함, dateFrom~min(dateTo, 오늘))
+// 과정 날짜 범위 내 날짜 배열 생성 (오늘까지만)
 const buildCourseDates = (course) => {
-  const dateFrom  = course?.dateFrom  ?? course?.date_from;
-  const dateTo    = course?.dateTo    ?? course?.date_to;
-  const schedDays = course?.schedDays ?? course?.sched_days;
-
-  if (!dateFrom) return [new Date().toISOString().slice(0, 10)];
+  const dateFrom = course?.dateFrom ?? course?.date_from;
+  const dateTo = course?.dateTo ?? course?.date_to;
+  const schedDaysRaw = course?.schedDays ?? course?.sched_days;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  if (!dateFrom) return [today.toISOString().slice(0, 10)];
+
   const start = new Date(dateFrom);
+  start.setHours(0, 0, 0, 0);
 
-  // 과정이 아직 시작 전이면 시작일만 반환
-  if (start > today) return [dateFrom];
+  // 아직 개강 전이면 시작일만
+  if (start > today) return [String(dateFrom).slice(0, 10)];
 
-  const end = dateTo
-    ? new Date(Math.min(new Date(dateTo).getTime(), today.getTime()))
-    : today;
+  const endCandidate = dateTo ? new Date(dateTo) : today;
+  endCandidate.setHours(0, 0, 0, 0);
+  const end = new Date(Math.min(endCandidate.getTime(), today.getTime()));
 
-  // schedDays 파싱: "월, 화, 목" 또는 "1,2,3,4,5" 혼용 지원
-  const DAY_MAP = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
-  const allowedDows = schedDays
-    ? new Set(
-        schedDays
-          .split(",")
-          .map(s => s.trim())
-          .map(s => (/^[0-6]$/.test(s) ? Number(s) : DAY_MAP[s]))
-          .filter(d => d !== undefined)
-      )
-    : null; // null이면 요일 제한 없음
+  // 요일 파싱: "월"~"일" / "0"~"6" 혼재 지원
+  const DAY_MAP = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
 
-  const dates = [];
+  const allowedDows =
+    schedDaysRaw && String(schedDaysRaw).trim().length
+      ? new Set(
+          String(schedDaysRaw)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .map((s) => (/^[0-6]$/.test(s) ? Number(s) : DAY_MAP[s]))
+            .filter((d) => d !== undefined)
+        )
+      : new Set([1, 2, 3, 4, 5]); // 없으면 기본 평일
+
+  const out = [];
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const dow = d.getDay();
-    const include = allowedDows
-      ? allowedDows.has(dow)
-      : (dow !== 0 && dow !== 6); // schedDays 없으면 주말 제외
-    if (include) dates.push(new Date(d).toISOString().slice(0, 10));
+    if (allowedDows && !allowedDows.has(dow)) continue;
+
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    out.push(`${yyyy}-${mm}-${dd}`);
   }
-  return dates.length ? dates : [today.toISOString().slice(0, 10)];
+
+  return out.length ? out : [String(dateFrom).slice(0, 10)];
 };
 
 // 과정 기간 표시 — date_from/date_to 기반으로 통일 (period 문자열 대체)
@@ -2500,7 +2518,9 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
 {(course?.schedDays ?? course?.sched_days) && (
   <div style={{ padding:"6px 12px", borderRadius:8, background:T.s2,
     border:`1px solid ${T.bd}`, fontSize:11, color:T.mu, lineHeight:1.5 }}>
-    📅 <b style={{ color:T.tx }}>{course?.schedDays ?? course?.sched_days}</b>
+    📅 <b style={{ color:T.tx }}>
+  {(course?.schedDays ?? course?.sched_days ?? "").toString()}
+</b>
     {(course?.schedTimeFrom ?? course?.sched_time_from) && (course?.schedTimeTo ?? course?.sched_time_to) && (
       <span style={{ marginLeft:6 }}>
         🕘 {course?.schedTimeFrom ?? course?.sched_time_from} ~ {course?.schedTimeTo ?? course?.sched_time_to}

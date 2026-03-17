@@ -422,5 +422,22 @@ ALTER TABLE instructors ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
 NOTIFY pgrst, 'reload schema';
 
 -- ==========================================
+-- 10. 출결 사유 컬럼 추가 (별지 83호 수강증명서 지원)
+-- reason: 결석 사유 메모 (자유 입력)
+-- absence_type: 결석 유형 ('excused'=부득이한사유, 'personal'=개인사유)
+-- ==========================================
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS reason       TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS absence_type TEXT;
+
+-- HRD 출결 기준 변경: 지각(L) 폐지 → 기존 지각 기록을 출석(O)으로 일괄 전환
+-- (일일 총 훈련시간의 50% 이상 참여 시 '출석', 미만 시 '결석'으로 새로 운영)
+UPDATE attendance SET status = 'O' WHERE status = 'L';
+
+-- 상태 주석 업데이트: O=출석, A=결석, U=미확인 (L=지각 폐지)
+COMMENT ON COLUMN attendance.status IS 'O=출석, A=결석, U=미확인 (지각 폐지: HRD 기준 변경)';
+
+NOTIFY pgrst, 'reload schema';
+
+-- ==========================================
 -- ✅ 완료! 이제 index.html을 새로고침하세요
 -- ==========================================

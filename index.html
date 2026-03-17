@@ -1722,7 +1722,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                 <Icon n="info" s={16}/>
                 <div style={{ fontSize:12, color:T.mu, flex:1 }}>
                   엑셀 양식은 <b style={{ color:T.p }}>양식 다운로드</b> 버튼에서 받으실 수 있습니다.
-                  필수 컬럼: <b>이름, 생년월일, 연락처, 과정코드</b>
+                  필수 컬럼: <b>이름, 주민등록번호, 연락처, 과정코드</b>　(구 양식: 생년월일 + 주민번호뒷자리도 호환)
                 </div>
                 <Btn variant="ghost" size="sm" onClick={downloadTemplate}>
                   <Icon n="dl" s={12}/> 양식 받기
@@ -2717,8 +2717,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                       check_in:     inTime  || null,
                       check_out:    curOut  || null,
                       method:       "manual",
-                      reason:       (rowStatus === "A" && curReason) ? curReason : null,
-                      absence_type: (rowStatus === "A" && curReason) ? curAbsType : null,
+                      ...(rowStatus === "A" && curReason ? { reason: curReason, absence_type: curAbsType || "personal" } : {}),
                     };
                     const { error } = await sbUpsert("attendance", [rowData], "student_id,date,course_id");
                     if (error) throw error;
@@ -2845,8 +2844,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     check_in:     inTime      || null,
                     check_out:    row.outTime  || null,
                     method:       "manual",
-                    reason:       (rowStatus === "A" && row.reason) ? row.reason : null,
-                    absence_type: (rowStatus === "A" && row.reason) ? (row.absenceType || "personal") : null,
+                    ...(rowStatus === "A" && row.reason ? { reason: row.reason, absence_type: row.absenceType || "personal" } : {}),
                   };
                 });
                 const { error } = await sbUpsert("attendance", attRows, "student_id,date,course_id");
@@ -3279,12 +3277,65 @@ const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
   </div>
 
   <!-- 수수료/처리사항 -->
-  <table class="fee-row" style="margin-top:8px;font-size:8.5pt;">
+  <table class="fee-row" style="margin-top:8px;font-size:8.5pt;width:100%;border-collapse:collapse;">
     <tr>
-      <td style="width:60px;text-align:center;background:#eee;font-weight:700;">수수료</td>
-      <td>없음</td>
+      <td rowspan="2" style="width:60px;text-align:center;background:#eee;font-weight:700;border:1px solid #555;padding:4px 6px;">수수료</td>
+      <td style="border:1px solid #555;padding:4px 6px;">없음</td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #555;padding:3px 6px;font-size:8pt;color:#666;">
+        ※ 표시란은 적지 아니합니다.
+      </td>
     </tr>
   </table>
+
+  <!-- 처리 지급결정 사항 -->
+  <table style="margin-top:6px;font-size:8pt;width:100%;border-collapse:collapse;">
+    <tr>
+      <td rowspan="6" style="border:1px solid #555;padding:3px 5px;background:#eee;font-weight:700;text-align:center;writing-mode:vertical-rl;width:22px;">※ 처리<br/>사항</td>
+      <td rowspan="2" style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:60px;">지급결정<br/>사항</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:80px;">구직급여</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:80px;">산출명세</td>
+      <td style="border:1px solid #555;padding:3px 5px;width:120px;">&nbsp;</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:50px;">지급액</td>
+      <td style="border:1px solid #555;padding:3px 5px;width:80px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td rowspan="3" style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;">직업능력<br/>개발수당</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;">산출명세</td>
+      <td style="border:1px solid #555;padding:3px 5px;">&nbsp;</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;">지급액</td>
+      <td style="border:1px solid #555;padding:3px 5px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;" colspan="1">미지급사유</td>
+      <td style="border:1px solid #555;padding:3px 5px;" colspan="3">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #555;padding:3px 5px;" colspan="4">&nbsp;</td>
+    </tr>
+    <tr>
+      <td colspan="6" style="border:none;padding:2px 0;"></td>
+    </tr>
+  </table>
+
+  <!-- 결재 -->
+  <table style="margin-top:4px;font-size:8pt;width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="border:1px solid #555;padding:3px 5px;background:#eee;font-weight:700;text-align:center;width:22px;">※ 결재</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:50px;">담당</td>
+      <td style="border:1px solid #555;padding:3px 5px;width:60px;height:32px;">&nbsp;</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:50px;">팀장</td>
+      <td style="border:1px solid #555;padding:3px 5px;width:60px;">&nbsp;</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:50px;">과장</td>
+      <td style="border:1px solid #555;padding:3px 5px;width:60px;">&nbsp;</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:70px;">청장·<br/>지청장</td>
+      <td style="border:1px solid #555;padding:3px 5px;width:80px;">&nbsp;</td>
+      <td style="border:1px solid #555;padding:3px 5px;background:#f5f5f5;font-weight:700;text-align:center;width:80px;">결재 연월일</td>
+      <td style="border:1px solid #555;padding:3px 5px;width:80px;">　.　.　</td>
+    </tr>
+  </table>
+
   <div style="font-size:8pt;color:#888;margin-top:6px;text-align:right;">210mm×297mm(일반용지 60g/㎡)</div>
 
 </div>
@@ -3450,7 +3501,7 @@ const CertMgmt = ({ students, courses }) => {
           <thead>
             <tr style={{ background:T.s2 }}>
               {[
-                {h:"번호",w:50},{h:"이름",w:"auto"},{h:"생년월일",w:100},
+                {h:"번호",w:50},{h:"이름",w:"auto"},{h:"주민등록번호",w:130},
                 {h:"출석률",w:80},{h:"문서번호",w:150},{h:"발급여부",w:90},{h:"",w:130}
               ].map(({h,w})=>(
                 <th key={h} style={{ padding:"10px 14px", textAlign:h==="이름"?"left":"center",
@@ -3480,7 +3531,14 @@ const CertMgmt = ({ students, courses }) => {
                       <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</span>
                     </div>
                   </td>
-                  <td style={{ padding:"12px 14px", textAlign:"center", fontSize:12, color:T.mu }}>{s.birth||"—"}</td>
+                  <td style={{ padding:"12px 14px", textAlign:"center", fontSize:11, color:T.mu, fontFamily:"monospace" }}>
+                    {(() => {
+                      const b = (s.birth||"").replace(/-/g,"");
+                      const front = b.length >= 8 ? b.slice(2,4)+b.slice(4,6)+b.slice(6,8) : "------";
+                      const back  = s.idBack ? s.idBack[0]+"______" : "-------";
+                      return `${front}-${back}`;
+                    })()}
+                  </td>
                   <td style={{ padding:"12px 14px", textAlign:"center" }}>
                     <span style={{ fontSize:14, fontWeight:800,
                       color: s.rate>=80?T.ok:s.rate>=60?T.warn:T.danger }}>{s.rate}%</span>
@@ -3649,7 +3707,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
             </FLD>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:10 }}>
             <FLD label="주민등록번호" required>
               <input
                 value={(() => {
@@ -3677,16 +3735,15 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
                   }
                   if (back7) set("idBack", back7);
                 }}
-                placeholder="YYMMDD-XXXXXXX"
+                placeholder="YYMMDD-XXXXXXX  (앞 6자리 + 뒷 7자리, 총 13자리)"
                 maxLength={14}
                 style={{ ...inpStyle, letterSpacing:"3px", fontFamily:"monospace" }}
               />
-            </FLD>
-            <FLD label="생년월일 · 나이">
-              <div style={{ padding:"8px 10px", background:T.s3, borderRadius:8,
-                fontSize:12, color:T.tx, lineHeight:"20px" }}>
-                {form.birth ? `${form.birth}  (${age})` : "—"}
-              </div>
+              {form.birth && (
+                <div style={{ fontSize:11, color:T.mu, marginTop:4, paddingLeft:2 }}>
+                  📅 자동계산 — 생년월일: <b style={{color:T.tx}}>{form.birth}</b>　·　{age}
+                </div>
+              )}
             </FLD>
           </div>
 
@@ -3765,7 +3822,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
           <Btn onClick={async ()=>{
             if(!form.name||!form.name.trim()) return alert("이름은 필수 입력 항목입니다.");
-            if(!form.birth) return alert("주민등록번호(또는 생년월일)는 필수 입력 항목입니다.");
+            if(!form.birth) return alert("주민등록번호는 필수 입력 항목입니다. (앞 6자리 입력 필요)");
             await onSave({ ...form, id: form.id||undefined });
             onClose();
           }}>
@@ -4913,8 +4970,12 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
     const wb = XLSX.utils.book_new();
     const rows = students.map(s => {
       const c = courses.find(x=>x.id===s.cid);
+      // 주민등록번호 조합: 생년월일(YYYY-MM-DD) → YYMMDD + 뒷자리 7자리
+      const b = (s.birth||"").replace(/-/g,"");
+      const front6 = b.length >= 8 ? b.slice(2,4)+b.slice(4,6)+b.slice(6,8) : "";
+      const idNum = front6 ? `${front6}-${s.idBack||""}` : (s.idBack||"");
       return {
-        "이름":s.name, "성별":s.gender||"", "생년월일":s.birth, "주민번호뒷자리":s.idBack||"",
+        "이름":s.name, "성별":s.gender||"", "주민등록번호":idNum,
         "연락처":s.phone, "거주시군":s.addrCity||"",
         "과정코드":c?.code||"", "과정명":c?.name||"", "분야":c?.cat||"",
         "면접일":s.itvDate||"", "면접점수":s.itvScore||"", "면접등급":s.itvGrade||"",
@@ -4923,7 +4984,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
       };
     });
     const ws1 = XLSX.utils.json_to_sheet(rows);
-    ws1["!cols"] = [8,5,12,14,14,10,8,28,10,12,8,8,8,20,8,8].map(w=>({wch:w}));
+    ws1["!cols"] = [8,5,16,14,10,8,28,10,12,8,8,8,20,8,8].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb, ws1, "전체_훈련생");
     const summary = stats.map(c=>({
       "과정코드":c.code,"과정명":c.name,"분야":c.cat,
@@ -4947,13 +5008,19 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
     const c = courses.find(x=>x.id===cid);
     const ss = students.filter(s=>s.cid===cid);
     if(!ss.length) { alert("해당 과정에 훈련생이 없습니다."); return; }
-    const rows = ss.map(s=>({
-      "이름":s.name,"성별":s.gender||"","생년월일":s.birth,"주민번호뒷자리":s.idBack||"",
-      "연락처":s.phone,"거주시군":s.addrCity||"",
-      "면접일":s.itvDate||"","면접점수":s.itvScore||"","면접등급":s.itvGrade||"",
-      "합격여부":s.itvPass?"합격":"불합격","특이사항":s.memo||"",
-      "출석률(%)":s.rate,"수료여부":s.rate>=80?"수료":"미수료",
-    }));
+    const rows = ss.map(s=>{
+      // 주민등록번호 조합
+      const b = (s.birth||"").replace(/-/g,"");
+      const front6 = b.length >= 8 ? b.slice(2,4)+b.slice(4,6)+b.slice(6,8) : "";
+      const idNum = front6 ? `${front6}-${s.idBack||""}` : (s.idBack||"");
+      return {
+        "이름":s.name,"성별":s.gender||"","주민등록번호":idNum,
+        "연락처":s.phone,"거주시군":s.addrCity||"",
+        "면접일":s.itvDate||"","면접점수":s.itvScore||"","면접등급":s.itvGrade||"",
+        "합격여부":s.itvPass?"합격":"불합격","특이사항":s.memo||"",
+        "출석률(%)":s.rate,"수료여부":s.rate>=80?"수료":"미수료",
+      };
+    });
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     ws["!cols"] = [8,5,12,14,14,10,12,8,8,8,20,8,8].map(w=>({wch:w}));
@@ -5459,7 +5526,7 @@ const LoginScreen = ({ onLogin, accounts }) => {
             {showNotice && (
               <div style={{ marginTop:8, padding:"10px 12px", background:"#fff",
                 borderRadius:8, border:`1px solid ${T.bd}`, fontSize:10, color:T.mu, lineHeight:1.8 }}>
-                <b style={{color:T.tx}}>수집 항목:</b> 성명, 생년월일, 주소, 연락처, 출결정보<br/>
+                <b style={{color:T.tx}}>수집 항목:</b> 성명, 주민등록번호, 주소, 연락처, 출결정보<br/>
                 <b style={{color:T.tx}}>수집 목적:</b> 직업훈련 학사관리 및 수료증 발급<br/>
                 <b style={{color:T.tx}}>보유 기간:</b> 훈련 종료 후 3년<br/>
                 <b style={{color:T.tx}}>담당부서:</b> 경기도일자리재단 북부사업본부 북부교육팀<br/>

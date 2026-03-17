@@ -167,17 +167,29 @@ const toStudent = r => r ? ({
   itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
 }) : null;
 
+// Excel serial date number → ISO "YYYY-MM-DD" string (or null if empty)
+const excelDateToISO = v => {
+  if (!v && v !== 0) return null;
+  if (typeof v === 'number') {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  if (/^\d{8}$/.test(s)) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+  return s || null;
+};
+
 const fromStudent = s => {
   const toNum = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
   return {
     cid: s.cid ? Number(s.cid) : null,
     name: s.name, gender: s.gender||"",
-    birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
+    birth: excelDateToISO(s.birth), id_back: s.idBack||"", phone: s.phone||"",
     phone2: s.phone2||"", addr_city: s.addrCity||"", addr_detail: s.addrDetail||"",
     edu: s.edu||"", major: s.major||"", career: s.career||"", cert: s.cert||"",
     status: s.status||"미취업", unemp: !!s.unemp,
     disabled: !!s.disabled, veteran: !!s.veteran,
-    itv_date: s.itvDate||null, itv_score: toNum(s.itvScore), itv_grade: s.itvGrade||"",
+    itv_date: excelDateToISO(s.itvDate), itv_score: toNum(s.itvScore), itv_grade: s.itvGrade||"",
     itv_pass: !!s.itvPass, memo: s.memo||"", rate: toNum(s.rate) ?? 0,
   };
 };
@@ -1640,7 +1652,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
         birth:      birth,
         idBack:     idBack,
         phone,
-        phone2:     String(r["비상연락처"]  ||""),
+        phone2:     String(r["비상연락처"]  ||"").replace(/[^0-9]/g, ""),
         addrCity:   r["거주시"]   || r["거주시군"]  || "",
         addrDetail: r["상세주소"]           || "",
         edu:        r["최종학력"]           || "",

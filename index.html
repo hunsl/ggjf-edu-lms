@@ -579,6 +579,22 @@ const buildCourseDates = (course) => {
   return dates.length ? dates : [today.toISOString().slice(0, 10)];
 };
 
+// 과정 전체 수업일수 계산 (dateFrom ~ dateTo, 요일 스케줄 반영)
+const countCourseDays = (course) => {
+  if (!course?.dateFrom || !course?.dateTo) return 0;
+  const DAY_MAP = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
+  const allowedDows = course.schedDays
+    ? new Set(course.schedDays.split(",").map(s => DAY_MAP[s.trim()]).filter(d => d !== undefined))
+    : null;
+  let count = 0;
+  const end = new Date(course.dateTo);
+  for (let d = new Date(course.dateFrom); d <= end; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay();
+    count += allowedDows ? (allowedDows.has(dow) ? 1 : 0) : (dow !== 0 && dow !== 6 ? 1 : 0);
+  }
+  return count;
+};
+
 // 과정 기간 표시 — date_from/date_to 기반으로 통일 (period 문자열 대체)
 // 예: "2026.3.2 ~ 2026.5.29"  (앞자리 0 없음 — 한국 날짜 표기 관례)
 const formatCoursePeriod = (c) => {
@@ -811,8 +827,12 @@ const Dashboard = ({ students, courses }) => {
     const enrolled = cs.length;
     const avgR     = cs.length ? Math.round(cs.reduce((a,b)=>a+b.rate,0)/cs.length) : 0;
     const isActive = c.dateFrom && c.dateFrom <= todayStr && (!c.dateTo || c.dateTo >= todayStr);
-    const status   = isActive ? "진행중" : (c.dateTo && c.dateTo < todayStr) ? "종료" : "예정";
-    return { ...c, enrolled, avgR, isActive, status };
+    const isEnded  = c.dateTo && c.dateTo < todayStr;
+    const status   = isActive ? "진행중" : isEnded ? "종료" : "예정";
+    const totalDays     = countCourseDays(c);
+    const completedDays = isActive ? buildCourseDates(c).length : isEnded ? totalDays : 0;
+    const timePct       = totalDays > 0 ? Math.min(100, Math.round(completedDays / totalDays * 100)) : 0;
+    return { ...c, enrolled, avgR, isActive, isEnded, status, totalDays, completedDays, timePct };
   }).sort((a,b) => (a.dateFrom||"9").localeCompare(b.dateFrom||"9") || a.name.localeCompare(b.name));
 
   const activeCnt = courseProgress.filter(c=>c.isActive).length;
@@ -1056,7 +1076,7 @@ const Dashboard = ({ students, courses }) => {
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                 <thead>
                   <tr style={{ borderBottom:`2px solid ${T.bd}` }}>
-                    {["분야","과정명","교육기간","모집목표","등록","출석률","강사","강의실","상태"].map(h => (
+                    {["분야","과정명","교육기간","모집목표","등록","출석률","교육일 진행","강사","강의실","상태"].map(h => (
                       <th key={h} style={{ padding:"7px 10px", textAlign:"left", fontSize:10,
                         color:T.mu, fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>
                     ))}
@@ -1107,6 +1127,21 @@ const Dashboard = ({ students, courses }) => {
                           {c.enrolled > 0
                             ? <span style={{ fontWeight:700, color:c.avgR>=80?T.ok:c.avgR>=70?T.warn:T.danger }}>{c.avgR}%</span>
                             : <span style={{ color:T.mu }}>—</span>}
+                        </td>
+                        <td style={{ padding:"9px 10px", minWidth:100 }}>
+                          {c.totalDays > 0 ? (
+                            <div>
+                              <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:T.mu, marginBottom:3 }}>
+                                <span>{c.completedDays}일 / {c.totalDays}일</span>
+                                <span style={{ fontWeight:700, color:c.timePct>=80?T.ok:c.timePct>=40?T.warn:T.mu }}>{c.timePct}%</span>
+                              </div>
+                              <div style={{ height:5, background:T.bd, borderRadius:3, overflow:"hidden" }}>
+                                <div style={{ height:"100%", width:`${c.timePct}%`,
+                                  background:c.isActive?T.p:c.isEnded?T.mu:T.info,
+                                  borderRadius:3, transition:"width .4s" }}/>
+                              </div>
+                            </div>
+                          ) : <span style={{ color:T.mu }}>—</span>}
                         </td>
                         <td style={{ padding:"9px 10px", fontSize:11, color:T.mu, whiteSpace:"nowrap" }}>
                           {courseInst.length>0 ? courseInst.map(i=>i.name).join(", ") : "—"}

@@ -2518,8 +2518,21 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
 {(course?.schedDays ?? course?.sched_days) && (
   <div style={{ padding:"6px 12px", borderRadius:8, background:T.s2,
     border:`1px solid ${T.bd}`, fontSize:11, color:T.mu, lineHeight:1.5 }}>
-    📅 <b style={{ color:T.tx }}>
-  {(course?.schedDays ?? course?.sched_days ?? "").toString()}
+📅 <b style={{ color:T.tx }}>
+  {(() => {
+    const raw = (course?.schedDays ?? course?.sched_days ?? "").toString();
+    const DAY_KO = ["일","월","화","수","목","금","토"];
+    const DAY_MAP = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
+    const set = new Set(
+      raw.split(",")
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => (/^[0-6]$/.test(s) ? Number(s) : DAY_MAP[s]))
+        .filter(d => d !== undefined)
+    );
+    const list = [...set].sort((a,b)=>a-b).map(d => DAY_KO[d]);
+    return list.length ? list.join(", ") : raw;
+  })()}
 </b>
     {(course?.schedTimeFrom ?? course?.sched_time_from) && (course?.schedTimeTo ?? course?.sched_time_to) && (
       <span style={{ marginLeft:6 }}>

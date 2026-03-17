@@ -2498,7 +2498,8 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
           </div>
           {/* 수업 요일 / 시간 통합 표시 */}
 {(course?.schedDays ?? course?.sched_days) && (
-  <div ...>
+  <div style={{ padding:"6px 12px", borderRadius:8, background:T.s2,
+    border:`1px solid ${T.bd}`, fontSize:11, color:T.mu, lineHeight:1.5 }}>
     📅 <b style={{ color:T.tx }}>{course?.schedDays ?? course?.sched_days}</b>
     {(course?.schedTimeFrom ?? course?.sched_time_from) && (course?.schedTimeTo ?? course?.sched_time_to) && (
       <span style={{ marginLeft:6 }}>

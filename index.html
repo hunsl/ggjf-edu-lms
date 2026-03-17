@@ -570,20 +570,22 @@ const SEED_STUDENTS = [
 
 // 과정 날짜 범위 내 날짜 배열 생성 (주말 포함, dateFrom~min(dateTo, 오늘))
 const buildCourseDates = (course) => {
-  if (!course?.dateFrom) return [new Date().toISOString().slice(0, 10)];
+  const dateFrom = course?.dateFrom ?? course?.date_from;
+  const dateTo   = course?.dateTo   ?? course?.date_to;
+  const schedDays = course?.schedDays ?? course?.sched_days;
+  if (!dateFrom) return [new Date().toISOString().slice(0, 10)];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = new Date(course.dateFrom);
+  const start = new Date(dateFrom);
   // 과정이 아직 시작 전이면 시작일만 반환
-  if (start > today) return [course.dateFrom];
-  const end = course.dateTo
-    ? new Date(Math.min(new Date(course.dateTo).getTime(), today.getTime()))
+  if (start > today) return [dateFrom];
+  const end = dateTo
+    ? new Date(Math.min(new Date(dateTo).getTime(), today.getTime()))
     : today;
-
   // schedDays 파싱: "월, 화, 목" → Set<요일번호> (0=일,1=월,...,6=토)
   const DAY_MAP = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
-  const allowedDows = course.schedDays
-    ? new Set(course.schedDays.split(",").map(s => DAY_MAP[s.trim()]).filter(d => d !== undefined))
+  const allowedDows = schedDays
+    ? new Set(schedDays.split(",").map(s => DAY_MAP[s.trim()]).filter(d => d !== undefined))
     : null; // null이면 평일 전체 (schedDays 미지정 과정 하위 호환)
 
   const dates = [];

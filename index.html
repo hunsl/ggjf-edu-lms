@@ -167,16 +167,20 @@ const toStudent = r => r ? ({
   itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
 }) : null;
 
-const fromStudent = s => ({
-  cid: s.cid, name: s.name, gender: s.gender||"",
-  birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
-  phone2: s.phone2||"", addr_city: s.addrCity||"", addr_detail: s.addrDetail||"",
-  edu: s.edu||"", major: s.major||"", career: s.career||"", cert: s.cert||"",
-  status: s.status||"미취업", unemp: s.unemp||false,
-  disabled: s.disabled||false, veteran: s.veteran||false,
-  itv_date: s.itvDate||null, itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
-  itv_pass: s.itvPass||false, memo: s.memo||"", rate: s.rate||0,
-});
+const fromStudent = s => {
+  const toNum = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+  return {
+    cid: s.cid ? Number(s.cid) : null,
+    name: s.name, gender: s.gender||"",
+    birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
+    phone2: s.phone2||"", addr_city: s.addrCity||"", addr_detail: s.addrDetail||"",
+    edu: s.edu||"", major: s.major||"", career: s.career||"", cert: s.cert||"",
+    status: s.status||"미취업", unemp: !!s.unemp,
+    disabled: !!s.disabled, veteran: !!s.veteran,
+    itv_date: s.itvDate||null, itv_score: toNum(s.itvScore), itv_grade: s.itvGrade||"",
+    itv_pass: !!s.itvPass, memo: s.memo||"", rate: toNum(s.rate) ?? 0,
+  };
+};
 
 const toCourse = r => r ? ({
   id: Number(r.id), cat: r.cat, cc: r.cc, name: r.name, code: r.code,
@@ -1637,7 +1641,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
         idBack:     idBack,
         phone,
         phone2:     String(r["비상연락처"]  ||""),
-        addrCity:   r["거주시"]            || "",
+        addrCity:   r["거주시"]   || r["거주시군"]  || "",
         addrDetail: r["상세주소"]           || "",
         edu:        r["최종학력"]           || "",
         major:      r["전공"]              || "",
@@ -1647,10 +1651,10 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
         unemp:      yn(r["실업급여수급"]),
         disabled:   yn(r["장애여부"]),
         veteran:    yn(r["보훈여부"]),
-        itvDate:    r["면접일자"]           || "",
+        itvDate:    r["면접일자"]  || r["면접일"]    || "",
         itvScore:   r["면접점수"]           || "",
         itvGrade:   r["면접등급"]           || "",
-        itvPass:    yn(r["합격여부"]),
+        itvPass:    yn(r["합격여부"]) || String(r["합격여부"]||"").trim() === "합격",
         memo:       r["특이사항"]           || "",
       };
       const existing = phone ? students.find(s => s.phone && s.phone === phone) : null;
@@ -7040,20 +7044,22 @@ function App() {
   // 학생 스키마 캐시 오류 감지 헬퍼
   const isStudentSchemaErr = (e) => {
     const m = e?.message || e?.hint || JSON.stringify(e);
-    return m.includes("schema cache") && m.includes("cid");
+    return m.includes("schema cache") || m.includes("Could not find");
   };
 
   const addStudents = useCallback(async (newOnes) => {
     const bodies = newOnes.map(fromStudent);
     let { data, error } = await sbInsert("students", bodies);
-    // cid 컬럼 스키마 캐시 오류 → cid 제외 후 재시도
+    // 스키마 캐시 오류 → 문제 컬럼 제거 후 재시도
     if (error && isStudentSchemaErr(error)) {
-      console.warn("⚠️ students.cid 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload");
-      const fallback = bodies.map(({ cid, ...rest }) => rest);
+      const m = error?.message || "";
+      const badCol = (m.match(/column ['"`]?(\w+)['"`]?/) || m.match(/'(\w+)'.*schema/) || [])[1] || "cid";
+      console.warn("⚠️ students 스키마 캐시 오류 (컬럼:", badCol, ") — Supabase → Settings → API → Reload schema");
+      const fallback = bodies.map(b => { const f = {...b}; delete f[badCol]; return f; });
       ({ data, error } = await sbInsert("students", fallback));
     }
     if (error) { 
-      alert("저장 오류: " + (error.message||JSON.stringify(error))); 
+      alert("저장 오류:\n" + fmtSaveError(error)); 
       console.error("❌ 학생 저장 실패:", error);
       return; 
     }

@@ -167,17 +167,29 @@ const toStudent = r => r ? ({
   itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
 }) : null;
 
+// Excel serial date number → ISO "YYYY-MM-DD" string (or null if empty)
+const excelDateToISO = v => {
+  if (!v && v !== 0) return null;
+  if (typeof v === 'number') {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  if (/^\d{8}$/.test(s)) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+  return s || null;
+};
+
 const fromStudent = s => {
   const toNum = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
   return {
     cid: s.cid ? Number(s.cid) : null,
     name: s.name, gender: s.gender||"",
-    birth: s.birth||null, id_back: s.idBack||"", phone: s.phone||"",
+    birth: excelDateToISO(s.birth), id_back: s.idBack||"", phone: s.phone||"",
     phone2: s.phone2||"", addr_city: s.addrCity||"", addr_detail: s.addrDetail||"",
     edu: s.edu||"", major: s.major||"", career: s.career||"", cert: s.cert||"",
     status: s.status||"미취업", unemp: !!s.unemp,
     disabled: !!s.disabled, veteran: !!s.veteran,
-    itv_date: s.itvDate||null, itv_score: toNum(s.itvScore), itv_grade: s.itvGrade||"",
+    itv_date: excelDateToISO(s.itvDate), itv_score: toNum(s.itvScore), itv_grade: s.itvGrade||"",
     itv_pass: !!s.itvPass, memo: s.memo||"", rate: toNum(s.rate) ?? 0,
   };
 };
@@ -246,6 +258,7 @@ const fromInstructor = i => ({
 
 const toRoom = r => r ? ({
   id: r.id,
+  floor: r.floor||0,
   name: r.name||"",
   addr: r.addr||"",
   capacity: r.capacity||20,
@@ -253,6 +266,7 @@ const toRoom = r => r ? ({
 }) : null;
 
 const fromRoom = r => ({
+  floor: r.floor||0,
   name: r.name||"",
   addr: r.addr||"",
   capacity: r.capacity||20,
@@ -477,18 +491,18 @@ const T = {
 =========================================================== */
 const COURSES = [
   { id:1,  cat:"늘봄강사양성",  cc:"#EA580C", name:"초등 피지컬 코딩강사 양성",      code:"NB-01", dateFrom:"2026-06-01", dateTo:"2026-07-31", period:"6~7월",  method:"블렌디드", hours:92,  tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 목", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-  { id:2,  cat:"늘봄강사양성",  cc:"#EA580C", name:"AI 딥러닝 전문강사 양성",         code:"NB-02", dateFrom:"2026-06-01", dateTo:"2026-08-31", period:"6~8월",  method:"블렌디드", hours:104, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-  { id:3,  cat:"늘봄강사양성",  cc:"#EA580C", name:"늘봄학교 창의융합교육강사 양성",  code:"NB-03", dateFrom:"2026-04-01", dateTo:"2026-06-30", period:"4~6월",  method:"대면",     hours:140, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 목", schedTimeFrom:"09:00", schedTimeTo:"14:00" },
+  { id:2,  cat:"늘봄강사양성",  cc:"#D97706", name:"AI 딥러닝 전문강사 양성",         code:"NB-02", dateFrom:"2026-06-01", dateTo:"2026-08-31", period:"6~8월",  method:"블렌디드", hours:104, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+  { id:3,  cat:"늘봄강사양성",  cc:"#16A34A", name:"늘봄학교 창의융합교육강사 양성",  code:"NB-03", dateFrom:"2026-04-01", dateTo:"2026-06-30", period:"4~6월",  method:"대면",     hours:140, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 목", schedTimeFrom:"09:00", schedTimeTo:"14:00" },
   { id:4,  cat:"지역연계·기여", cc:"#C2410C", name:"ERP·지게차 물류관리 실무자 양성", code:"JY-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월",  method:"대면",     hours:182, tgt:15, cGoal:14, eGoal:9,  schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-  { id:5,  cat:"지역연계·기여", cc:"#C2410C", name:"승강기 전문가 양성",               code:"JY-02", dateFrom:"2026-05-04", dateTo:"2026-06-26", period:"5~6월",  method:"대면",     hours:80,  tgt:15, cGoal:14, eGoal:9,  schedDays:"월, 화, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-  { id:6,  cat:"지역연계·기여", cc:"#C2410C", name:"중장년 기회강사 양성",             code:"JY-03", dateFrom:"2026-05-01", dateTo:"2026-07-31", period:"5~7월",  method:"블렌디드", hours:83,  tgt:15, cGoal:14, eGoal:9,  schedDays:"화, 목",     schedTimeFrom:"09:30", schedTimeTo:"13:30" },
-  { id:7,  cat:"지역연계·기여", cc:"#C2410C", name:"미지정 공모과정 (지역연계)",       code:"JY-04", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+  { id:5,  cat:"지역연계·기여", cc:"#0891B2", name:"승강기 전문가 양성",               code:"JY-02", dateFrom:"2026-05-04", dateTo:"2026-06-26", period:"5~6월",  method:"대면",     hours:80,  tgt:15, cGoal:14, eGoal:9,  schedDays:"월, 화, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+  { id:6,  cat:"지역연계·기여", cc:"#0D9488", name:"중장년 기회강사 양성",             code:"JY-03", dateFrom:"2026-05-01", dateTo:"2026-07-31", period:"5~7월",  method:"블렌디드", hours:83,  tgt:15, cGoal:14, eGoal:9,  schedDays:"화, 목",     schedTimeFrom:"09:30", schedTimeTo:"13:30" },
+  { id:7,  cat:"지역연계·기여", cc:"#7C3AED", name:"미지정 공모과정 (지역연계)",       code:"JY-04", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:8,  cat:"사무분야",      cc:"#9A3412", name:"행정회계 사무 OA (1기)",           code:"SM-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-  { id:9,  cat:"사무분야",      cc:"#9A3412", name:"행정회계 사무 OA (2기)",           code:"SM-02", dateFrom:"2026-07-01", dateTo:"2026-09-30", period:"7~9월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+  { id:9,  cat:"사무분야",      cc:"#BE185D", name:"행정회계 사무 OA (2기)",           code:"SM-02", dateFrom:"2026-07-01", dateTo:"2026-09-30", period:"7~9월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:10, cat:"식품분야",      cc:"#DC2626", name:"HACCP 전문인력 양성",               code:"FD-01", dateFrom:"2026-04-01", dateTo:"2026-05-31", period:"4~5월",  method:"대면",     hours:112, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목",  schedTimeFrom:"09:00", schedTimeTo:"14:00" },
   { id:11, cat:"IT 신직무",     cc:"#F97316", name:"AI 시대의 캐릭터 크리에이터 양성",  code:"IT-01", dateFrom:"2026-08-03", dateTo:"2026-09-30", period:"8~9월",  method:"비대면",   hours:108, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금",     schedTimeFrom:"10:00", schedTimeTo:"14:00" },
-  { id:12, cat:"IT 신직무",     cc:"#F97316", name:"미지정 공모과정 (IT-A)",            code:"IT-02", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-  { id:13, cat:"IT 신직무",     cc:"#F97316", name:"미지정 공모과정 (IT-B)",            code:"IT-03", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:15, cGoal:14, eGoal:9,  schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+  { id:12, cat:"IT 신직무",     cc:"#2563EB", name:"미지정 공모과정 (IT-A)",            code:"IT-02", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+  { id:13, cat:"IT 신직무",     cc:"#8B5CF6", name:"미지정 공모과정 (IT-B)",            code:"IT-03", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:15, cGoal:14, eGoal:9,  schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
 ];
 
 const SEED_STUDENTS = [
@@ -1640,7 +1654,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
         birth:      birth,
         idBack:     idBack,
         phone,
-        phone2:     String(r["비상연락처"]  ||""),
+        phone2:     String(r["비상연락처"]  ||"").replace(/[^0-9]/g, ""),
         addrCity:   r["거주시"]   || r["거주시군"]  || "",
         addrDetail: r["상세주소"]           || "",
         edu:        r["최종학력"]           || "",
@@ -4175,9 +4189,25 @@ const InstructorMgmt = ({ courses }) => {
    ④ ROOM MANAGEMENT  강의실관리  (월간 캘린더)
 =========================================================== */
 const SEED_ROOMS = [
-  { id:1, name:"101호 강의실", addr:"의정부시 청사로 1", capacity:25, equip:"빔프로젝터·PC 25대·화이트보드" },
-  { id:2, name:"세미나실 A",   addr:"의정부시 청사로 1", capacity:15, equip:"TV·노트북 연결" },
-  { id:3, name:"컴퓨터실",     addr:"양주시 남면로 20",  capacity:20, equip:"PC 20대·프린터" },
+  // 1층
+  { id:1,  floor:1, name:"드림스튜디오",      addr:"1층",       capacity:2,  equip:"개인 작업 공간 (1/2인실)" },
+  { id:2,  floor:1, name:"어울림홀",           addr:"1층",       capacity:25, equip:"빔프로젝터·강의대·음향" },
+  { id:3,  floor:1, name:"차오름홀",           addr:"1층",       capacity:50, equip:"무대·음향·빔프로젝터" },
+  { id:4,  floor:1, name:"IT교육장 205호",     addr:"1층 205호", capacity:30, equip:"PC 30대·빔프로젝터" },
+  { id:5,  floor:1, name:"IT교육장 206호",     addr:"1층 206호", capacity:30, equip:"PC 30대·빔프로젝터" },
+  // 2층
+  { id:6,  floor:2, name:"IT교육장 209호",     addr:"2층 209호", capacity:30, equip:"PC 30대·빔프로젝터" },
+  { id:7,  floor:2, name:"IT교육장 210호",     addr:"2층 210호", capacity:30, equip:"PC 30대·빔프로젝터" },
+  { id:8,  floor:2, name:"일반교육장 201호",   addr:"2층",       capacity:25, equip:"빔프로젝터·화이트보드" },
+  { id:9,  floor:2, name:"일반교육장 202호",   addr:"2층",       capacity:25, equip:"빔프로젝터·화이트보드" },
+  { id:10, floor:2, name:"일반교육장 203호",   addr:"2층",       capacity:25, equip:"빔프로젝터·화이트보드" },
+  { id:11, floor:2, name:"일반교육장 204호",   addr:"2층",       capacity:25, equip:"빔프로젝터·화이트보드" },
+  { id:12, floor:2, name:"집단상담실",         addr:"2층",       capacity:10, equip:"원형 테이블·의자" },
+  // 3층
+  { id:13, floor:3, name:"일반교육장 301호",   addr:"3층 301호", capacity:25, equip:"빔프로젝터·화이트보드" },
+  { id:14, floor:3, name:"일반교육장 305호",   addr:"3층 305호", capacity:25, equip:"빔프로젝터·화이트보드" },
+  { id:15, floor:3, name:"일반교육장 306호",   addr:"3층 306호", capacity:25, equip:"빔프로젝터·화이트보드" },
+  { id:16, floor:3, name:"분임토의실",         addr:"3층",       capacity:15, equip:"원형 테이블·화이트보드" },
 ];
 /* ── BookModal: 강의 일정 추가/수정 (독립 컴포넌트) ── */
 const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSave, onDelete }) => {
@@ -4329,7 +4359,7 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSav
 const RoomModal = ({ room, onClose, setRooms, onSave }) => {
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
-  const empty = { name:"", addr:"", capacity:20, equip:"" };
+  const empty = { floor:1, name:"", addr:"", capacity:20, equip:"" };
   const [form, setForm] = useState(room||empty);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const isEdit = !!(room?.id);
@@ -4349,12 +4379,19 @@ const RoomModal = ({ room, onClose, setRooms, onSave }) => {
           </button>
         </div>
         <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:11 }}>
-          <FLD label="강의실 이름" required><input value={form.name||""} onChange={e=>set("name",e.target.value)} placeholder="101호 강의실" style={inp}/></FLD>
-          <FLD label="주소"><input value={form.addr||""} onChange={e=>set("addr",e.target.value)} placeholder="의정부시 청사로 1" style={inp}/></FLD>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <FLD label="층">
+              <select value={form.floor||1} onChange={e=>set("floor",+e.target.value)} style={{...inp,cursor:"pointer"}}>
+                <option value={1}>1층</option>
+                <option value={2}>2층</option>
+                <option value={3}>3층</option>
+              </select>
+            </FLD>
             <FLD label="수용 인원"><input type="number" value={form.capacity||""} onChange={e=>set("capacity",+e.target.value)} placeholder="20" style={inp}/></FLD>
-            <FLD label="설비"><input value={form.equip||""} onChange={e=>set("equip",e.target.value)} placeholder="PC·빔프로젝터" style={inp}/></FLD>
           </div>
+          <FLD label="강의실 이름" required><input value={form.name||""} onChange={e=>set("name",e.target.value)} placeholder="일반교육장 301호" style={inp}/></FLD>
+          <FLD label="위치(호수)"><input value={form.addr||""} onChange={e=>set("addr",e.target.value)} placeholder="3층 301호" style={inp}/></FLD>
+          <FLD label="설비"><input value={form.equip||""} onChange={e=>set("equip",e.target.value)} placeholder="PC·빔프로젝터" style={inp}/></FLD>
         </div>
         <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"space-between", background:T.s2 }}>
@@ -4755,24 +4792,50 @@ const RoomMgmt = ({ courses }) => {
       {/* DB 연동 상태 체크리스트 */}
       <SyncPanel dbStatus={dbStatus} rtStatus={rtStatus} lastOp={lastOp} count={rooms.length}/>
 
-      {/* 강의실 목록 */}
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
-        <button onClick={()=>setSelRoom(0)} style={{
-          padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer",
-          fontSize:11, fontWeight:600, background: selRoom===0 ? T.p : T.s3,
-          color: selRoom===0 ? "#fff" : T.mu }}>전체</button>
-        {rooms.map(r=>(
-          <button key={r.id} onClick={()=>setSelRoom(r.id)} style={{
+      {/* 강의실 목록 - 층별 그룹 */}
+      <div style={{ marginBottom:16 }}>
+        {/* 전체 버튼 */}
+        <div style={{ display:"flex", gap:8, marginBottom:8, flexWrap:"wrap", alignItems:"center" }}>
+          <button onClick={()=>setSelRoom(0)} style={{
             padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer",
-            fontSize:11, fontWeight:600, background: selRoom===r.id ? T.p : T.s3,
-            color: selRoom===r.id ? "#fff" : T.mu }}>{r.name}</button>
-        ))}
-        {selRoom!==0 && (
-          <button onClick={()=>{setEditRoom(rooms.find(r=>r.id===selRoom));setShowRM(true);}}
-            style={{ padding:"5px 10px", borderRadius:16, border:`1px solid ${T.bd}`,
-              background:"transparent", color:T.mu, cursor:"pointer", fontSize:11 }}>
-            <Icon n="edit" s={11}/> 수정
-          </button>
+            fontSize:11, fontWeight:600, background: selRoom===0 ? T.p : T.s3,
+            color: selRoom===0 ? "#fff" : T.mu }}>전체</button>
+          {selRoom!==0 && (
+            <button onClick={()=>{setEditRoom(rooms.find(r=>r.id===selRoom));setShowRM(true);}}
+              style={{ padding:"5px 10px", borderRadius:16, border:`1px solid ${T.bd}`,
+                background:"transparent", color:T.mu, cursor:"pointer", fontSize:11 }}>
+              <Icon n="edit" s={11}/> 수정
+            </button>
+          )}
+        </div>
+        {/* 층별 그룹 */}
+        {[1,2,3].map(fl => {
+          const flRooms = rooms.filter(r => (r.floor||0) === fl);
+          if (!flRooms.length) return null;
+          return (
+            <div key={fl} style={{ marginBottom:8, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+              <span style={{ fontSize:10, fontWeight:800, color:T.mu, minWidth:24, textAlign:"center",
+                background:T.s3, borderRadius:6, padding:"3px 7px", whiteSpace:"nowrap" }}>{fl}층</span>
+              {flRooms.map(r=>(
+                <button key={r.id} onClick={()=>setSelRoom(r.id)} style={{
+                  padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer",
+                  fontSize:11, fontWeight:600, background: selRoom===r.id ? T.p : T.s3,
+                  color: selRoom===r.id ? "#fff" : T.mu }}>{r.name}</button>
+              ))}
+            </div>
+          );
+        })}
+        {/* 층 정보 없는 방 */}
+        {rooms.filter(r => !r.floor).length > 0 && (
+          <div style={{ marginBottom:8, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+            <span style={{ fontSize:10, fontWeight:800, color:T.mu, background:T.s3, borderRadius:6, padding:"3px 7px" }}>기타</span>
+            {rooms.filter(r => !r.floor).map(r=>(
+              <button key={r.id} onClick={()=>setSelRoom(r.id)} style={{
+                padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer",
+                fontSize:11, fontWeight:600, background: selRoom===r.id ? T.p : T.s3,
+                color: selRoom===r.id ? "#fff" : T.mu }}>{r.name}</button>
+            ))}
+          </div>
         )}
       </div>
 
@@ -4785,7 +4848,7 @@ const RoomMgmt = ({ courses }) => {
               <span style={{ fontSize:18 }}>🏫</span>
               <div>
                 <div style={{ fontSize:13, fontWeight:800, color:T.tx }}>{r.name}</div>
-                <div style={{ fontSize:11, color:T.mu }}>{r.addr}</div>
+                <div style={{ fontSize:11, color:T.mu }}>{r.floor ? `${r.floor}층` : ""}{r.addr && r.floor ? " · " : ""}{r.addr}</div>
               </div>
             </div>
             <Chip label={`수용 ${r.capacity}명`} bg={T.pbg} color={T.p}/>

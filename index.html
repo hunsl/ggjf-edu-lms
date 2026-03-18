@@ -4622,9 +4622,10 @@ const RoomMgmt = ({ courses }) => {
   const _roomErrMsg = (err, prefix) => {
     const m = err?.message || String(err);
     const is404 = err?.code === "42P01" || m.includes("does not exist") || m.includes("404");
-    return is404
-      ? `${prefix}: 'rooms' 테이블이 없습니다.\nSupabase SQL Editor에서 supabase-setup.sql 전체를 실행하세요.`
-      : `${prefix}: ${m}`;
+    if (is404) {
+      return `${prefix}: 'rooms' 테이블이 없습니다.\nSupabase SQL Editor에서 supabase-setup.sql 전체를 실행하세요.`;
+    }
+    return `${prefix}: ${fmtSaveError(err)}`;
   };
 
   const handleRoomSave = async (room) => {

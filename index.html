@@ -3150,35 +3150,38 @@ const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Pretendard','맑은 고딕','Malgun Gothic',sans-serif;background:#fff;
        display:flex;align-items:flex-start;justify-content:center;padding:20px 0;}
-  .doc{width:210mm;min-height:297mm;padding:14mm 18mm 10mm;background:#fff;display:flex;flex-direction:column;}
+  .doc{width:210mm;min-height:297mm;padding:12mm 16mm 10mm;background:#fff;display:flex;flex-direction:column;}
   /* 서식 번호 */
   .form-no{text-align:right;font-size:8.5pt;color:#333;margin-bottom:3px;}
   /* 제목 */
-  .title-box{border:2px solid #000;text-align:center;padding:7px 0;margin-bottom:8px;}
-  .title-box h1{font-size:16pt;font-weight:900;letter-spacing:7px;color:#000;}
+  .title-box{border:2px solid #000;text-align:center;padding:8px 0;margin-bottom:6px;}
+  .title-box h1{font-size:16pt;font-weight:900;letter-spacing:8px;color:#000;}
   /* 메인 테이블 */
   table.main{width:100%;border-collapse:collapse;font-size:9pt;}
-  table.main td{border:1px solid #333;padding:4px 6px;vertical-align:middle;line-height:1.5;}
+  table.main td{border:1px solid #333;padding:5px 7px;vertical-align:middle;line-height:1.6;}
   .slbl{background:#f0f0f0;font-weight:800;text-align:center;writing-mode:vertical-rl;
     text-orientation:upright;letter-spacing:3px;font-size:8.5pt;width:24px;padding:4px 2px;}
-  .fno{background:#f5f5f5;font-weight:700;font-size:8.5pt;text-align:center;
-    width:20px;padding:3px 2px;color:#222;}
-  .flbl{background:#f5f5f5;font-weight:700;font-size:9pt;white-space:nowrap;padding:4px 7px;}
-  .fval{font-size:9.5pt;padding:4px 7px;}
+  .fno{background:#f5f5f5;font-weight:700;font-size:9pt;text-align:center;
+    width:20px;padding:4px 2px;color:#222;}
+  .flbl{background:#f5f5f5;font-weight:700;font-size:9pt;white-space:nowrap;padding:5px 8px;}
+  .fval{font-size:9.5pt;padding:5px 8px;}
   .hd{background:#f0f0f0;font-weight:700;text-align:center;}
+  .col-hd{background:#ececec;font-weight:700;font-size:8pt;text-align:center;padding:3px 5px;white-space:nowrap;letter-spacing:2px;}
   /* 서명 영역 */
-  .sign-wrap{margin:8px 0;text-align:center;line-height:2;}
-  .sign-row{display:flex;justify-content:center;align-items:center;gap:12px;margin-top:4px;}
-  .sign-title{font-size:12pt;font-weight:800;letter-spacing:3px;}
-  .stamp{width:42px;height:42px;border:2px solid #333;border-radius:50%;
+  .sign-area{margin-top:8px;text-align:center;}
+  .sign-date{font-size:11pt;font-weight:700;letter-spacing:2px;margin-bottom:6px;}
+  .sign-row{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:6px;}
+  .sign-org{font-size:12pt;font-weight:900;letter-spacing:3px;}
+  .stamp{width:44px;height:44px;border:2px solid #333;border-radius:50%;
     display:inline-flex;align-items:center;justify-content:center;font-size:11pt;font-weight:900;}
+  .sign-to{font-size:9.5pt;margin-top:6px;color:#333;}
   /* 인쇄 버튼 */
   .print-btn{position:fixed;bottom:24px;right:24px;background:#EA580C;color:#fff;
     border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;
     cursor:pointer;box-shadow:0 4px 20px rgba(234,88,12,.4);font-family:inherit;z-index:99;}
   @media print{
     body{padding:0;}
-    .doc{padding:10mm 15mm 8mm;}
+    .doc{padding:10mm 14mm 8mm;}
     .print-btn{display:none;}
     @page{size:A4 portrait;margin:0;}
   }
@@ -3188,19 +3191,21 @@ const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
   <div class="form-no">[별지 제83호 서식]</div>
   <div class="title-box"><h1>직업능력개발 훈련 등 수강증명서</h1></div>
 
-  <!-- 단일 통합 테이블 -->
+  <!-- ━━ 메인 테이블 (7열) ━━
+       col1=구역레이블(24px) col2=번호(20px) col3=항목명(76px)
+       col4=값(가변)        col5=번호2(20px) col6=항목명2(84px) col7=값2(94px) -->
   <table class="main">
     <colgroup>
-      <col style="width:26px"/><!-- 구역 레이블 -->
-      <col style="width:20px"/><!-- 번호① -->
-      <col style="width:76px"/><!-- 항목명 -->
-      <col/>                   <!-- 값 (가변) -->
-      <col style="width:20px"/><!-- 번호② -->
-      <col style="width:84px"/><!-- 항목명2 -->
-      <col style="width:94px"/><!-- 값2 -->
+      <col style="width:24px"/>
+      <col style="width:20px"/>
+      <col style="width:78px"/>
+      <col/>
+      <col style="width:20px"/>
+      <col style="width:84px"/>
+      <col style="width:96px"/>
     </colgroup>
     <tbody>
-      <!-- ━━ 훈련생(수급자격자) rowspan=2 ━━ -->
+      <!-- ━━ 훈련생(수급자격자) — 2행 ━━ -->
       <tr>
         <td class="slbl" rowspan="2">훈련생<br/>(수급<br/>자격자)</td>
         <td class="fno">①</td>
@@ -3215,7 +3220,8 @@ const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
         <td class="flbl">주　　소</td>
         <td class="fval" colspan="4">${addr}</td>
       </tr>
-      <!-- ━━ 수강명세 (독립 행) ━━ -->
+
+      <!-- ━━ 수강명세 — 1행 ━━ -->
       <tr>
         <td class="slbl">수강<br/>명세</td>
         <td class="fno">④</td>
@@ -3225,137 +3231,163 @@ const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
         <td class="flbl">수강시간</td>
         <td class="fval">${c.hours ? c.hours + '시간' : '　　시간'}</td>
       </tr>
-      <!-- ━━ 수강증명명세 rowspan=7 ━━ -->
+
+      <!-- ━━ 수강증명명세 — rowspan=7 (행6~12) ━━ -->
+      <!-- 행1: ⑥ 증명대상기간 -->
       <tr>
         <td class="slbl" rowspan="7">수강증명<br/>명세</td>
         <td class="fno">⑥</td>
-        <td class="flbl" style="letter-spacing:1px;font-size:8.5pt;">증명대상기간</td>
+        <td class="flbl" style="font-size:8.5pt;">증명대상기간</td>
         <td class="fval" colspan="4">
           ${certPeriod}<br/>
           <span style="font-size:8.5pt;color:#555;">${schedLine}</span>
         </td>
       </tr>
+      <!-- 행2: ⑦ 휴일 -->
       <tr>
         <td class="fno">⑦</td>
         <td class="flbl" colspan="2" style="font-size:8.5pt;">휴일 등 훈련이 없었던 날</td>
         <td class="fval" colspan="3">공휴일 및 법정 휴일 (과정 운영 일정 참조)</td>
       </tr>
-      <!-- ⑧ header -->
+      <!-- 행3: ⑧ 헤더 — ⑧ 번호 셀은 rowspan=5로 행3~7 점유(㉠라벨+㉠데이터+㉡라벨+㉡데이터) -->
       <tr>
-        <td class="fno hd" rowspan="5" style="vertical-align:middle;">⑧</td>
-        <td class="flbl" colspan="5" style="background:#fafafa;font-size:9pt;">
+        <td class="fno hd" rowspan="5" style="vertical-align:middle;font-size:9pt;">⑧</td>
+        <td colspan="5" style="background:#f5f5f5;font-size:9pt;font-weight:700;padding:5px 8px;">
           본인의 사정으로 수강하지 아니한 날
         </td>
       </tr>
-      <!-- ㉠ 질병·부상 -->
+      <!-- 행4: ㉠ 라벨 — col3~7(5칸) 사용: ㉠(1)+제목(4) -->
       <tr>
-        <td class="fno hd" rowspan="2" style="font-size:8pt;">㉠</td>
-        <td colspan="3" style="padding:3px 6px;font-size:9pt;background:#f9f9f9;">
-          질병·부상 등 부득이한 사유가 있는 날&nbsp;&nbsp;<b>(총 ${excused.length}일)</b>
+        <td class="fno hd" style="font-size:8pt;vertical-align:middle;">㉠</td>
+        <td colspan="4" style="padding:4px 8px;font-size:9pt;background:#fafafa;">
+          질병·부상 등 부득이한 사유가 있는 날 &nbsp;&nbsp;<b>(총 ${excused.length}일)</b>
         </td>
-        <td class="hd" style="font-size:8.5pt;padding:3px 5px;">사유</td>
-        <td style="padding:3px 6px;font-size:9pt;">${fmtAbsReasons(excused)||'　'}</td>
       </tr>
+      <!-- 행5: ㉠ 날짜·사유 — col3~7(5칸): 날자(1)+일자(2)+사유헤더(1)+사유값(1) -->
       <tr>
-        <td colspan="4" style="padding:3px 7px;font-size:9pt;">일자: ${fmtAbsDates(excused)}</td>
+        <td class="col-hd">날자</td>
+        <td colspan="2" style="padding:4px 8px;font-size:8.5pt;">${fmtAbsDates(excused)}</td>
+        <td class="col-hd">사유</td>
+        <td style="padding:4px 8px;font-size:8.5pt;">${fmtAbsReasons(excused)||'해당없음'}</td>
       </tr>
-      <!-- ㉡ 개인사유 -->
+      <!-- 행6: ㉡ 라벨 — col3~7(5칸): ㉡(1)+제목(4) -->
       <tr>
-        <td class="fno hd" rowspan="2" style="font-size:8pt;">㉡</td>
-        <td colspan="3" style="padding:3px 6px;font-size:9pt;background:#f9f9f9;">
-          부득이한 사유가 없는 날&nbsp;&nbsp;<b>(총 ${personal.length}일)</b>
+        <td class="fno hd" style="font-size:8pt;vertical-align:middle;">㉡</td>
+        <td colspan="4" style="padding:4px 8px;font-size:9pt;background:#fafafa;">
+          부득이한 사유가 없는 날 &nbsp;&nbsp;<b>(총 ${personal.length}일)</b>
         </td>
-        <td class="hd" style="font-size:8.5pt;padding:3px 5px;">사유</td>
-        <td style="padding:3px 6px;font-size:9pt;">${fmtAbsReasons(personal)||'개인사유'}</td>
       </tr>
+      <!-- 행7: ㉡ 날짜·사유 — col3~7(5칸): 날자(1)+일자(2)+사유헤더(1)+사유값(1) -->
       <tr>
-        <td colspan="4" style="padding:3px 7px;font-size:9pt;">일자: ${fmtAbsDates(personal)}</td>
+        <td class="col-hd">날자</td>
+        <td colspan="2" style="padding:4px 8px;font-size:8.5pt;">${fmtAbsDates(personal)}</td>
+        <td class="col-hd">사유</td>
+        <td style="padding:4px 8px;font-size:8.5pt;">${fmtAbsReasons(personal)||'개인사유'}</td>
       </tr>
-      <!-- ⑨ 취업 사실 -->
+
+      <!-- ⑨ 취업 사실 — 수강증명명세 rowspan 종료 후, 전체 7열 사용 -->
       <tr>
-        <td class="fno hd" colspan="2" style="text-align:center;padding:4px 6px;">⑨</td>
-        <td colspan="3" style="padding:4px 7px;font-size:9pt;font-weight:700;">
+        <td class="fno hd" colspan="2" style="text-align:center;padding:5px 6px;font-size:9.5pt;">⑨</td>
+        <td colspan="3" style="padding:5px 8px;font-size:9pt;font-weight:700;">
           증명대상기간 중 취업·취로 또는 소득을 얻은 사실
         </td>
-        <td colspan="2" style="padding:4px 7px;">□ 있음&nbsp;&nbsp;■ 없음</td>
+        <td colspan="2" style="padding:5px 8px;font-size:9pt;">□ 있음&nbsp;&nbsp;■ 없음</td>
       </tr>
     </tbody>
   </table>
 
-  <!-- 훈련생 확인 + 서명 -->
-  <div style="margin-top:8px;border:1px solid #333;padding:6px 10px;font-size:9pt;line-height:1.8;">
-    <b>※ 훈련생확인</b>&nbsp;&nbsp;위의 사실이 틀림없음을 증명합니다.
-  </div>
-  <div class="sign-wrap" style="margin-top:10px;font-size:10pt;">
-    <div>${issueDate}</div>
+  <!-- ━━ 훈련생 확인 ━━ -->
+  <table style="width:100%;border-collapse:collapse;margin-top:6px;">
+    <tr>
+      <td style="border:1px solid #333;padding:6px 10px;font-size:9pt;line-height:1.8;">
+        <b>※ 훈련생확인</b>&nbsp;&nbsp;위의 사실이 틀림없음을 증명합니다.
+      </td>
+    </tr>
+  </table>
+
+  <!-- ━━ 서명 ━━ -->
+  <div class="sign-area">
+    <div class="sign-date">${issueDate}</div>
     <div class="sign-row">
-      <span class="sign-title">경기도일자리재단 대표이사</span>
+      <span class="sign-org">경기도일자리재단 대표이사</span>
       <span class="stamp">(인)</span>
     </div>
-    <div style="margin-top:6px;font-size:9pt;color:#444;">지방노동청(지청)장&nbsp;&nbsp;귀하</div>
+    <div class="sign-to">지방노동청(지청)장&nbsp;&nbsp;귀하</div>
   </div>
 
-  <!-- 수수료 -->
-  <table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-top:8px;">
+  <!-- ━━ 수수료 ━━ -->
+  <table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-top:10px;">
     <tr>
-      <td rowspan="2" class="hd" style="border:1px solid #333;width:56px;padding:4px 6px;">수수료</td>
-      <td style="border:1px solid #333;padding:4px 6px;">없음</td>
+      <td rowspan="2" class="hd" style="border:1px solid #333;width:52px;padding:5px 6px;">수수료</td>
+      <td style="border:1px solid #333;padding:4px 8px;font-weight:700;">없&nbsp;&nbsp;음</td>
     </tr>
     <tr>
-      <td style="border:1px solid #333;padding:3px 6px;font-size:8pt;color:#555;">
+      <td style="border:1px solid #333;padding:4px 8px;font-size:8pt;color:#555;">
         ※ 표시란은 적지 아니합니다.
       </td>
     </tr>
   </table>
 
-  <!-- 처리사항 -->
+  <!-- ━━ 처리사항 ━━
+       7열: ※처리사항(r5) | 지급결정사항(r2) | 구직급여/직업능력개발수당(r3) | 산출명세 | 값 | 지급액 | 값 -->
+  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin-top:5px;">
+    <colgroup>
+      <col style="width:20px"/>
+      <col style="width:56px"/>
+      <col style="width:66px"/>
+      <col style="width:74px"/>
+      <col/>
+      <col style="width:44px"/>
+      <col style="width:70px"/>
+    </colgroup>
+    <tbody>
+      <tr>
+        <td rowspan="5" class="hd" style="border:1px solid #333;writing-mode:vertical-rl;padding:3px 2px;font-size:7.5pt;">※ 처리<br/>사항</td>
+        <td rowspan="2" class="hd" style="border:1px solid #333;padding:3px 5px;">지급결정<br/>사항</td>
+        <td class="hd" style="border:1px solid #333;padding:3px 5px;">구직급여</td>
+        <td class="hd" style="border:1px solid #333;padding:3px 5px;">산출명세</td>
+        <td style="border:1px solid #333;padding:3px 5px;">&nbsp;</td>
+        <td class="hd" style="border:1px solid #333;padding:3px 5px;">지급액</td>
+        <td style="border:1px solid #333;padding:3px 5px;">&nbsp;</td>
+      </tr>
+      <tr>
+        <td rowspan="3" class="hd" style="border:1px solid #333;padding:3px 5px;font-size:7.5pt;">직업능력<br/>개발수당</td>
+        <td class="hd" style="border:1px solid #333;padding:3px 5px;">산출명세</td>
+        <td style="border:1px solid #333;padding:3px 5px;">&nbsp;</td>
+        <td class="hd" style="border:1px solid #333;padding:3px 5px;">지급액</td>
+        <td style="border:1px solid #333;padding:3px 5px;">&nbsp;</td>
+      </tr>
+      <tr>
+        <td class="hd" style="border:1px solid #333;padding:3px 5px;">미지급사유</td>
+        <td style="border:1px solid #333;padding:3px 5px;" colspan="3">&nbsp;</td>
+      </tr>
+      <tr>
+        <td style="border:1px solid #333;padding:3px 5px;" colspan="4">&nbsp;</td>
+      </tr>
+      <tr>
+        <td colspan="6" style="border:none;height:3px;"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ━━ 결재 ━━ -->
   <table style="width:100%;border-collapse:collapse;font-size:8pt;margin-top:4px;">
     <tr>
-      <td rowspan="5" class="hd" style="border:1px solid #333;writing-mode:vertical-rl;width:22px;padding:3px 2px;">※ 처리<br/>사항</td>
-      <td rowspan="2" class="hd" style="border:1px solid #333;width:58px;padding:3px 5px;">지급결정<br/>사항</td>
-      <td class="hd" style="border:1px solid #333;width:68px;padding:3px 5px;">구직급여</td>
-      <td class="hd" style="border:1px solid #333;width:76px;padding:3px 5px;">산출명세</td>
-      <td style="border:1px solid #333;padding:3px 5px;width:110px;">&nbsp;</td>
-      <td class="hd" style="border:1px solid #333;width:48px;padding:3px 5px;">지급액</td>
-      <td style="border:1px solid #333;padding:3px 5px;width:76px;">&nbsp;</td>
-    </tr>
-    <tr>
-      <td rowspan="3" class="hd" style="border:1px solid #333;padding:3px 5px;">직업능력<br/>개발수당</td>
-      <td class="hd" style="border:1px solid #333;padding:3px 5px;">산출명세</td>
-      <td style="border:1px solid #333;padding:3px 5px;">&nbsp;</td>
-      <td class="hd" style="border:1px solid #333;padding:3px 5px;">지급액</td>
-      <td style="border:1px solid #333;padding:3px 5px;">&nbsp;</td>
-    </tr>
-    <tr>
-      <td class="hd" style="border:1px solid #333;padding:3px 5px;">미지급사유</td>
-      <td style="border:1px solid #333;padding:3px 5px;" colspan="3">&nbsp;</td>
-    </tr>
-    <tr>
-      <td style="border:1px solid #333;padding:3px 5px;" colspan="4">&nbsp;</td>
-    </tr>
-    <tr>
-      <td colspan="6" style="border:none;height:3px;"></td>
+      <td class="hd" style="border:1px solid #333;width:36px;padding:3px 4px;">※ 결재</td>
+      <td class="hd" style="border:1px solid #333;width:42px;padding:3px 4px;">담당</td>
+      <td style="border:1px solid #333;width:50px;height:32px;">&nbsp;</td>
+      <td class="hd" style="border:1px solid #333;width:42px;padding:3px 4px;">팀장</td>
+      <td style="border:1px solid #333;width:50px;">&nbsp;</td>
+      <td class="hd" style="border:1px solid #333;width:42px;padding:3px 4px;">과장</td>
+      <td style="border:1px solid #333;width:50px;">&nbsp;</td>
+      <td class="hd" style="border:1px solid #333;width:60px;padding:3px 4px;font-size:7.5pt;">청장·지청장</td>
+      <td style="border:1px solid #333;width:64px;">&nbsp;</td>
+      <td class="hd" style="border:1px solid #333;width:72px;padding:3px 4px;">결재 연월일</td>
+      <td style="border:1px solid #333;padding:3px 4px;">　.　.　</td>
     </tr>
   </table>
 
-  <!-- 결재 -->
-  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin-top:4px;">
-    <tr>
-      <td class="hd" style="border:1px solid #333;width:38px;padding:3px 4px;">※ 결재</td>
-      <td class="hd" style="border:1px solid #333;width:46px;padding:3px 4px;">담당</td>
-      <td style="border:1px solid #333;width:52px;height:30px;">&nbsp;</td>
-      <td class="hd" style="border:1px solid #333;width:46px;padding:3px 4px;">팀장</td>
-      <td style="border:1px solid #333;width:52px;">&nbsp;</td>
-      <td class="hd" style="border:1px solid #333;width:46px;padding:3px 4px;">과장</td>
-      <td style="border:1px solid #333;width:52px;">&nbsp;</td>
-      <td class="hd" style="border:1px solid #333;width:64px;padding:3px 4px;">청장·지청장</td>
-      <td style="border:1px solid #333;width:68px;">&nbsp;</td>
-      <td class="hd" style="border:1px solid #333;width:76px;padding:3px 4px;">결재 연월일</td>
-      <td style="border:1px solid #333;width:68px;padding:3px 4px;">　.　.　</td>
-    </tr>
-  </table>
-
-  <div style="font-size:7.5pt;color:#888;margin-top:6px;text-align:right;">210mm×297mm(일반용지 60g/㎡)</div>
+  <div style="font-size:7.5pt;color:#888;margin-top:5px;text-align:right;">210mm×297mm(일반용지 60g/㎡)</div>
 
 </div>
 <button class="print-btn" onclick="window.print()">🖨️ PDF 저장 / 인쇄</button>

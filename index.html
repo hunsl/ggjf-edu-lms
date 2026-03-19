@@ -275,8 +275,8 @@ const fromRoom = r => ({
 
 const toBooking = r => r ? ({
   id: r.id,
-  roomId: r.room_id,
-  courseId: r.course_id,
+  roomId: Number(r.room_id),      // ← Number() 추가 (Gantt 타입 불일치 버그 수정)
+  courseId: Number(r.course_id),  // ← Number() 추가
   label: r.label||"",
   start: r.start_date||"",
   end: r.end_date||"",
@@ -4275,9 +4275,15 @@ const SEED_ROOMS = [
 const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSave, onDelete }) => {
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
-  const empty = { roomId:rooms[0]?.id||1, courseId:courses[0]?.id||1,
-    label:"", start:"", end:"", color:BOOKING_COLORS[0] };
-  const [form, setForm] = useState(init||empty);
+const firstCourseId = courses[0]?.id || 1;
+const empty = {
+  roomId: rooms[0]?.id || 1,
+  courseId: firstCourseId,
+  label: courses[0]?.name || "",
+  start: "", end: "",
+  color: getCourseColor(firstCourseId, courses),  // ← 과정 팔레트 자동 적용
+};
+const [form, setForm] = useState(init || empty);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const isEdit = !!(init?.id);
 
@@ -4341,8 +4347,16 @@ const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSav
             </select>
           </FLD>
           <FLD label="과정">
-            <select value={form.courseId} onChange={e=>{ const c=courses.find(x=>x.id===+e.target.value); set("courseId",+e.target.value); set("label",c?.name||""); }}
-              style={{...inp,cursor:"pointer"}}>
+<select value={form.courseId} onChange={e=>{
+  const cid = +e.target.value;
+  const c = courses.find(x => x.id === cid);
+  setForm(p => ({
+    ...p,
+    courseId: cid,
+    label: c?.name || "",
+    color: getCourseColor(cid, courses),  // ← 과정 선택 시 색상 자동 설정
+  }));
+}} style={{...inp, cursor:"pointer"}}>
               {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
             </select>
           </FLD>
@@ -4493,6 +4507,19 @@ const RoomModal = ({ room, onClose, setRooms, onSave }) => {
 
 const BOOKING_COLORS = ["#EA580C","#C2410C","#7C2D12","#9A3412","#DC2626","#2563EB","#7C3AED","#059669"];
 
+// 과정별 고정 색상 팔레트 (순서대로 자동 배정)
+const COURSE_PALETTE = [
+  "#2563EB","#7C3AED","#059669","#DC2626","#D97706",
+  "#0891B2","#DB2777","#65A30D","#EA580C","#0F766E",
+  "#4F46E5","#BE185D","#15803D","#B45309","#6D28D9",
+];
+// courseId → 팔레트 색상 (courses 배열 내 인덱스 기반)
+const getCourseColor = (courseId, courses) => {
+  const idx = courses.findIndex(c => c.id === courseId);
+  return COURSE_PALETTE[(idx >= 0 ? idx : 0) % COURSE_PALETTE.length];
+};
+    
+    
 /* shared style for active pill tab — defined here so RoomMgmt can use it */
 const TAB_PILL_SHADOW = `0 1px 6px rgba(0,0,0,.10),0 0 0 1px rgba(234,88,12,.18)`;
 
@@ -4730,10 +4757,16 @@ const RoomMgmt = ({ courses }) => {
           }
           throw error;
         }
-        const saved = (data && data[0]) ? toBooking(data[0]) : { ...book, id: Date.now() };
-        // 실시간 구독이 먼저 도착했을 수 있으므로 중복 방지 처리
-        setBookings(p => p.find(b => b.id === saved.id) ? p.map(b => b.id===saved.id ? saved : b) : [...p, saved]);
-      }
+// ✅ 수정: data가 있을 때만 낙관적 업데이트, 없으면 실시간 구독에 맡김
+if (data && data[0]) {
+  const saved = toBooking(data[0]);
+  // 실시간 구독이 먼저 도착했을 수 있으므로 중복 방지
+  setBookings(p => p.some(b => b.id === saved.id)
+    ? p.map(b => b.id === saved.id ? saved : b)
+    : [...p, saved]
+  );
+}
+// data 없으면 실시간 구독(onInsert)이 처리 → 중복 방지
       setLastOp({ type: book.id ? "edit" : "add", status: "ok" });
     } catch (err) {
       setLastOp({ type: book.id ? "edit" : "add", status: "error", msg: err.message || String(err) });

@@ -4550,7 +4550,7 @@ const RoomGanttChart = ({ rooms, bookings, courses, onEditBook, year, month, pre
             </div>
             {Array.from({length:daysInMonth}).map((_,dayIdx) => {
               const ds = dateStr(dayIdx+1);
-              const dayBooks = bookings.filter(b => Number(b.roomId) === Number(room.id) && b.start<=ds && b.end>=ds);
+              const dayBooks = bookings.filter(b => b.roomId===room.id && b.start<=ds && b.end>=ds);
               const conflict = dayBooks.length > 1;
               const isToday  = ds === todayStr;
               return (
@@ -4772,8 +4772,9 @@ const RoomMgmt = ({ courses }) => {
     if(!d) return [];
     const ds = dateStr(d);
     return bookings.filter(b =>
-  (roomId===0 || Number(b.roomId) === Number(roomId)) && b.start<=ds && b.end>=ds
-);
+      (roomId===0 || b.roomId===roomId) && b.start<=ds && b.end>=ds
+    );
+  };
 
   // 특정 날 특정 강의실에서 중복 있는지 검사 (요일/시간 3단계)
   const hasConflictOnDay = d => {

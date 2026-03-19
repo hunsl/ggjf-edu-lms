@@ -4737,7 +4737,7 @@ const RoomMgmt = ({ courses }) => {
     }
   };
 
-  const handleBookSave = async (book) => {
+const handleBookSave = async (book) => {
     try {
       if (book.id) {
         const { error } = await sbUpdate("room_bookings", `id=eq.${book.id}`, fromBooking(book));
@@ -4746,10 +4746,9 @@ const RoomMgmt = ({ courses }) => {
       } else {
         const { data, error } = await sbInsert("room_bookings", fromBooking(book));
         if (error) {
-          // room_bookings 테이블 미존재 → 로컬 전용 모드로 저장
           const m = error?.message || String(error);
           if (m.includes("does not exist") || m.includes("404") || error?.code === "42P01") {
-            console.warn("⚠️ room_bookings 테이블 없음 — 로컬 저장 (DB 미반영). Supabase SQL Editor에서 supabase-setup.sql을 실행하세요.");
+            console.warn("⚠️ room_bookings 테이블 없음 — 로컬 저장.");
             alert("강의실 예약 테이블이 없어 이번 세션에만 임시 저장됩니다.\nSupabase SQL Editor에서 supabase-setup.sql 전체를 실행하면 영구 저장됩니다.");
             setBookings(p => [...p, { ...book, id: Date.now() }]);
             setLastOp({ type: "add", status: "error", msg: "room_bookings 테이블 없음" });
@@ -4757,16 +4756,14 @@ const RoomMgmt = ({ courses }) => {
           }
           throw error;
         }
-// ✅ 수정: data가 있을 때만 낙관적 업데이트, 없으면 실시간 구독에 맡김
-if (data && data[0]) {
-  const saved = toBooking(data[0]);
-  // 실시간 구독이 먼저 도착했을 수 있으므로 중복 방지
-  setBookings(p => p.some(b => b.id === saved.id)
-    ? p.map(b => b.id === saved.id ? saved : b)
-    : [...p, saved]
-  );
-}
-// data 없으면 실시간 구독(onInsert)이 처리 → 중복 방지
+        if (data && data[0]) {
+          const saved = toBooking(data[0]);
+          setBookings(p => p.some(b => b.id === saved.id)
+            ? p.map(b => b.id === saved.id ? saved : b)
+            : [...p, saved]
+          );
+        }
+      }  // ← ✅ 여기! else { 를 닫는 중괄호
       setLastOp({ type: book.id ? "edit" : "add", status: "ok" });
     } catch (err) {
       setLastOp({ type: book.id ? "edit" : "add", status: "error", msg: err.message || String(err) });

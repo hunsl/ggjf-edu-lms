@@ -570,31 +570,60 @@ const SEED_STUDENTS = [
 
 // 과정 날짜 범위 내 날짜 배열 생성 (주말 포함, dateFrom~min(dateTo, 오늘))
 const buildCourseDates = (course) => {
-  if (!course?.dateFrom) return [new Date().toISOString().slice(0, 10)];
+  // 💡 핵심: toISOString()의 9시간 시차 버그를 막아주는 로컬 날짜 변환 함수
+  const getLocalStr = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const dateFrom = course?.dateFrom ?? course?.date_from;
+  const dateTo = course?.dateTo ?? course?.date_to;
+  const schedDaysRaw = course?.schedDays ?? course?.sched_days;
+
+  // 시작일이 아예 없으면 오늘 날짜 반환 (시차 버그 방지 적용)
+  if (!dateFrom) return [getLocalStr(new Date())];
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = new Date(course.dateFrom);
-  // 과정이 아직 시작 전이면 시작일만 반환
-  if (start > today) return [course.dateFrom];
-  const end = course.dateTo
-    ? new Date(Math.min(new Date(course.dateTo).getTime(), today.getTime()))
-    : today;
 
-  // schedDays 파싱: "월, 화, 목" → Set<요일번호> (0=일,1=월,...,6=토)
-  const DAY_MAP = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
-  const allowedDows = course.schedDays
-    ? new Set(course.schedDays.split(",").map(s => DAY_MAP[s.trim()]).filter(d => d !== undefined))
-    : null; // null이면 평일 전체 (schedDays 미지정 과정 하위 호환)
+  const start = new Date(dateFrom);
+  start.setHours(0, 0, 0, 0);
 
-  const dates = [];
+  // 아직 개강 전이면 시작일만 반환
+  if (start > today) return [String(dateFrom).slice(0, 10)];
+
+  const endCandidate = dateTo ? new Date(dateTo) : today;
+  endCandidate.setHours(0, 0, 0, 0);
+  const end = new Date(Math.min(endCandidate.getTime(), today.getTime()));
+
+  // 요일 파싱: "월"~"일" / "0"~"6" 혼재 지원 (작성하신 훌륭한 로직 유지)
+  const DAY_MAP = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
+
+  const allowedDows =
+    schedDaysRaw && String(schedDaysRaw).trim().length
+      ? new Set(
+          String(schedDaysRaw)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .map((s) => (/^[0-6]$/.test(s) ? Number(s) : DAY_MAP[s]))
+            .filter((d) => d !== undefined)
+        )
+      : new Set([1, 2, 3, 4, 5]); // 없으면 기본 평일
+
+  const out = [];
+  
+  // 💡 잘려있던 반복문 추가 및 시차 버그 없는 getLocalStr 적용
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dow = d.getDay();
-    const include = allowedDows
-      ? allowedDows.has(dow)
-      : (dow !== 0 && dow !== 6); // schedDays 없으면 주말 제외
-    if (include) dates.push(new Date(d).toISOString().slice(0, 10));
+    if (allowedDows.has(d.getDay())) {
+      out.push(getLocalStr(d));
+    }
   }
-  return dates.length ? dates : [today.toISOString().slice(0, 10)];
+
+  // 뽑아낸 날짜가 없으면 오늘 날짜 반환
+  return out.length ? out : [getLocalStr(today)];
 };
 
 // 과정 기간 표시 — date_from/date_to 기반으로 통일 (period 문자열 대체)

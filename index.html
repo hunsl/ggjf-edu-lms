@@ -3821,7 +3821,7 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   w.document.write(html); w.document.close();
 };
 
-/* ── 참여확인서 — 2026년 [과정명] 최종 선발 참여자 확인서 ── */
+/* ── 수강증명서(자체) — 2026년 [과정명] 최종 선발 수강 확인서 ── */
 const printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
   const birthFmt = s.birth
     ? s.birth.replace(/(\d{4})-(\d{2})-(\d{2})/, "$1년 $2월 $3일")
@@ -3836,7 +3836,7 @@ const printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>참여확인서 - ${s.name}</title>
+<title>수강증명서 - ${s.name}</title>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -4015,7 +4015,7 @@ const CertMgmt = ({ students, courses }) => {
 
   if (!course) return null;
   // 수료증: 출석률 80% 이상
-  // 수강증명서/참여확인서: 해당 과정 수강자 전체 (출석률 무관 — 등록 자체가 기준)
+  // 수강증명서/수강증명서(자체): 해당 과정 수강자 전체 (출석률 무관 — 등록 자체가 기준)
   const certEligible   = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>=80);
   const attendEligible = students.filter(s => Number(s.cid)===Number(course.id));
   const eligible = docType==="cert" ? certEligible : attendEligible;
@@ -4082,7 +4082,7 @@ const CertMgmt = ({ students, courses }) => {
     if (docType==="cert") {
       printCertificate(s, course, no, issueDate);
     } else if (docType === "parti") {
-      // 참여확인서: 강의실 정보 조회 후 출력
+      // 수강증명서(자체) : 강의실 정보 조회 후 출력
       let roomName = "";
       try {
         const { data: bookData } = await sbGet("room_bookings",
@@ -4166,8 +4166,8 @@ const CertMgmt = ({ students, courses }) => {
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         {[
           {id:"cert",   label:"📋 수 료 증",   sub:"출석률 80% 이상"},
-          {id:"attend", label:"📄 수강증명서", sub:"수강자 전체"},
-          {id:"parti",  label:"📃 참여확인서", sub:"최종 선발 참여자"},
+          {id:"attend", label:"📄 수강증명서(고용노동부)", sub:"수강자 전체"},
+          {id:"parti",  label:"📃 수강증명서(자체)", sub:"최종 선발 참여자"},
         ].map(({id,label,sub})=>{
           const cnt = certHistory.filter(r => r.docType === id).length;
           return (
@@ -4264,7 +4264,7 @@ const CertMgmt = ({ students, courses }) => {
           <div style={{ padding:"12px 18px", borderBottom:`1px solid ${T.bd}`,
             display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>
-              📋 발급이력 — {docType==="cert"?"수료증":docType==="parti"?"참여확인서":"수강증명서"}
+              📋 발급이력 — {docType==="cert"?"수료증":docType==="parti"?"수강증명서(자체)":"수강증명서(고용노동부)"}
               <span style={{ fontSize:11, color:T.mu, fontWeight:400, marginLeft:8 }}>
                 현재 과정: {historyForCurrent.length}건 / 전체: {issuedCountForType}건
               </span>
@@ -4329,7 +4329,7 @@ const CertMgmt = ({ students, courses }) => {
           display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div>
             <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>
-              {docType==="cert" ? "수료 대상자" : docType==="parti" ? "참여확인서 대상자" : "수강 대상자"}
+              {docType==="cert" ? "수료 대상자" : docType==="parti" ? "수강증명서 대상자(자체)" : "수강 대상자"}
             </span>
             <span style={{ fontSize:12, color:T.mu, marginLeft:8 }}>
               {eligible.length}명

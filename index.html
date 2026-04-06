@@ -3469,24 +3469,73 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   const idBack  = s.idBack || "　　　　　　　";
   const idNum   = `${idFront} - ${idBack}`;
 
+  // 날짜 포맷 헬퍼 (점 표기: 2025. 8. 7.)
+  const fmtYMD_dot = d => {
+    if (!d) return "";
+    const p = d.split("-");
+    return `${p[0]}. ${+p[1]}. ${+p[2]}.`;
+  };
+  const fmtMD_dot = d => {
+    if (!d) return "";
+    const p = d.split("-");
+    return `${+p[1]}. ${+p[2]}.`;
+  };
+  const fmtRange_dot = (from, to) => {
+    if (!from) return "";
+    if (!to) return fmtYMD_dot(from) + " ~";
+    return from.slice(0,4) === to.slice(0,4)
+      ? `${fmtYMD_dot(from)} ~ ${fmtMD_dot(to)}`
+      : `${fmtYMD_dot(from)} ~ ${fmtYMD_dot(to)}`;
+  };
+
   // ⑥ 증명대상기간 — 실제 참여 기간으로 동적 계산 (certStartDate/certEndDate 우선)
-  const fmtD = d => d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, dd) =>
-    `${y}년 ${String(+m)}월 ${String(+dd)}일`) : "　　　　";
   const todayStr = new Date().toISOString().slice(0,10);
   const computedFrom = certStartDate || c.dateFrom || "";
   const computedTo   = certEndDate   ||
     (c.dateTo && todayStr < c.dateTo ? todayStr : c.dateTo) || todayStr;
-  const certPeriod = `${fmtD(computedFrom)} ~ ${fmtD(computedTo)}`;
 
-  // ⑦ 수강기간 세부 (요일·시간)
-  const schedLine = (() => {
-    const days = c.schedDays || "";
+  // 일일 수업 시간(시간 수) 계산
+  const dailyHoursNum = (() => {
     const tFrom = c.schedTimeFrom || "";
     const tTo   = c.schedTimeTo   || "";
-    const parts = [];
-    if (days)         parts.push(`매주 ${days}`);
-    if (tFrom && tTo) parts.push(`${tFrom} ~ ${tTo}`);
-    return parts.join(" / ") || "　";
+    if (!tFrom || !tTo) return 0;
+    const [fh, fm] = tFrom.split(":").map(Number);
+    const [th, tm] = tTo.split(":").map(Number);
+    const h = (th * 60 + tm - fh * 60 - fm) / 60;
+    return h > 0 ? h : 0;
+  })();
+
+  // 증명대상기간 내 훈련 일수·시간 계산
+  const countCertTrainingDays = (from, to) => {
+    if (!from || !to) return 0;
+    const DAY_MAP = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
+    const schedDaysRaw = c.schedDays || "";
+    const allowedDows = schedDaysRaw.trim()
+      ? new Set(schedDaysRaw.split(",").map(s => DAY_MAP[s.trim()]).filter(d => d !== undefined))
+      : new Set([1,2,3,4,5]);
+    let count = 0;
+    const start = new Date(from); start.setHours(0,0,0,0);
+    const end   = new Date(to);   end.setHours(0,0,0,0);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (allowedDows.has(d.getDay())) count++;
+    }
+    return count;
+  };
+  const certDayCount  = countCertTrainingDays(computedFrom, computedTo);
+  const certHoursNum  = certDayCount * dailyHoursNum;
+  const certDaySuffix = certDayCount
+    ? ` (${certDayCount}일${certHoursNum ? `, ${certHoursNum}시간` : ''})`
+    : '';
+  const certPeriodStr = fmtRange_dot(computedFrom, computedTo) + certDaySuffix;
+
+  // ⑤ 수강시간: 요일 (일 N시간, 기간, 총 M시간) 형식
+  const trainingHoursStr = (() => {
+    const days    = c.schedDays || "";
+    const dailyStr = dailyHoursNum ? `일 ${dailyHoursNum}시간` : "";
+    const periodStr = fmtRange_dot(c.dateFrom, c.dateTo);
+    const totalStr  = c.hours ? `총 ${c.hours}시간` : "";
+    const inner = [dailyStr, periodStr, totalStr].filter(Boolean).join(", ");
+    return days ? (inner ? `${days} (${inner})` : days) : (inner || "　　시간");
   })();
 
   // ⑧ 결석 분류
@@ -3510,7 +3559,11 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Pretendard','맑은 고딕','Malgun Gothic',sans-serif;background:#f4f4f4;
-       display:flex;align-items:flex-start;justify-content:center;padding:24px 0;}
+       display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 0;}
+  .edit-guide{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;padding:10px 18px;
+    border-radius:8px;margin-bottom:16px;font-size:13px;font-weight:600;width:210mm;
+    text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.06);}
+  .edit-guide span{color:#D97706;}
   .doc{width:210mm;min-height:297mm;padding:13mm 17mm 11mm;background:#fff;display:flex;flex-direction:column;
        box-shadow:0 4px 32px rgba(0,0,0,.13);}
   /* 서식 번호 */
@@ -3520,17 +3573,21 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   .title-box h1{font-size:17pt;font-weight:900;letter-spacing:10px;color:#111;}
   /* 메인 테이블 */
   table.main{width:100%;border-collapse:collapse;font-size:9pt;}
-  table.main td{border:1px solid #444;padding:5px 8px;vertical-align:middle;line-height:1.7;}
-  .slbl{background:#e8e8e8;font-weight:900;text-align:center;writing-mode:vertical-rl;
+  table.main td{border:1px solid #555;padding:5px 8px;vertical-align:middle;line-height:1.75;}
+  .slbl{background:#d8d8d8;font-weight:900;text-align:center;writing-mode:vertical-rl;
     text-orientation:upright;letter-spacing:3px;font-size:8pt;width:26px;padding:5px 2px;color:#111;}
-  .fno{background:#f0f0f0;font-weight:800;font-size:9pt;text-align:center;
+  .fno{background:#ececec;font-weight:800;font-size:9pt;text-align:center;
     width:22px;padding:5px 2px;color:#111;border-right:1px solid #aaa;}
-  .flbl{background:#f0f0f0;font-weight:700;font-size:9pt;white-space:nowrap;padding:5px 10px;
+  .flbl{background:#ececec;font-weight:700;font-size:9pt;white-space:nowrap;padding:5px 10px;
     border-right:1px solid #ccc;}
   .fval{font-size:9.5pt;padding:5px 10px;}
-  .hd{background:#e8e8e8;font-weight:800;text-align:center;}
+  .hd{background:#d8d8d8;font-weight:800;text-align:center;}
   .col-hd{background:#e4e4e4;font-weight:800;font-size:8pt;text-align:center;
     padding:4px 6px;white-space:nowrap;letter-spacing:1.5px;color:#222;}
+  /* 수정 가능 셀 */
+  .editable{outline:none;border:1px dashed #a0bfdf !important;border-radius:0;}
+  .editable:hover{background:#f0f7ff;cursor:text;}
+  .editable:focus{background:#fef3c7;border-color:#f59e0b !important;outline:none;}
   /* 서명 영역 */
   .sign-area{margin-top:10px;text-align:center;}
   .sign-date{font-size:11.5pt;font-weight:700;letter-spacing:2px;margin-bottom:8px;color:#111;}
@@ -3546,27 +3603,33 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   @media print{
     body{padding:0;background:#fff;}
     .doc{padding:11mm 15mm 9mm;box-shadow:none;}
-    .print-btn{display:none;}
+    .edit-guide,.print-btn{display:none;}
+    .editable{border:1px solid #555 !important;background:transparent !important;}
     @page{size:A4 portrait;margin:0;}
   }
 </style></head>
-<body><div class="doc">
+<body>
+<div class="edit-guide">
+  💡 <span>셀을 클릭</span>하면 수강시간, 증명대상기간, 휴일, 결석 날짜 등을 직접 수정할 수 있습니다.
+  (인쇄·PDF 저장 시 점선 테두리는 모두 사라집니다.)
+</div>
+<div class="doc">
 
   <div class="form-no">[별지 제83호 서식]</div>
   <div class="title-box"><h1>직업능력개발 훈련 등 수강증명서</h1></div>
 
   <!-- ━━ 메인 테이블 (7열) ━━
-       col1=구역레이블(24px) col2=번호(20px) col3=항목명(76px)
-       col4=값(가변)        col5=번호2(20px) col6=항목명2(84px) col7=값2(94px) -->
+       col1=구역레이블(26px) col2=번호(22px) col3=항목명(80px)
+       col4=값(가변)        col5=번호2(22px) col6=항목명2(90px) col7=값2(100px) -->
   <table class="main">
     <colgroup>
-      <col style="width:24px"/>
-      <col style="width:20px"/>
-      <col style="width:78px"/>
+      <col style="width:26px"/>
+      <col style="width:22px"/>
+      <col style="width:80px"/>
       <col/>
-      <col style="width:20px"/>
-      <col style="width:84px"/>
-      <col style="width:96px"/>
+      <col style="width:22px"/>
+      <col style="width:90px"/>
+      <col style="width:100px"/>
     </colgroup>
     <tbody>
       <!-- ━━ 훈련생(수급자격자) — 2행 ━━ -->
@@ -3582,7 +3645,7 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
       <tr>
         <td class="fno">③</td>
         <td class="flbl">주　　소</td>
-        <td class="fval" colspan="4">${addr}</td>
+        <td class="fval editable" contenteditable="true" colspan="4">${addr}</td>
       </tr>
 
       <!-- ━━ 수강명세 — 1행 ━━ -->
@@ -3590,10 +3653,10 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
         <td class="slbl">수강<br/>명세</td>
         <td class="fno">④</td>
         <td class="flbl">수강직종</td>
-        <td class="fval">${c.name}</td>
+        <td class="fval editable" contenteditable="true">${c.name}</td>
         <td class="fno">⑤</td>
         <td class="flbl">수강시간</td>
-        <td class="fval">${c.hours ? c.hours + '시간' : '　　시간'}</td>
+        <td class="fval editable" contenteditable="true" style="font-size:8.5pt;word-break:keep-all;">${trainingHoursStr}</td>
       </tr>
 
       <!-- ━━ 수강증명명세 — rowspan=7 (행6~12) ━━ -->
@@ -3602,51 +3665,48 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
         <td class="slbl" rowspan="7">수강증명<br/>명세</td>
         <td class="fno">⑥</td>
         <td class="flbl" style="font-size:8.5pt;">증명대상기간</td>
-        <td class="fval" colspan="4">
-          ${certPeriod}<br/>
-          <span style="font-size:8.5pt;color:#555;">${schedLine}</span>
-        </td>
+        <td class="fval editable" contenteditable="true" colspan="4" style="font-size:9.5pt;font-weight:600;">${certPeriodStr}</td>
       </tr>
       <!-- 행2: ⑦ 휴일 -->
       <tr>
         <td class="fno">⑦</td>
-        <td class="flbl" colspan="2" style="font-size:8.5pt;">휴일 등 훈련이 없었던 날</td>
-        <td class="fval" colspan="3">공휴일 및 법정 휴일 (과정 운영 일정 참조)</td>
+        <td class="flbl" colspan="2" style="font-size:8.5pt;">휴일 등 훈련이<br/>없었던 날</td>
+        <td class="fval editable" contenteditable="true" colspan="3" style="font-size:8.5pt;">공휴일 및 법정 휴일 (과정 운영 일정 참조)</td>
       </tr>
       <!-- 행3: ⑧ 헤더 — ⑧ 번호 셀은 rowspan=5로 행3~7 점유(㉠라벨+㉠데이터+㉡라벨+㉡데이터) -->
       <tr>
         <td class="fno hd" rowspan="5" style="vertical-align:middle;font-size:9pt;">⑧</td>
-        <td colspan="5" style="background:#f5f5f5;font-size:9pt;font-weight:700;padding:5px 8px;">
+        <td colspan="5" style="background:#f0f0f0;font-size:9pt;font-weight:700;padding:5px 8px;text-align:center;letter-spacing:1px;">
           본인의 사정으로 수강하지 아니한 날
         </td>
       </tr>
-      <!-- 행4: ㉠ 라벨 — col3~7(5칸) 사용: ㉠(1)+제목(4) -->
+      <!-- 행4: ㉠ 라벨 -->
       <tr>
         <td class="fno hd" style="font-size:8pt;vertical-align:middle;">㉠</td>
-        <td colspan="4" style="padding:4px 8px;font-size:9pt;background:#fafafa;">
+        <td colspan="4" style="padding:4px 8px;font-size:9pt;background:#f8f8f8;">
           질병·부상 등 부득이한 사유가 있는 날 &nbsp;&nbsp;<b>(총 ${excused.length}일)</b>
         </td>
       </tr>
-      <!-- 행5: ㉠ 날짜·사유 — col3~7(5칸): 날자(1)+일자(2)+사유헤더(1)+사유값(1) -->
+      <!-- 행5: ㉠ 날짜·사유 -->
       <tr>
-        <td class="col-hd">날자</td>
-        <td colspan="2" style="padding:4px 8px;font-size:8.5pt;">${fmtAbsDates(excused)}</td>
-        <td class="col-hd">사유</td>
-        <td style="padding:4px 8px;font-size:8.5pt;">${fmtAbsReasons(excused)||'해당없음'}</td>
+        <td class="col-hd" style="width:30px;">날자</td>
+        <td colspan="2" class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsDates(excused)}</td>
+        <td class="col-hd" style="width:30px;">사유</td>
+        <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsReasons(excused)||'해당없음'}</td>
       </tr>
-      <!-- 행6: ㉡ 라벨 — col3~7(5칸): ㉡(1)+제목(4) -->
+      <!-- 행6: ㉡ 라벨 -->
       <tr>
         <td class="fno hd" style="font-size:8pt;vertical-align:middle;">㉡</td>
-        <td colspan="4" style="padding:4px 8px;font-size:9pt;background:#fafafa;">
+        <td colspan="4" style="padding:4px 8px;font-size:9pt;background:#f8f8f8;">
           부득이한 사유가 없는 날 &nbsp;&nbsp;<b>(총 ${personal.length}일)</b>
         </td>
       </tr>
-      <!-- 행7: ㉡ 날짜·사유 — col3~7(5칸): 날자(1)+일자(2)+사유헤더(1)+사유값(1) -->
+      <!-- 행7: ㉡ 날짜·사유 -->
       <tr>
-        <td class="col-hd">날자</td>
-        <td colspan="2" style="padding:4px 8px;font-size:8.5pt;">${fmtAbsDates(personal)}</td>
-        <td class="col-hd">사유</td>
-        <td style="padding:4px 8px;font-size:8.5pt;">${fmtAbsReasons(personal)||'개인사유'}</td>
+        <td class="col-hd" style="width:30px;">날자</td>
+        <td colspan="2" class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsDates(personal)}</td>
+        <td class="col-hd" style="width:30px;">사유</td>
+        <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsReasons(personal)||'개인사유'}</td>
       </tr>
 
       <!-- ⑨ 취업 사실 — 수강증명명세 rowspan 종료 후, 전체 7열 사용 -->
@@ -3655,7 +3715,7 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
         <td colspan="3" style="padding:5px 8px;font-size:9pt;font-weight:700;">
           증명대상기간 중 취업·취로 또는 소득을 얻은 사실
         </td>
-        <td colspan="2" style="padding:5px 8px;font-size:9pt;">□ 있음&nbsp;&nbsp;■ 없음</td>
+        <td class="editable" contenteditable="true" colspan="2" style="padding:5px 8px;font-size:9pt;">□ 있음&nbsp;&nbsp;■ 없음</td>
       </tr>
     </tbody>
   </table>
@@ -3926,6 +3986,9 @@ const CertMgmt = ({ students, courses }) => {
   const [issueDate, setIssueDate]   = useState("2026년　　월　　일");
   const [customDate, setCustomDate] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  // 수강증명서 — 증명대상기간 수동 지정
+  const [certOverrideStart, setCertOverrideStart] = useState("");
+  const [certOverrideEnd,   setCertOverrideEnd]   = useState("");
 
   // 발급이력: localStorage에서 초기화, 이후 useState로 관리
   const [certHistory, setCertHistory] = useState(loadCertHistory);
@@ -4060,6 +4123,9 @@ const CertMgmt = ({ students, courses }) => {
       } catch(e) {
         console.warn("출결 데이터 로드 오류:", e);
       }
+      // 수동 지정 기간이 있으면 우선 적용
+      if (certOverrideStart) certStartDate = certOverrideStart;
+      if (certOverrideEnd)   certEndDate   = certOverrideEnd;
       printAttendCert(s, course, no, issueDate, studentAbsences, certStartDate, certEndDate);
     }
     return nextHist; // 전체 발급 시 사용
@@ -4155,6 +4221,42 @@ const CertMgmt = ({ students, courses }) => {
           </Btn>
         </div>
       </Card>
+
+      {/* 수강증명서 전용 — 증명대상기간 수동 지정 */}
+      {docType === "attend" && (
+        <Card style={{ padding:"14px 18px", marginBottom:16, background:"#FFFBEB", border:`1px solid #FDE68A` }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#92400E", marginBottom:10 }}>
+            📋 ⑥ 증명대상기간 수동 지정 <span style={{ fontSize:11, fontWeight:400 }}>— 비워두면 자동 계산 (최초 출석일 ~ 오늘)</span>
+          </div>
+          <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <span style={{ fontSize:11, color:"#92400E", fontWeight:600 }}>시작일</span>
+              <input type="date" value={certOverrideStart}
+                onChange={e => setCertOverrideStart(e.target.value)}
+                style={{ padding:"5px 8px", border:`1px solid #FCD34D`, borderRadius:7,
+                  fontSize:12, outline:"none", background:"#fff" }}/>
+            </div>
+            <span style={{ color:"#92400E" }}>~</span>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <span style={{ fontSize:11, color:"#92400E", fontWeight:600 }}>종료일</span>
+              <input type="date" value={certOverrideEnd}
+                onChange={e => setCertOverrideEnd(e.target.value)}
+                style={{ padding:"5px 8px", border:`1px solid #FCD34D`, borderRadius:7,
+                  fontSize:12, outline:"none", background:"#fff" }}/>
+            </div>
+            {(certOverrideStart || certOverrideEnd) && (
+              <button onClick={() => { setCertOverrideStart(""); setCertOverrideEnd(""); }}
+                style={{ padding:"4px 10px", borderRadius:6, border:`1px solid #FCD34D`,
+                  background:"#FEF3C7", color:"#92400E", fontSize:11, cursor:"pointer", fontWeight:600 }}>
+                초기화 (자동)
+              </button>
+            )}
+            <span style={{ fontSize:11, color:"#B45309", marginLeft:4 }}>
+              💡 수강증명서 발급 창에서도 셀 클릭으로 직접 수정 가능합니다
+            </span>
+          </div>
+        </Card>
+      )}
 
       {/* 발급이력 패널 */}
       {showHistory && (

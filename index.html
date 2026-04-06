@@ -1643,11 +1643,13 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
     if (!attModal) { setAttRecords([]); return; }
     let cancelled = false;
     setAttLoading(true);
+    const studentId = Number(attModal.id);
+    if (!studentId) { setAttLoading(false); return; }
     const load = async () => {
       try {
         const { data, error } = await sbGet(
           "attendance",
-          `select=date,check_in,check_out,status&student_id=eq.${attModal.id}&order=date.asc`
+          `select=date,check_in,check_out,status&student_id=eq.${studentId}&order=date.asc`
         );
         if (!cancelled) setAttRecords(error ? [] : (data || []));
       } catch { if (!cancelled) setAttRecords([]); }
@@ -1660,6 +1662,8 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
   // 모달이 열린 동안 Realtime 구독 (해당 학생 출결 실시간 갱신)
   useEffect(() => {
     if (!attModal) return;
+    const studentId = Number(attModal.id);
+    if (!studentId) return;
     let intentionallyClosed = false;
     let heartbeatId = null;
     let currentWs   = null;
@@ -1686,7 +1690,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
             config: {
               broadcast: { self: false }, presence: { key: "" },
               postgres_changes: [{ event: "*", schema: "public", table: "attendance",
-                filter: `student_id=eq.${attModal.id}` }]
+                filter: `student_id=eq.${studentId}` }]
             },
             access_token: SB_KEY
           },
@@ -1707,14 +1711,14 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
             const ids = msg.payload.ids || [];
             if (subIds.length > 0 && !ids.some(id => subIds.includes(id))) return;
             const { type: evType, record: nr } = msg.payload.data;
-            if ((evType === "INSERT" || evType === "UPDATE") && nr?.student_id === attModal.id) {
+            if ((evType === "INSERT" || evType === "UPDATE") && Number(nr?.student_id) === studentId) {
               setAttRecords(prev => {
                 const idx = prev.findIndex(r => r.date === nr.date);
                 const updated = { date: nr.date, check_in: nr.check_in, check_out: nr.check_out, status: nr.status };
                 if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next; }
                 return [...prev, updated].sort((a, b) => a.date.localeCompare(b.date));
               });
-            } else if (evType === "DELETE" && msg.payload.data?.old_record?.student_id === attModal.id) {
+            } else if (evType === "DELETE" && Number(msg.payload.data?.old_record?.student_id) === studentId) {
               setAttRecords(prev => prev.filter(r => r.date !== msg.payload.data.old_record?.date));
             }
           }
@@ -2436,6 +2440,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
 </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
+    else { alert("팝업이 차단되었습니다. 브라우저에서 팝업 차단을 해제해주세요."); }
   };
 
   // ── 출결 기록 (입실/퇴실 분리) ──
@@ -3865,6 +3870,7 @@ const printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
 
   const w = window.open("", "_blank", "width=900,height=1200");
   if (w) { w.document.write(html); w.document.close(); }
+  else { alert("팝업이 차단되었습니다. 브라우저에서 팝업 차단을 해제해주세요."); }
 };
 
 const CertMgmt = ({ students, courses }) => {

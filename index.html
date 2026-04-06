@@ -3921,6 +3921,13 @@ const CertMgmt = ({ students, courses }) => {
 
   // docType별 series 반환
   const docSeries = dt => dt==="cert" ? "북부교육팀" : dt==="parti" ? "북부-참여" : "북부-수강";
+  // docType의 다음 발급번호 (표시용)
+  const getNextCertNo = dt => {
+    const maxNo = certHistory
+      .filter(r => r.docType === dt)
+      .reduce((max, r) => Math.max(max, parseInt(r.certNo, 10) || 0), 0);
+    return String(maxNo + 1).padStart(3, "0");
+  };
 
   // 발급번호 조회: 이미 발급된 경우 동일 번호 재사용, 신규인 경우 전역 최대값+1
   const getCertNo = (s, histOverride = null) => {
@@ -3946,7 +3953,7 @@ const CertMgmt = ({ students, courses }) => {
     );
     if (alreadyIssued) return histRef; // 재출력: 이력 추가 없음
     const record = {
-      id:          Date.now() + Math.random(),
+      id:          `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
       studentId:   s.id,
       studentName: s.name,
       courseId:    course.id,
@@ -4198,7 +4205,7 @@ const CertMgmt = ({ students, courses }) => {
           </div>
           <div style={{ fontSize:11, color:T.mu }}>
             다음 발급번호: <b style={{ color:T.p, fontFamily:"monospace" }}>
-              2026-{docSeries(docType)}-{String(certHistory.filter(r=>r.docType===docType).reduce((m,r)=>Math.max(m,parseInt(r.certNo,10)||0),0)+1).padStart(3,"0")}호
+              2026-{docSeries(docType)}-{getNextCertNo(docType)}호
             </b>
           </div>
         </div>

@@ -3772,96 +3772,134 @@ const printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
     ? `${fmtD(c.dateFrom)} ~ ${fmtD(c.dateTo)}`
     : "　　　　　　";
   const loc = roomName || "미배정";
+  const courseYear = c.dateFrom ? c.dateFrom.slice(0, 4) : new Date().getFullYear();
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>참여확인서 - ${s.name}</title>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Pretendard','맑은 고딕','Malgun Gothic',sans-serif;background:#f4f4f4;
-       display:flex;align-items:flex-start;justify-content:center;padding:24px 0;}
-  .doc{width:210mm;min-height:297mm;padding:20mm 22mm 18mm;background:#fff;display:flex;flex-direction:column;
-       box-shadow:0 4px 32px rgba(0,0,0,.13);}
-  .doc-no{font-size:9pt;color:#555;text-align:right;margin-bottom:4px;letter-spacing:.5px;}
-  .title-wrap{text-align:center;margin-bottom:32px;}
-  .title{font-size:30pt;font-weight:900;letter-spacing:16px;color:#111;
-    border-bottom:3px double #111;display:inline-block;padding-bottom:8px;}
-  table.info{width:100%;border-collapse:collapse;font-size:10pt;margin-bottom:20px;}
-  table.info td{border:1px solid #555;padding:7px 12px;vertical-align:middle;line-height:1.7;}
-  table.info .lbl{background:#efefef;font-weight:800;white-space:nowrap;width:96px;color:#222;}
-  .body-wrap{margin:22px 0 30px;padding:22px 24px;border:2px solid #333;border-radius:4px;
-    font-size:12pt;line-height:2.0;color:#111;text-align:center;background:#fafafa;}
-  .part-table{width:100%;border-collapse:collapse;font-size:10pt;margin-top:20px;}
-  .part-table th,.part-table td{border:1px solid #444;padding:7px 12px;text-align:center;}
-  .part-table th{background:#e8e8e8;font-weight:800;color:#111;}
-  .part-table td.chk{font-size:14pt;color:#059669;}
-  .sign-wrap{margin-top:auto;padding-top:28px;text-align:center;}
-  .sign-date{font-size:12pt;font-weight:700;letter-spacing:2px;margin-bottom:12px;color:#111;}
-  .sign-line{display:inline-flex;align-items:center;gap:18px;}
-  .sign-title{font-size:14pt;font-weight:900;color:#111;letter-spacing:3px;}
-  .stamp-box{width:54px;height:54px;border:2.5px solid #333;border-radius:50%;
-    display:inline-flex;align-items:center;justify-content:center;
-    color:#333;font-size:13pt;font-weight:900;}
+  body{background:#e2e8f0;display:flex;flex-direction:column;align-items:center;
+       padding:40px 20px;color:#111;font-family:'Pretendard','Malgun Gothic',sans-serif;}
+  .edit-guide{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;padding:12px 20px;
+    border-radius:8px;margin-bottom:20px;font-size:14px;font-weight:600;width:210mm;
+    text-align:center;box-shadow:0 4px 6px rgba(0,0,0,0.05);}
+  .edit-guide span{color:#D97706;}
+  .doc{width:210mm;min-height:297mm;padding:35mm 25mm;background:#fff;display:flex;
+       flex-direction:column;position:relative;line-height:1.6;
+       box-shadow:0 10px 30px rgba(0,0,0,0.15);}
+  .editable{outline:none;border:1px dashed #cbd5e1;border-radius:4px;padding:2px 4px;
+    transition:background 0.2s,border-color 0.2s;}
+  .editable:hover,.editable:focus{background:#fef3c7;border-color:#f59e0b;cursor:text;}
+  td.editable{border:1px solid #000;border-radius:0;}
+  td.editable:hover,td.editable:focus{background:#fef3c7;outline:2px solid #f59e0b;outline-offset:-2px;}
+  .header-info{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:40px;}
+  .doc-no{font-size:11pt;color:#333;}
+  .title-wrap{text-align:center;margin-bottom:50px;}
+  .title{font-size:32pt;font-weight:900;letter-spacing:15px;color:#000;
+    font-family:'Batang','바탕',serif;-webkit-text-stroke:1.5px #000;}
+  table{width:100%;border-collapse:collapse;border:2px solid #000;}
+  th,td{border:1px solid #000;padding:14px 10px;font-size:12pt;text-align:center;vertical-align:middle;}
+  th{background-color:#f4f6f8;font-weight:700;width:20%;}
+  td{width:30%;}
+  .course-table{margin-bottom:50px;}
+  .course-table td.full-width{text-align:left;padding-left:20px;}
+  .main-text{font-size:18pt;font-weight:700;line-height:1.9;text-align:center;color:#000;
+    margin-bottom:50px;word-break:keep-all;}
+  .trainee-table{margin-bottom:60px;}
+  .trainee-table th{width:25%;}
+  .footer{text-align:center;margin-top:auto;margin-bottom:20px;display:flex;
+    flex-direction:column;align-items:center;gap:40px;}
+  .issue-date{font-size:14pt;letter-spacing:2px;}
+  .issuer{font-size:24pt;font-weight:900;letter-spacing:5px;
+    font-family:'Gungsuh','궁서',serif;position:relative;display:flex;align-items:center;}
+  .stamp-container{position:relative;margin-left:10px;cursor:pointer;display:inline-flex;
+    align-items:center;justify-content:center;width:60px;height:60px;border-radius:8px;
+    transition:background 0.2s;}
+  .stamp-container:hover{background:#fef3c7;}
+  .stamp-container:hover::after{content:'클릭하여 직인 첨부';position:absolute;bottom:-20px;
+    font-size:11px;color:#EA580C;font-family:'Pretendard',sans-serif;white-space:nowrap;
+    letter-spacing:0;font-weight:bold;}
+  .stamp-img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:75px;height:75px;object-fit:contain;mix-blend-mode:multiply;pointer-events:none;}
   .print-btn{position:fixed;bottom:24px;right:24px;background:#EA580C;color:#fff;
-    border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;
-    cursor:pointer;box-shadow:0 4px 20px rgba(234,88,12,.4);font-family:inherit;z-index:99;}
+    border:none;border-radius:10px;padding:12px 24px;font-size:15px;font-weight:700;
+    cursor:pointer;z-index:99;box-shadow:0 4px 15px rgba(234,88,12,0.4);}
+  .print-btn:active{transform:scale(0.96);}
   @media print{
-    body{padding:0;background:#fff;}
-    .doc{padding:18mm 20mm 16mm;box-shadow:none;}
-    .print-btn{display:none;}
+    body{background:#fff;padding:0;}
+    .doc{padding:25mm;box-shadow:none;width:auto;min-height:auto;}
+    .edit-guide,.print-btn{display:none;}
+    .editable{border:none !important;padding:0 !important;background:transparent !important;}
+    td.editable{border:1px solid #000 !important;outline:none !important;}
+    .stamp-container:hover{background:transparent;}
+    .stamp-container::after{display:none;}
     @page{size:A4 portrait;margin:0;}
   }
 </style></head>
-<body><div class="doc">
-  <div class="doc-no">2026-북부-참여-${certNo}호</div>
+<body>
+<div class="edit-guide">
+  💡 <span>마우스로 텍스트를 클릭</span>하면 문서번호, 제출처, 이름, 날짜 등을 자유롭게 직접 수정할 수 있습니다.<br/>
+  (인쇄 또는 PDF 저장 시 점선 박스는 모두 사라집니다.)
+</div>
+<div class="doc">
+  <div class="header-info">
+    <div style="font-size:12pt;font-weight:700;">참 여 확 인 서</div>
+    <div class="doc-no">
+      <span class="editable" contenteditable="true">2026-북부-참여-${certNo}호</span>
+    </div>
+  </div>
   <div class="title-wrap"><div class="title">참 여 확 인 서</div></div>
-
-  <table class="info">
-    <tr>
-      <td class="lbl">과 정 명</td>
-      <td colspan="3">${c.name}</td>
-    </tr>
-    <tr>
-      <td class="lbl">교육기간</td>
-      <td>${eduPeriod}</td>
-      <td class="lbl">교육시간</td>
-      <td>${c.hours ? c.hours + '시간' : '　　시간'}</td>
-    </tr>
-    <tr>
-      <td class="lbl">교육장소</td>
-      <td colspan="3">${loc}</td>
-    </tr>
+  <table class="course-table">
+    <tbody>
+      <tr>
+        <th>과정명</th>
+        <td colspan="3" class="full-width editable" contenteditable="true" style="font-weight:700;">${c.name}</td>
+      </tr>
+      <tr>
+        <th>교육기간</th>
+        <td class="editable" contenteditable="true">${eduPeriod}</td>
+        <th>교육시간</th>
+        <td class="editable" contenteditable="true">${c.hours ? c.hours + '시간' : '　　시간'}</td>
+      </tr>
+      <tr>
+        <th>교육장소</th>
+        <td class="editable" contenteditable="true">${loc}</td>
+        <th>제출처</th>
+        <td class="editable" contenteditable="true"></td>
+      </tr>
+    </tbody>
   </table>
-
-  <div class="body-wrap">
-    위 사람은 2026년 <b>「${c.name}」</b>에<br/>
+  <div class="main-text editable" contenteditable="true">
+    위 사람은 ${courseYear}년 「${c.name}」에<br/>
     최종 선발되어 참여 중임을 확인합니다.
   </div>
-
-  <table class="part-table">
+  <table class="trainee-table">
     <thead>
       <tr>
-        <th>성　　명</th>
-        <th>생년월일</th>
-        <th>교육과정 참여여부</th>
-        <th>서　　명</th>
+        <th>성명</th><th>생년월일</th><th>교육과정 참여여부</th><th>서명</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td style="font-size:12pt;font-weight:800;">${s.name}</td>
-        <td>${birthFmt}</td>
-        <td class="chk">✔ 참여 중</td>
-        <td style="min-width:80px;height:36px;">&nbsp;</td>
+        <td class="editable" contenteditable="true" style="font-weight:700;font-size:13pt;">${s.name}</td>
+        <td class="editable" contenteditable="true">${birthFmt}</td>
+        <td class="editable" contenteditable="true" style="font-weight:800;color:#059669;">☑ 참여 중</td>
+        <td class="editable" contenteditable="true"></td>
       </tr>
     </tbody>
   </table>
-
-  <div class="sign-wrap">
-    <div class="sign-date">${issueDate}</div>
-    <div class="sign-line">
-      <div class="sign-title">경기도일자리재단 대표이사</div>
-      <div class="stamp-box">(인)</div>
+  <div class="footer">
+    <div class="issue-date editable" contenteditable="true">${issueDate}</div>
+    <div class="issuer">
+      <span class="editable" contenteditable="true">경기도일자리재단 대표이사</span>
+      <span class="stamp-container" onclick="document.getElementById('stamp-upload').click()">
+        (인)
+        <img id="stamp-preview" class="stamp-img" style="display:none;" alt="직인"/>
+      </span>
+      <input type="file" id="stamp-upload" accept="image/png,image/jpeg" style="display:none;"
+        onchange="(function(e){const f=e.target.files[0];if(f){const r=new FileReader();r.onload=function(ev){const i=document.getElementById('stamp-preview');i.src=ev.target.result;i.style.display='block';};r.readAsDataURL(f);}})(event)"/>
     </div>
   </div>
 </div>

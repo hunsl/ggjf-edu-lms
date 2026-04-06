@@ -3873,12 +3873,34 @@ const printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
   else { alert("팝업이 차단되었습니다. 브라우저에서 팝업 차단을 해제해주세요."); }
 };
 
+/* ── 발급이력 localStorage 헬퍼 ── */
+const CERT_HIST_KEY = "gjf_issued_certs";
+const loadCertHistory = () => {
+  try { return JSON.parse(safeLocal.get(CERT_HIST_KEY) || "[]"); } catch { return []; }
+};
+const saveCertHistory = hist => {
+  try { safeLocal.set(CERT_HIST_KEY, JSON.stringify(hist)); } catch {}
+};
+
 const CertMgmt = ({ students, courses }) => {
-  const [course, setCourse]       = useState(courses[3] || courses[0]);
-  const [docType, setDocType]     = useState("cert");   // "cert" | "attend" | "parti"
-  const [issued, setIssued]       = useState({});
-  const [issueDate, setIssueDate] = useState("2026년　　월　　일");
+  const [course, setCourse]         = useState(courses[3] || courses[0]);
+  const [docType, setDocType]       = useState("cert");   // "cert" | "attend" | "parti"
+  const [issueDate, setIssueDate]   = useState("2026년　　월　　일");
   const [customDate, setCustomDate] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+
+  // 발급이력: localStorage에서 초기화, 이후 useState로 관리
+  const [certHistory, setCertHistory] = useState(loadCertHistory);
+
+  // certHistory → issued 맵 (key: studentId+docType+courseId)
+  const issued = useMemo(() => {
+    const map = {};
+    certHistory.forEach(r => {
+      const key = String(r.studentId) + r.docType + String(r.courseId);
+      if (!map[key]) map[key] = { no: r.certNo, date: r.issueDate, issuedAt: r.issuedAt };
+    });
+    return map;
+  }, [certHistory]);
 
   // courses prop 변경(실시간 업데이트/편집) 시 선택 과정 최신 데이터로 동기화
   useEffect(() => {
@@ -3897,17 +3919,59 @@ const CertMgmt = ({ students, courses }) => {
   const attendEligible = students.filter(s => Number(s.cid)===Number(course.id));
   const eligible = docType==="cert" ? certEligible : attendEligible;
 
-  const getCertNo = (s, idx) => {
-    if (issued[s.id+docType]?.no) return issued[s.id+docType].no;
-    // 순번 숫자만 반환 — 전체 번호는 템플릿에서 조합
-    // 수료증: "2026-북부교육팀-{no}호" / 수강증명서: "제 2026-북부-수강-{no} 호"
-    return String(idx+1).padStart(3, "0");
+  // docType별 series 반환
+  const docSeries = dt => dt==="cert" ? "북부교육팀" : dt==="parti" ? "북부-참여" : "북부-수강";
+
+  // 발급번호 조회: 이미 발급된 경우 동일 번호 재사용, 신규인 경우 전역 최대값+1
+  const getCertNo = (s, histOverride = null) => {
+    const hist = histOverride || certHistory;
+    const existing = hist.find(r =>
+      String(r.studentId) === String(s.id) &&
+      r.docType === docType &&
+      String(r.courseId) === String(course.id)
+    );
+    if (existing) return existing.certNo;
+    const maxNo = hist
+      .filter(r => r.docType === docType)
+      .reduce((max, r) => Math.max(max, parseInt(r.certNo, 10) || 0), 0);
+    return String(maxNo + 1).padStart(3, "0");
   };
 
-  const handleIssue = async (s, idx) => {
-    const no = getCertNo(s, idx);
-    setIssued(p => ({ ...p, [s.id+docType]: { no, date: issueDate } }));
-    if(docType==="cert") {
+  // 이력에 발급 기록 추가 (중복 방지)
+  const recordIssue = (s, no, histRef) => {
+    const alreadyIssued = histRef.find(r =>
+      String(r.studentId) === String(s.id) &&
+      r.docType === docType &&
+      String(r.courseId) === String(course.id)
+    );
+    if (alreadyIssued) return histRef; // 재출력: 이력 추가 없음
+    const record = {
+      id:          Date.now() + Math.random(),
+      studentId:   s.id,
+      studentName: s.name,
+      courseId:    course.id,
+      courseName:  course.name,
+      docType,
+      certNo:      no,
+      fullNo:      `2026-${docSeries(docType)}-${no}호`,
+      issueDate,
+      issuedAt:    new Date().toISOString(),
+    };
+    return [record, ...histRef];
+  };
+
+  const handleIssue = async (s, histOverride = null) => {
+    const hist = histOverride || certHistory;
+    const no = getCertNo(s, hist);
+    const nextHist = recordIssue(s, no, hist);
+
+    if (!histOverride) {
+      // 단건 발급: 상태+localStorage 즉시 갱신
+      setCertHistory(nextHist);
+      saveCertHistory(nextHist);
+    }
+
+    if (docType==="cert") {
       printCertificate(s, course, no, issueDate);
     } else if (docType === "parti") {
       // 참여확인서: 강의실 정보 조회 후 출력
@@ -3941,13 +4005,11 @@ const CertMgmt = ({ students, courses }) => {
             reason: r.reason || "",
           }));
         }
-        // 최초 출석일: 훈련생이 실제로 참여한 첫날
         if (firstRes.data && firstRes.data.length > 0) {
           certStartDate = firstRes.data[0].date;
         } else {
           certStartDate = course.dateFrom || null;
         }
-        // 종료일: 오늘 vs 과정 종료일 중 빠른 것
         const todayISO = new Date().toISOString().slice(0,10);
         certEndDate = (course.dateTo && todayISO < course.dateTo) ? todayISO : (course.dateTo || todayISO);
       } catch(e) {
@@ -3955,15 +4017,32 @@ const CertMgmt = ({ students, courses }) => {
       }
       printAttendCert(s, course, no, issueDate, studentAbsences, certStartDate, certEndDate);
     }
+    return nextHist; // 전체 발급 시 사용
   };
 
-  const handleIssueAll = () => eligible.forEach((s, idx) => handleIssue(s, idx));
+  const handleIssueAll = async () => {
+    // 전체 발급: 번호 중복 없이 순차 부여하기 위해 이력을 로컬에서 누적
+    let runningHist = [...certHistory];
+    for (const s of eligible) {
+      const no = getCertNo(s, runningHist);
+      runningHist = recordIssue(s, no, runningHist);
+      await handleIssue(s, runningHist);
+    }
+    setCertHistory(runningHist);
+    saveCertHistory(runningHist);
+  };
 
   const fmtDate = raw => {
     if (!raw) return "";
     const [y,m,d] = raw.split("-");
     return `${y}년 ${m}월 ${d}일`;
   };
+
+  // 현재 docType·과정 기준 발급 현황
+  const issuedCountForType = certHistory.filter(r => r.docType === docType).length;
+  const historyForCurrent  = certHistory.filter(r =>
+    r.docType === docType && String(r.courseId) === String(course.id)
+  );
 
   return (
     <div className="page">
@@ -3978,19 +4057,27 @@ const CertMgmt = ({ students, courses }) => {
           {id:"cert",   label:"📋 수 료 증",   sub:"출석률 80% 이상"},
           {id:"attend", label:"📄 수강증명서", sub:"수강자 전체"},
           {id:"parti",  label:"📃 참여확인서", sub:"최종 선발 참여자"},
-        ].map(({id,label,sub})=>(
-          <button key={id} onClick={()=>setDocType(id)} style={{
-            padding:"10px 20px", borderRadius:10, border:"none", cursor:"pointer",
-            background: docType===id ? T.p : T.s2,
-            color: docType===id ? "#fff" : T.mu,
-            fontWeight:700, fontSize:13, transition:"all .15s",
-            borderWidth:2, borderStyle:"solid",
-            borderColor: docType===id ? T.p : T.bd }}>
-            {label}
-            <div style={{ fontSize:10, fontWeight:400, marginTop:2,
-              color: docType===id ? "rgba(255,255,255,.7)" : T.mu }}>{sub}</div>
-          </button>
-        ))}
+        ].map(({id,label,sub})=>{
+          const cnt = certHistory.filter(r => r.docType === id).length;
+          return (
+            <button key={id} onClick={()=>setDocType(id)} style={{
+              padding:"10px 20px", borderRadius:10, border:"none", cursor:"pointer",
+              background: docType===id ? T.p : T.s2,
+              color: docType===id ? "#fff" : T.mu,
+              fontWeight:700, fontSize:13, transition:"all .15s",
+              borderWidth:2, borderStyle:"solid",
+              borderColor: docType===id ? T.p : T.bd, position:"relative" }}>
+              {label}
+              <div style={{ fontSize:10, fontWeight:400, marginTop:2,
+                color: docType===id ? "rgba(255,255,255,.7)" : T.mu }}>{sub}</div>
+              {cnt > 0 && (
+                <span style={{ position:"absolute", top:-6, right:-6, background: docType===id ? "#fff" : T.p,
+                  color: docType===id ? T.p : "#fff", borderRadius:99, fontSize:9, fontWeight:800,
+                  padding:"1px 5px", lineHeight:"16px", minWidth:16, textAlign:"center" }}>{cnt}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* 과정 선택 */}
@@ -4014,12 +4101,80 @@ const CertMgmt = ({ students, courses }) => {
           style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
             fontSize:12, outline:"none", background:T.s2, cursor:"pointer" }}/>
         <div style={{ fontSize:12, color:T.mu }}>→ <b style={{color:T.p}}>{issueDate}</b></div>
-        <div style={{ marginLeft:"auto" }}>
+        <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
+          <Btn size="sm" variant="ghost" onClick={()=>setShowHistory(v=>!v)}>
+            📋 발급이력 {issuedCountForType > 0 && `(${issuedCountForType}건)`}
+          </Btn>
           <Btn size="sm" onClick={handleIssueAll}>
             <Icon n="dl" s={13}/> 전체 {eligible.length}명 출력
           </Btn>
         </div>
       </Card>
+
+      {/* 발급이력 패널 */}
+      {showHistory && (
+        <Card style={{ overflow:"hidden", marginBottom:16 }}>
+          <div style={{ padding:"12px 18px", borderBottom:`1px solid ${T.bd}`,
+            display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>
+              📋 발급이력 — {docType==="cert"?"수료증":docType==="parti"?"참여확인서":"수강증명서"}
+              <span style={{ fontSize:11, color:T.mu, fontWeight:400, marginLeft:8 }}>
+                현재 과정: {historyForCurrent.length}건 / 전체: {issuedCountForType}건
+              </span>
+            </span>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => {
+                if(!window.confirm("현재 문서 종류의 발급이력을 모두 초기화하시겠습니까?")) return;
+                setCertHistory(prev => {
+                  const next = prev.filter(r => r.docType !== docType);
+                  saveCertHistory(next);
+                  return next;
+                });
+              }} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:`1px solid ${T.bd}`,
+                background:"#FEF2F2", color:T.danger, cursor:"pointer", fontWeight:600 }}>
+                🗑 이력 초기화
+              </button>
+              <button onClick={()=>setShowHistory(false)} style={{ fontSize:11, padding:"4px 10px",
+                borderRadius:6, border:`1px solid ${T.bd}`, background:T.s2, color:T.mu, cursor:"pointer" }}>
+                닫기
+              </button>
+            </div>
+          </div>
+          {certHistory.filter(r => r.docType === docType).length === 0 ? (
+            <div style={{ padding:"28px 0", textAlign:"center", fontSize:13, color:T.mu }}>
+              발급이력이 없습니다
+            </div>
+          ) : (
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:T.s2 }}>
+                  {["문서번호","이름","과정명","발급일자","발급시각"].map(h=>(
+                    <th key={h} style={{ padding:"8px 14px", textAlign:"center",
+                      fontSize:11, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {certHistory
+                  .filter(r => r.docType === docType)
+                  .sort((a,b) => new Date(b.issuedAt) - new Date(a.issuedAt))
+                  .map(r => (
+                  <tr key={r.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
+                    <td style={{ padding:"9px 14px", textAlign:"center", fontFamily:"monospace",
+                      fontSize:11, fontWeight:700, color:T.p }}>{r.fullNo}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"center", fontSize:12, fontWeight:700, color:T.tx }}>{r.studentName}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"center", fontSize:11, color:T.mu }}>{r.courseName}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"center", fontSize:11, color:T.mu }}>{r.issueDate}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"center", fontSize:10, color:T.mu }}>
+                      {new Date(r.issuedAt).toLocaleString("ko-KR")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
 
       {/* 대상자 테이블 */}
       <Card style={{ overflow:"hidden" }}>
@@ -4041,6 +4196,11 @@ const CertMgmt = ({ students, courses }) => {
               )}
             </span>
           </div>
+          <div style={{ fontSize:11, color:T.mu }}>
+            다음 발급번호: <b style={{ color:T.p, fontFamily:"monospace" }}>
+              2026-{docSeries(docType)}-{String(certHistory.filter(r=>r.docType===docType).reduce((m,r)=>Math.max(m,parseInt(r.certNo,10)||0),0)+1).padStart(3,"0")}호
+            </b>
+          </div>
         </div>
 
         {/* 출력 안내 */}
@@ -4058,7 +4218,7 @@ const CertMgmt = ({ students, courses }) => {
             <tr style={{ background:T.s2 }}>
               {[
                 {h:"번호",w:50},{h:"이름",w:"auto"},{h:"주민등록번호",w:130},
-                {h:"출석률",w:80},{h:"문서번호",w:150},{h:"발급여부",w:90},{h:"",w:130}
+                {h:"출석률",w:80},{h:"문서번호",w:180},{h:"발급여부",w:90},{h:"",w:130}
               ].map(({h,w})=>(
                 <th key={h} style={{ padding:"10px 14px", textAlign:h==="이름"?"left":"center",
                   fontSize:11, color:T.mu, fontWeight:700,
@@ -4073,9 +4233,10 @@ const CertMgmt = ({ students, courses }) => {
               </td></tr>
             )}
             {eligible.map((s, idx) => {
-              const key  = s.id+docType;
-              const cert = issued[key];
-              const no   = getCertNo(s, idx);
+              const issuedKey = String(s.id) + docType + String(course.id);
+              const cert = issued[issuedKey];
+              const no   = getCertNo(s);
+              const fullNo = `2026-${docSeries(docType)}-${no}호`;
               return (
                 <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
                   <td style={{ padding:"12px 14px", textAlign:"center", fontSize:12, color:T.mu }}>{idx+1}</td>
@@ -4099,16 +4260,17 @@ const CertMgmt = ({ students, courses }) => {
                     <span style={{ fontSize:14, fontWeight:800,
                       color: s.rate>=80?T.ok:s.rate>=60?T.warn:T.danger }}>{s.rate}%</span>
                   </td>
-                  <td style={{ padding:"12px 14px", textAlign:"center", fontSize:11, color:T.mu, fontFamily:"monospace" }}>
+                  <td style={{ padding:"12px 14px", textAlign:"center", fontSize:11, fontFamily:"monospace" }}>
                     {cert
-                      ? `2026-북부-${docType==="cert"?"수료":docType==="parti"?"참여":"수강"}-${no}호`
-                      : <span style={{color:T.bd}}>미발급</span>}
+                      ? <span style={{ color:T.p, fontWeight:700 }}>{fullNo}</span>
+                      : <span style={{ color:T.bd }}>미발급 (예정: {fullNo})</span>}
                   </td>
                   <td style={{ padding:"12px 14px", textAlign:"center" }}>
                     <Chip label={cert?"발급완료":"미발급"} bg={cert?T.pbg:T.s3} color={cert?T.p:T.mu}/>
+                    {cert && <div style={{ fontSize:9, color:T.mu, marginTop:2 }}>{cert.date}</div>}
                   </td>
                   <td style={{ padding:"12px 14px", textAlign:"center" }}>
-                    <Btn size="sm" variant={cert?"ghost":"primary"} onClick={()=>handleIssue(s,idx)}>
+                    <Btn size="sm" variant={cert?"ghost":"primary"} onClick={()=>handleIssue(s)}>
                       <Icon n="dl" s={12}/>{cert?"재출력":"PDF 발급"}
                     </Btn>
                   </td>

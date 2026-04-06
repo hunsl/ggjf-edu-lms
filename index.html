@@ -3472,12 +3472,12 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   // 날짜 포맷 헬퍼 (점 표기: 2025. 8. 7.)
   const fmtYMD_dot = d => {
     if (!d) return "";
-    const p = (d||"").split("-");
+    const p = d.split("-");
     return `${p[0]}. ${+p[1]}. ${+p[2]}.`;
   };
   const fmtMD_dot = d => {
     if (!d) return "";
-    const p = (d||"").split("-");
+    const p = d.split("-");
     return `${+p[1]}. ${+p[2]}.`;
   };
   const fmtRange_dot = (from, to) => {
@@ -3523,8 +3523,10 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   };
   const certDayCount  = countCertTrainingDays(computedFrom, computedTo);
   const certHoursNum  = certDayCount * dailyHoursNum;
-  const certPeriodStr = fmtRange_dot(computedFrom, computedTo)
-    + (certDayCount ? ` (${certDayCount}일${certHoursNum ? `, ${certHoursNum}시간` : ''})` : '');
+  const certDaySuffix = certDayCount
+    ? ` (${certDayCount}일${certHoursNum ? `, ${certHoursNum}시간` : ''})`
+    : '';
+  const certPeriodStr = fmtRange_dot(computedFrom, computedTo) + certDaySuffix;
 
   // ⑤ 수강시간: 요일 (일 N시간, 기간, 총 M시간) 형식
   const trainingHoursStr = (() => {

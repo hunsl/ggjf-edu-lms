@@ -1633,6 +1633,109 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
   const [tab, setTab] = useState("list");          // "list" | "import"
   const fileRef = useRef();
 
+  // ── 출결 상세 모달 ──
+  const [attModal, setAttModal] = useState(null);         // 선택된 학생 (또는 null)
+  const [attRecords, setAttRecords] = useState([]);       // 출결 일별 기록
+  const [attLoading, setAttLoading] = useState(false);
+
+  // 모달 열릴 때 출결 데이터 로드
+  useEffect(() => {
+    if (!attModal) { setAttRecords([]); return; }
+    let cancelled = false;
+    setAttLoading(true);
+    const load = async () => {
+      try {
+        const { data, error } = await sbGet(
+          "attendance",
+          `select=date,check_in,check_out,status&student_id=eq.${attModal.id}&order=date.asc`
+        );
+        if (!cancelled) setAttRecords(error ? [] : (data || []));
+      } catch { if (!cancelled) setAttRecords([]); }
+      if (!cancelled) setAttLoading(false);
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [attModal]);
+
+  // 모달이 열린 동안 Realtime 구독 (해당 학생 출결 실시간 갱신)
+  useEffect(() => {
+    if (!attModal) return;
+    let intentionallyClosed = false;
+    let heartbeatId = null;
+    let currentWs   = null;
+    let retryDelay  = 2000;
+    let refCount    = 0;
+    const channel = `realtime:public:attendance`;
+    const joinRef = String(++refCount);
+    let subIds = [];
+
+    const send = (obj) => {
+      if (currentWs?.readyState === WebSocket.OPEN) currentWs.send(JSON.stringify(obj));
+    };
+    const connect = () => {
+      if (intentionallyClosed) return;
+      const ws = new WebSocket(
+        `wss://${SB_URL.replace("https://","")}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+      );
+      currentWs = ws;
+      ws.onopen = () => {
+        retryDelay = 2000;
+        send({
+          topic: channel, event: "phx_join",
+          payload: {
+            config: {
+              broadcast: { self: false }, presence: { key: "" },
+              postgres_changes: [{ event: "*", schema: "public", table: "attendance",
+                filter: `student_id=eq.${attModal.id}` }]
+            },
+            access_token: SB_KEY
+          },
+          ref: joinRef, join_ref: joinRef
+        });
+        heartbeatId = setInterval(() => {
+          send({ topic: "phoenix", event: "heartbeat", payload: {}, ref: String(++refCount) });
+        }, 25000);
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.event === "phx_reply" && msg.ref === joinRef) {
+            subIds = (msg.payload?.response?.postgres_changes || []).map(c => c.id);
+            return;
+          }
+          if (msg.event === "postgres_changes" && msg.payload?.data) {
+            const ids = msg.payload.ids || [];
+            if (subIds.length > 0 && !ids.some(id => subIds.includes(id))) return;
+            const { type: evType, record: nr } = msg.payload.data;
+            if ((evType === "INSERT" || evType === "UPDATE") && nr?.student_id === attModal.id) {
+              setAttRecords(prev => {
+                const idx = prev.findIndex(r => r.date === nr.date);
+                const updated = { date: nr.date, check_in: nr.check_in, check_out: nr.check_out, status: nr.status };
+                if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next; }
+                return [...prev, updated].sort((a, b) => a.date.localeCompare(b.date));
+              });
+            } else if (evType === "DELETE" && msg.payload.data?.old_record?.student_id === attModal.id) {
+              setAttRecords(prev => prev.filter(r => r.date !== msg.payload.data.old_record?.date));
+            }
+          }
+        } catch {}
+      };
+      ws.onerror = () => {};
+      ws.onclose = (ev) => {
+        clearInterval(heartbeatId);
+        heartbeatId = null;
+        if (!intentionallyClosed) { setTimeout(connect, retryDelay); retryDelay = Math.min(retryDelay * 2, 30000); }
+      };
+    };
+    connect();
+    return () => {
+      intentionallyClosed = true;
+      clearInterval(heartbeatId);
+      heartbeatId = null;
+      currentWs?.close();
+    };
+  }, [attModal]);
+
   const filtered = useMemo(() => students.filter(s => {
     if(cFilter && s.cid!==cFilter) return false;
     if(riskOnly && s.rate>=80) return false;
@@ -1877,6 +1980,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                     {h:"취약계층",        align:"center"},
                     {h:"면접",            align:"center"},
                     {h:"출석률",          align:"center"},
+                    {h:"출결조회",        align:"center"},
                     {h:"",               align:"center"},
                   ].map(({h,align})=>(
                     <th key={h} style={{ padding:"10px 12px",
@@ -2009,6 +2113,16 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         </div>
                       </td>
 
+                      {/* 출결 조회 */}
+                      <td style={{ padding:"11px 12px", textAlign:"center" }}>
+                        <button onClick={()=>setAttModal(s)} title="출결 상세 조회" style={{
+                          padding:"4px 8px", borderRadius:6, border:`1px solid ${T.bd}`,
+                          background:T.s2, color:"#2563EB", cursor:"pointer",
+                          fontSize:11, fontWeight:600, whiteSpace:"nowrap" }}>
+                          📋 상세
+                        </button>
+                      </td>
+
                       {/* 수정·삭제 */}
                       <td style={{ padding:"11px 12px", textAlign:"center" }}>
                         <div style={{ display:"flex", gap:4, justifyContent:"center" }}>
@@ -2038,6 +2152,127 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
           </Card>
         </>
       )}
+
+      {/* ── 출결 상세 모달 ── */}
+      {attModal && (() => {
+        const modalCourse = courses.find(x => x.id === attModal.cid);
+        const STATUS_LABEL = { O:"출석", A:"결석", L:"지각", U:"미확인" };
+        const STATUS_COLOR = { O:T.ok, A:T.danger, L:T.warn, U:T.mu };
+        const STATUS_BG    = { O:"#ECFDF5", A:"#FEF2F2", L:"#FFFBEB", U:T.s2 };
+        return (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", zIndex:999,
+            display:"flex", alignItems:"center", justifyContent:"center" }}
+            onClick={e=>{ if(e.target===e.currentTarget) setAttModal(null); }}>
+            <div style={{ background:T.s, borderRadius:16, width:620, maxWidth:"96vw",
+              maxHeight:"92vh", display:"flex", flexDirection:"column",
+              boxShadow:"0 24px 64px rgba(0,0,0,.28)", overflow:"hidden", animation:"fadeUp .2s ease" }}>
+
+              {/* 모달 헤더 */}
+              <div style={{ background:`linear-gradient(135deg,#1D4ED8,#2563EB)`,
+                padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+                <div>
+                  <div style={{ fontSize:15, fontWeight:800, color:"#fff" }}>
+                    📋 출결 상세 현황 — {attModal.name}
+                  </div>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,.65)", marginTop:2 }}>
+                    {modalCourse?.name || "-"} · 전체 출결 기록 (실시간)
+                  </div>
+                </div>
+                <button onClick={()=>setAttModal(null)} style={{ width:28, height:28, borderRadius:6, border:"none",
+                  background:"rgba(255,255,255,.18)", color:"#fff", cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <Icon n="x" s={14}/>
+                </button>
+              </div>
+
+              {/* 요약 통계 */}
+              {!attLoading && attRecords.length > 0 && (() => {
+                const cnt = { O:0, A:0, L:0, U:0 };
+                attRecords.forEach(r => { cnt[r.status || "U"] = (cnt[r.status || "U"] || 0) + 1; });
+                return (
+                  <div style={{ display:"flex", gap:0, borderBottom:`1px solid ${T.bd}`, flexShrink:0 }}>
+                    {[
+                      { key:"O", label:"출석", icon:"✅" },
+                      { key:"A", label:"결석", icon:"❌" },
+                      { key:"L", label:"지각", icon:"⏰" },
+                      { key:"U", label:"미확인", icon:"❓" },
+                    ].map(({key,label,icon}) => (
+                      <div key={key} style={{ flex:1, padding:"12px 0", textAlign:"center",
+                        borderRight:`1px solid ${T.bd}`, background:STATUS_BG[key] }}>
+                        <div style={{ fontSize:18 }}>{icon}</div>
+                        <div style={{ fontSize:16, fontWeight:800, color:STATUS_COLOR[key] }}>{cnt[key]||0}</div>
+                        <div style={{ fontSize:10, color:T.mu }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* 테이블 */}
+              <div style={{ flex:1, overflowY:"auto" }}>
+                {attLoading ? (
+                  <div style={{ padding:40, textAlign:"center", color:T.mu, fontSize:13 }}>
+                    <div style={{ fontSize:24, marginBottom:8 }}>⏳</div>
+                    출결 데이터를 불러오는 중...
+                  </div>
+                ) : attRecords.length === 0 ? (
+                  <div style={{ padding:40, textAlign:"center", color:T.mu, fontSize:13 }}>
+                    <div style={{ fontSize:24, marginBottom:8 }}>📭</div>
+                    출결 기록이 없습니다
+                  </div>
+                ) : (
+                  <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                    <thead>
+                      <tr style={{ background:T.s2, position:"sticky", top:0, zIndex:1 }}>
+                        {["일자","입실시간","퇴실시간","출결상태"].map(h => (
+                          <th key={h} style={{ padding:"10px 14px", fontSize:11, color:T.mu,
+                            fontWeight:700, textAlign:"center", borderBottom:`1px solid ${T.bd}` }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attRecords.map((r, i) => {
+                        const st = r.status || "U";
+                        return (
+                          <tr key={r.date || i} style={{ borderBottom:`1px solid ${T.bd}` }}>
+                            <td style={{ padding:"10px 14px", textAlign:"center", fontSize:12,
+                              fontWeight:600, color:T.tx }}>{r.date}</td>
+                            <td style={{ padding:"10px 14px", textAlign:"center", fontSize:12,
+                              color: r.check_in ? T.ok : T.mu }}>
+                              {r.check_in ? r.check_in.slice(0,5) : "—"}
+                            </td>
+                            <td style={{ padding:"10px 14px", textAlign:"center", fontSize:12,
+                              color: r.check_out ? T.p : T.mu }}>
+                              {r.check_out ? r.check_out.slice(0,5) : "—"}
+                            </td>
+                            <td style={{ padding:"10px 14px", textAlign:"center" }}>
+                              <span style={{ padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:700,
+                                background:STATUS_BG[st], color:STATUS_COLOR[st] }}>
+                                {STATUS_LABEL[st]||st}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* 하단 */}
+              <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`, flexShrink:0,
+                display:"flex", justifyContent:"space-between", alignItems:"center", background:T.s2 }}>
+                <span style={{ fontSize:11, color:T.mu }}>
+                  총 <b style={{color:T.tx}}>{attRecords.length}</b>일 기록
+                  {" · "}
+                  <span style={{ color:T.ok, fontSize:10 }}>● Supabase Realtime 실시간 반영</span>
+                </span>
+                <Btn variant="ghost" size="sm" onClick={()=>setAttModal(null)}>닫기</Btn>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -2055,6 +2290,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
   const [simRunning, setSimRunning] = useState(false);
   const [manualAtt, setManualAtt]   = useState({});
   const simRef = useRef(null);
+  const qrContainerRef = useRef(null); // QR 캔버스 컨테이너 ref (다운로드·새탭 용)
 
   // ── 시간 설정 — 과정별 schedTimeFrom/To에서 자동 로드, 수동 수정 가능 ──
   const parseHM = (str, defH, defM) => {
@@ -2134,6 +2370,73 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
   const qrData    = `${pageBase}?mode=checkin&cid=${course.id}&date=${date}&type=${qrType}&t=${encodeURIComponent(qrToken)}`;
   const qrColor   = qrType === "in" ? "#2563EB" : "#9A3412";
   // qrUrl 제거 — QRCanvas 컴포넌트로 로컬 생성 (Tracking Prevention 대응)
+
+  // QR 캔버스 → DataURL 헬퍼
+  const getQrDataUrl = () => {
+    const canvas = qrContainerRef.current?.querySelector("canvas");
+    if (!canvas) return null;
+    return canvas.toDataURL("image/png");
+  };
+
+  // QR 이미지 다운로드
+  const downloadQrImage = () => {
+    const dataUrl = getQrDataUrl();
+    if (!dataUrl) { alert("QR 코드를 먼저 생성해주세요."); return; }
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `QR_${course.code}_${date}_${qrType}.png`;
+    a.click();
+  };
+
+  // QR 새 탭으로 크게 보기
+  const openQrBigView = () => {
+    const dataUrl = getQrDataUrl();
+    if (!dataUrl) { alert("QR 코드를 먼저 생성해주세요."); return; }
+    const labelColor = qrType === "in" ? "#2563EB" : "#9A3412";
+    const labelBg    = qrType === "in" ? "#EFF6FF" : "#FFF7ED";
+    const labelTxt   = qrType === "in" ? "📥 입실 QR" : "📤 퇴실 QR";
+    const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
+<title>QR 출석 — ${course.name}</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Pretendard','맑은 고딕',sans-serif; background:#0F172A;
+    min-height:100vh; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:28px; padding:32px; }
+  .badge { padding:10px 28px; border-radius:32px; font-size:18px; font-weight:800;
+    background:${labelBg}; color:${labelColor}; letter-spacing:2px; }
+  .course-name { font-size:clamp(22px,3vw,36px); font-weight:900; color:#F1F5F9;
+    text-align:center; letter-spacing:1px; }
+  .qr-wrap { background:#fff; border-radius:20px; padding:24px;
+    box-shadow:0 0 60px rgba(${qrType==="in"?"37,99,235":"154,52,18"},.5); }
+  .qr-wrap img { display:block; width:min(72vw,540px); height:min(72vw,540px); border-radius:8px; }
+  .date-row { font-size:18px; font-weight:600; color:#94A3B8; }
+  #clock { font-size:clamp(28px,4.5vw,56px); font-weight:900; color:#F8FAFC;
+    letter-spacing:4px; font-variant-numeric:tabular-nums; }
+  .hint { font-size:14px; color:#64748B; text-align:center; }
+</style></head>
+<body>
+  <div class="badge">${labelTxt}</div>
+  <div class="course-name">${course.name}</div>
+  <div class="qr-wrap"><img src="${dataUrl}" alt="QR Code"/></div>
+  <div class="date-row">📅 ${date}</div>
+  <div id="clock"></div>
+  <div class="hint">📱 스마트폰으로 QR 코드를 스캔하여 출석을 등록하세요</div>
+<script>
+  function tick() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    const s = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('clock').textContent = h+':'+m+':'+s;
+  }
+  tick();
+  setInterval(tick, 1000);
+<\/script>
+</body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
 
   // ── 출결 기록 (입실/퇴실 분리) ──
   const [records, setRecords] = useState({}); // { studentId: { in:{time,status}, out:{time} } }
@@ -2594,7 +2897,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             </div>
 
             {/* QR 이미지 — 로컬 canvas 렌더링 (Tracking Prevention 대응) */}
-            <div style={{ position:"relative", display:"inline-block", marginBottom:12 }}>
+            <div ref={qrContainerRef} style={{ position:"relative", display:"inline-block", marginBottom:12 }}>
               <div style={{ border:`2px solid ${qrType==="in"?"#2563EB":T.pl}`, borderRadius:10, overflow:"hidden", lineHeight:0 }}>
                 <QRCanvas data={qrData} size={200} color={qrColor} bgColor="#ffffff" />
               </div>
@@ -2604,6 +2907,26 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                   background:`linear-gradient(90deg,transparent,${qrType==="in"?"#2563EB":T.pl},transparent)`,
                   animation:"scanLine 2s linear infinite", opacity:.7 }}/>
               </div>
+            </div>
+
+            {/* 새 탭 / 다운로드 버튼 */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:10 }}>
+              <button onClick={openQrBigView} title="대형 모니터에 QR을 크게 표시" style={{
+                padding:"8px 4px", borderRadius:8, border:`1.5px solid #2563EB`,
+                background:"#EFF6FF", color:"#2563EB", cursor:"pointer",
+                fontSize:10, fontWeight:700, display:"flex", flexDirection:"column",
+                alignItems:"center", gap:2 }}>
+                <span style={{ fontSize:15 }}>🖥️</span>
+                새 탭으로 크게 보기
+              </button>
+              <button onClick={downloadQrImage} title="QR 이미지를 PNG로 저장" style={{
+                padding:"8px 4px", borderRadius:8, border:`1.5px solid ${T.p}`,
+                background:T.pbg, color:T.p, cursor:"pointer",
+                fontSize:10, fontWeight:700, display:"flex", flexDirection:"column",
+                alignItems:"center", gap:2 }}>
+                <span style={{ fontSize:15 }}>📥</span>
+                QR 이미지 다운로드
+              </button>
             </div>
 
             {/* 시간 정보 */}
@@ -3133,7 +3456,7 @@ const printCertificate = (s, c, certNo, issueDate) => {
 };
 
 /* ── 수강증명서 [별지 제83호 서식] — 직업능력개발 훈련 등 수강증명서 ── */
-const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
+const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate = null, certEndDate = null) => {
   // ② 주민등록번호 조합
   const b = (s.birth||"").replace(/-/g,"");
   const front6 = b.length >= 8 ? b.slice(2,4)+b.slice(4,6)+b.slice(6,8) : "";
@@ -3141,10 +3464,14 @@ const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
   const idBack  = s.idBack || "　　　　　　　";
   const idNum   = `${idFront} - ${idBack}`;
 
-  // ⑥ 증명대상기간
+  // ⑥ 증명대상기간 — 실제 참여 기간으로 동적 계산 (certStartDate/certEndDate 우선)
   const fmtD = d => d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, dd) =>
     `${y}년 ${String(+m)}월 ${String(+dd)}일`) : "　　　　";
-  const certPeriod = `${fmtD(c.dateFrom||"")} ~ ${fmtD(c.dateTo||"")}`;
+  const todayStr = new Date().toISOString().slice(0,10);
+  const computedFrom = certStartDate || c.dateFrom || "";
+  const computedTo   = certEndDate   ||
+    (c.dateTo && todayStr < c.dateTo ? todayStr : c.dateTo) || todayStr;
+  const certPeriod = `${fmtD(computedFrom)} ~ ${fmtD(computedTo)}`;
 
   // ⑦ 수강기간 세부 (요일·시간)
   const schedLine = (() => {
@@ -3177,40 +3504,43 @@ const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Pretendard','맑은 고딕','Malgun Gothic',sans-serif;background:#fff;
-       display:flex;align-items:flex-start;justify-content:center;padding:20px 0;}
-  .doc{width:210mm;min-height:297mm;padding:12mm 16mm 10mm;background:#fff;display:flex;flex-direction:column;}
+  body{font-family:'Pretendard','맑은 고딕','Malgun Gothic',sans-serif;background:#f4f4f4;
+       display:flex;align-items:flex-start;justify-content:center;padding:24px 0;}
+  .doc{width:210mm;min-height:297mm;padding:13mm 17mm 11mm;background:#fff;display:flex;flex-direction:column;
+       box-shadow:0 4px 32px rgba(0,0,0,.13);}
   /* 서식 번호 */
-  .form-no{text-align:right;font-size:8.5pt;color:#333;margin-bottom:3px;}
+  .form-no{text-align:right;font-size:8pt;color:#555;margin-bottom:4px;letter-spacing:.5px;}
   /* 제목 */
-  .title-box{border:2px solid #000;text-align:center;padding:8px 0;margin-bottom:6px;}
-  .title-box h1{font-size:16pt;font-weight:900;letter-spacing:8px;color:#000;}
+  .title-box{border:2.5px solid #111;text-align:center;padding:10px 0;margin-bottom:7px;}
+  .title-box h1{font-size:17pt;font-weight:900;letter-spacing:10px;color:#111;}
   /* 메인 테이블 */
   table.main{width:100%;border-collapse:collapse;font-size:9pt;}
-  table.main td{border:1px solid #333;padding:5px 7px;vertical-align:middle;line-height:1.6;}
-  .slbl{background:#f0f0f0;font-weight:800;text-align:center;writing-mode:vertical-rl;
-    text-orientation:upright;letter-spacing:3px;font-size:8.5pt;width:24px;padding:4px 2px;}
-  .fno{background:#f5f5f5;font-weight:700;font-size:9pt;text-align:center;
-    width:20px;padding:4px 2px;color:#222;}
-  .flbl{background:#f5f5f5;font-weight:700;font-size:9pt;white-space:nowrap;padding:5px 8px;}
-  .fval{font-size:9.5pt;padding:5px 8px;}
-  .hd{background:#f0f0f0;font-weight:700;text-align:center;}
-  .col-hd{background:#ececec;font-weight:700;font-size:8pt;text-align:center;padding:3px 5px;white-space:nowrap;letter-spacing:2px;}
+  table.main td{border:1px solid #444;padding:5px 8px;vertical-align:middle;line-height:1.7;}
+  .slbl{background:#e8e8e8;font-weight:900;text-align:center;writing-mode:vertical-rl;
+    text-orientation:upright;letter-spacing:3px;font-size:8pt;width:26px;padding:5px 2px;color:#111;}
+  .fno{background:#f0f0f0;font-weight:800;font-size:9pt;text-align:center;
+    width:22px;padding:5px 2px;color:#111;border-right:1px solid #aaa;}
+  .flbl{background:#f0f0f0;font-weight:700;font-size:9pt;white-space:nowrap;padding:5px 10px;
+    border-right:1px solid #ccc;}
+  .fval{font-size:9.5pt;padding:5px 10px;}
+  .hd{background:#e8e8e8;font-weight:800;text-align:center;}
+  .col-hd{background:#e4e4e4;font-weight:800;font-size:8pt;text-align:center;
+    padding:4px 6px;white-space:nowrap;letter-spacing:1.5px;color:#222;}
   /* 서명 영역 */
-  .sign-area{margin-top:8px;text-align:center;}
-  .sign-date{font-size:11pt;font-weight:700;letter-spacing:2px;margin-bottom:6px;}
-  .sign-row{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:6px;}
-  .sign-org{font-size:12pt;font-weight:900;letter-spacing:3px;}
-  .stamp{width:44px;height:44px;border:2px solid #333;border-radius:50%;
-    display:inline-flex;align-items:center;justify-content:center;font-size:11pt;font-weight:900;}
-  .sign-to{font-size:9.5pt;margin-top:6px;color:#333;}
+  .sign-area{margin-top:10px;text-align:center;}
+  .sign-date{font-size:11.5pt;font-weight:700;letter-spacing:2px;margin-bottom:8px;color:#111;}
+  .sign-row{display:flex;justify-content:center;align-items:center;gap:16px;margin-top:6px;}
+  .sign-org{font-size:12.5pt;font-weight:900;letter-spacing:3px;color:#111;}
+  .stamp{width:48px;height:48px;border:2.5px solid #333;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;font-size:12pt;font-weight:900;color:#333;}
+  .sign-to{font-size:9.5pt;margin-top:8px;color:#444;}
   /* 인쇄 버튼 */
   .print-btn{position:fixed;bottom:24px;right:24px;background:#EA580C;color:#fff;
     border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;
     cursor:pointer;box-shadow:0 4px 20px rgba(234,88,12,.4);font-family:inherit;z-index:99;}
   @media print{
-    body{padding:0;}
-    .doc{padding:10mm 14mm 8mm;}
+    body{padding:0;background:#fff;}
+    .doc{padding:11mm 15mm 9mm;box-shadow:none;}
     .print-btn{display:none;}
     @page{size:A4 portrait;margin:0;}
   }
@@ -3426,9 +3756,120 @@ const printAttendCert = (s, c, certNo, issueDate, absences = []) => {
   w.document.write(html); w.document.close();
 };
 
+/* ── 참여확인서 — 2026년 [과정명] 최종 선발 참여자 확인서 ── */
+const printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
+  const birthFmt = s.birth
+    ? s.birth.replace(/(\d{4})-(\d{2})-(\d{2})/, "$1년 $2월 $3일")
+    : "　　　　년　　월　　일";
+  const fmtD = d => d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, dd) =>
+    `${y}년 ${String(+m)}월 ${String(+dd)}일`) : "　　　　";
+  const eduPeriod = (c.dateFrom && c.dateTo)
+    ? `${fmtD(c.dateFrom)} ~ ${fmtD(c.dateTo)}`
+    : "　　　　　　";
+  const loc = roomName || "미배정";
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
+<title>참여확인서 - ${s.name}</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Pretendard','맑은 고딕','Malgun Gothic',sans-serif;background:#f4f4f4;
+       display:flex;align-items:flex-start;justify-content:center;padding:24px 0;}
+  .doc{width:210mm;min-height:297mm;padding:20mm 22mm 18mm;background:#fff;display:flex;flex-direction:column;
+       box-shadow:0 4px 32px rgba(0,0,0,.13);}
+  .doc-no{font-size:9pt;color:#555;text-align:right;margin-bottom:4px;letter-spacing:.5px;}
+  .title-wrap{text-align:center;margin-bottom:32px;}
+  .title{font-size:30pt;font-weight:900;letter-spacing:16px;color:#111;
+    border-bottom:3px double #111;display:inline-block;padding-bottom:8px;}
+  table.info{width:100%;border-collapse:collapse;font-size:10pt;margin-bottom:20px;}
+  table.info td{border:1px solid #555;padding:7px 12px;vertical-align:middle;line-height:1.7;}
+  table.info .lbl{background:#efefef;font-weight:800;white-space:nowrap;width:96px;color:#222;}
+  .body-wrap{margin:22px 0 30px;padding:22px 24px;border:2px solid #333;border-radius:4px;
+    font-size:12pt;line-height:2.0;color:#111;text-align:center;background:#fafafa;}
+  .part-table{width:100%;border-collapse:collapse;font-size:10pt;margin-top:20px;}
+  .part-table th,.part-table td{border:1px solid #444;padding:7px 12px;text-align:center;}
+  .part-table th{background:#e8e8e8;font-weight:800;color:#111;}
+  .part-table td.chk{font-size:14pt;color:#059669;}
+  .sign-wrap{margin-top:auto;padding-top:28px;text-align:center;}
+  .sign-date{font-size:12pt;font-weight:700;letter-spacing:2px;margin-bottom:12px;color:#111;}
+  .sign-line{display:inline-flex;align-items:center;gap:18px;}
+  .sign-title{font-size:14pt;font-weight:900;color:#111;letter-spacing:3px;}
+  .stamp-box{width:54px;height:54px;border:2.5px solid #333;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;
+    color:#333;font-size:13pt;font-weight:900;}
+  .print-btn{position:fixed;bottom:24px;right:24px;background:#EA580C;color:#fff;
+    border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;
+    cursor:pointer;box-shadow:0 4px 20px rgba(234,88,12,.4);font-family:inherit;z-index:99;}
+  @media print{
+    body{padding:0;background:#fff;}
+    .doc{padding:18mm 20mm 16mm;box-shadow:none;}
+    .print-btn{display:none;}
+    @page{size:A4 portrait;margin:0;}
+  }
+</style></head>
+<body><div class="doc">
+  <div class="doc-no">2026-북부-참여-${certNo}호</div>
+  <div class="title-wrap"><div class="title">참 여 확 인 서</div></div>
+
+  <table class="info">
+    <tr>
+      <td class="lbl">과 정 명</td>
+      <td colspan="3">${c.name}</td>
+    </tr>
+    <tr>
+      <td class="lbl">교육기간</td>
+      <td>${eduPeriod}</td>
+      <td class="lbl">교육시간</td>
+      <td>${c.hours ? c.hours + '시간' : '　　시간'}</td>
+    </tr>
+    <tr>
+      <td class="lbl">교육장소</td>
+      <td colspan="3">${loc}</td>
+    </tr>
+  </table>
+
+  <div class="body-wrap">
+    위 사람은 2026년 <b>「${c.name}」</b>에<br/>
+    최종 선발되어 참여 중임을 확인합니다.
+  </div>
+
+  <table class="part-table">
+    <thead>
+      <tr>
+        <th>성　　명</th>
+        <th>생년월일</th>
+        <th>교육과정 참여여부</th>
+        <th>서　　명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="font-size:12pt;font-weight:800;">${s.name}</td>
+        <td>${birthFmt}</td>
+        <td class="chk">✔ 참여 중</td>
+        <td style="min-width:80px;height:36px;">&nbsp;</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="sign-wrap">
+    <div class="sign-date">${issueDate}</div>
+    <div class="sign-line">
+      <div class="sign-title">경기도일자리재단 대표이사</div>
+      <div class="stamp-box">(인)</div>
+    </div>
+  </div>
+</div>
+<button class="print-btn" onclick="window.print()">🖨️ PDF 저장 / 인쇄</button>
+</body></html>`;
+
+  const w = window.open("", "_blank", "width=900,height=1200");
+  if (w) { w.document.write(html); w.document.close(); }
+};
+
 const CertMgmt = ({ students, courses }) => {
   const [course, setCourse]       = useState(courses[3] || courses[0]);
-  const [docType, setDocType]     = useState("cert");   // "cert" | "attend"
+  const [docType, setDocType]     = useState("cert");   // "cert" | "attend" | "parti"
   const [issued, setIssued]       = useState({});
   const [issueDate, setIssueDate] = useState("2026년　　월　　일");
   const [customDate, setCustomDate] = useState("");
@@ -3445,7 +3886,7 @@ const CertMgmt = ({ students, courses }) => {
 
   if (!course) return null;
   // 수료증: 출석률 80% 이상
-  // 수강증명서: 해당 과정 수강자 전체 (출석률 무관 — 등록 자체가 기준)
+  // 수강증명서/참여확인서: 해당 과정 수강자 전체 (출석률 무관 — 등록 자체가 기준)
   const certEligible   = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>=80);
   const attendEligible = students.filter(s => Number(s.cid)===Number(course.id));
   const eligible = docType==="cert" ? certEligible : attendEligible;
@@ -3462,23 +3903,51 @@ const CertMgmt = ({ students, courses }) => {
     setIssued(p => ({ ...p, [s.id+docType]: { no, date: issueDate } }));
     if(docType==="cert") {
       printCertificate(s, course, no, issueDate);
-    } else {
-      // 수강증명서(별지 83호): 해당 학생의 결석 기록 로드
-      let studentAbsences = [];
+    } else if (docType === "parti") {
+      // 참여확인서: 강의실 정보 조회 후 출력
+      let roomName = "";
       try {
-        const { data } = await sbGet("attendance",
-          `select=date,status,reason,absence_type&student_id=eq.${s.id}&course_id=eq.${course.id}&status=eq.A`);
-        if (data) {
-          studentAbsences = data.map(r => ({
+        const { data: bookData } = await sbGet("room_bookings",
+          `select=room_id&course_id=eq.${course.id}&limit=1`);
+        if (bookData && bookData.length > 0) {
+          const { data: roomData } = await sbGet("rooms",
+            `select=name&id=eq.${bookData[0].room_id}&limit=1`);
+          if (roomData && roomData.length > 0) roomName = roomData[0].name;
+        }
+      } catch(e) { console.warn("강의실 조회 오류:", e); }
+      printParticipationCert(s, course, no, issueDate, roomName);
+    } else {
+      // 수강증명서(별지 83호): 결석 기록 + 최초 출석일 로드
+      let studentAbsences = [];
+      let certStartDate = null;
+      let certEndDate   = null;
+      try {
+        const [absRes, firstRes] = await Promise.all([
+          sbGet("attendance",
+            `select=date,status,reason,absence_type&student_id=eq.${s.id}&course_id=eq.${course.id}&status=eq.A`),
+          sbGet("attendance",
+            `select=date&student_id=eq.${s.id}&course_id=eq.${course.id}&status=in.(O,L)&order=date.asc&limit=1`),
+        ]);
+        if (absRes.data) {
+          studentAbsences = absRes.data.map(r => ({
             date: r.date,
             absenceType: r.absence_type || "personal",
             reason: r.reason || "",
           }));
         }
+        // 최초 출석일: 훈련생이 실제로 참여한 첫날
+        if (firstRes.data && firstRes.data.length > 0) {
+          certStartDate = firstRes.data[0].date;
+        } else {
+          certStartDate = course.dateFrom || null;
+        }
+        // 종료일: 오늘 vs 과정 종료일 중 빠른 것
+        const todayISO = new Date().toISOString().slice(0,10);
+        certEndDate = (course.dateTo && todayISO < course.dateTo) ? todayISO : (course.dateTo || todayISO);
       } catch(e) {
         console.warn("출결 데이터 로드 오류:", e);
       }
-      printAttendCert(s, course, no, issueDate, studentAbsences);
+      printAttendCert(s, course, no, issueDate, studentAbsences, certStartDate, certEndDate);
     }
   };
 
@@ -3498,10 +3967,11 @@ const CertMgmt = ({ students, courses }) => {
       />
 
       {/* 문서 종류 선택 */}
-      <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         {[
           {id:"cert",   label:"📋 수 료 증",   sub:"출석률 80% 이상"},
           {id:"attend", label:"📄 수강증명서", sub:"수강자 전체"},
+          {id:"parti",  label:"📃 참여확인서", sub:"최종 선발 참여자"},
         ].map(({id,label,sub})=>(
           <button key={id} onClick={()=>setDocType(id)} style={{
             padding:"10px 20px", borderRadius:10, border:"none", cursor:"pointer",
@@ -3551,7 +4021,7 @@ const CertMgmt = ({ students, courses }) => {
           display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div>
             <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>
-              {docType==="cert" ? "수료 대상자" : "수강 대상자"}
+              {docType==="cert" ? "수료 대상자" : docType==="parti" ? "참여확인서 대상자" : "수강 대상자"}
             </span>
             <span style={{ fontSize:12, color:T.mu, marginLeft:8 }}>
               {eligible.length}명
@@ -3625,7 +4095,7 @@ const CertMgmt = ({ students, courses }) => {
                   </td>
                   <td style={{ padding:"12px 14px", textAlign:"center", fontSize:11, color:T.mu, fontFamily:"monospace" }}>
                     {cert
-                      ? `2026-북부-${docType==="cert"?"수료":"수강"}-${no}호`
+                      ? `2026-북부-${docType==="cert"?"수료":docType==="parti"?"참여":"수강"}-${no}호`
                       : <span style={{color:T.bd}}>미발급</span>}
                   </td>
                   <td style={{ padding:"12px 14px", textAlign:"center" }}>

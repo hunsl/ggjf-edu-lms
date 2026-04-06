@@ -3588,6 +3588,8 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   .editable{outline:none;border:1px dashed #a0bfdf !important;border-radius:0;}
   .editable:hover{background:#f0f7ff;cursor:text;}
   .editable:focus{background:#fef3c7;border-color:#f59e0b !important;outline:none;}
+  /* ⑧ 구분 셀 (㉡ 사유/일자 개별 셀) */
+  .subcell{padding:5px 8px;font-size:8.5pt;border-left:1px solid #bbb;}
   /* 서명 영역 */
   .sign-area{margin-top:10px;text-align:center;}
   .sign-date{font-size:11.5pt;font-weight:700;letter-spacing:2px;margin-bottom:8px;color:#111;}
@@ -3693,7 +3695,7 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
       <!-- 행5: ㉠ 사유 -->
       <tr>
         <td class="col-hd" style="font-size:8.5pt;white-space:nowrap;">사&nbsp;유</td>
-        <td colspan="3" class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsReasons(excused)||'　'}</td>
+        <td colspan="3" class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsReasons(excused)||'해당없음'}</td>
       </tr>
       <!-- 행6: ㉠ 일자 -->
       <tr>
@@ -3711,15 +3713,15 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
       <tr>
         <td class="col-hd" style="font-size:8.5pt;white-space:nowrap;">사&nbsp;유</td>
         <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsReasons(personal)||'개인사유'}</td>
-        <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;border-left:1px solid #bbb;"></td>
-        <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;border-left:1px solid #bbb;">개인사유</td>
+        <td class="editable subcell" contenteditable="true"></td>
+        <td class="editable subcell" contenteditable="true">개인사유</td>
       </tr>
       <!-- 행9: ㉡ 일자 -->
       <tr>
         <td class="col-hd" style="font-size:8.5pt;white-space:nowrap;">일&nbsp;자</td>
         <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsDates(personal)}</td>
-        <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;border-left:1px solid #bbb;">-</td>
-        <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;border-left:1px solid #bbb;">-</td>
+        <td class="editable subcell" contenteditable="true">-</td>
+        <td class="editable subcell" contenteditable="true">-</td>
       </tr>
 
       <!-- ⑨ 취업 사실 — 수강증명명세 rowspan 종료 후, 전체 7열 사용 -->

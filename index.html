@@ -2449,6 +2449,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
   // ── Supabase에서 출결 데이터 로드 ──
   useEffect(() => {
     if (!course || !date) return;
+    setManualAtt({}); // 날짜·과정 변경 시 이전 수동입력 초기화
     const loadAttendance = async () => {
       try {
         const courseStudentIds = courseStudents.map(s => s.id);
@@ -3993,6 +3994,34 @@ const CertMgmt = ({ students, courses }) => {
   // 발급이력: localStorage에서 초기화, 이후 useState로 관리
   const [certHistory, setCertHistory] = useState(loadCertHistory);
 
+  // 마운트 시 Supabase에서 이력 로드 (여러 기기/사용자 간 공유)
+  useEffect(() => {
+    const loadFromDB = async () => {
+      try {
+        const { data, error } = await sbGet("cert_issuances", "select=*&order=issued_at.desc&limit=2000");
+        if (!error && data && data.length > 0) {
+          const hist = data.map(r => ({
+            id:          r.id,
+            studentId:   r.student_id,
+            studentName: r.student_name,
+            courseId:    r.course_id,
+            courseName:  r.course_name,
+            docType:     r.doc_type,
+            certNo:      r.cert_no,
+            fullNo:      r.full_no,
+            issueDate:   r.issue_date,
+            issuedAt:    r.issued_at,
+          }));
+          setCertHistory(hist);
+          saveCertHistory(hist); // localStorage 동기화
+        }
+      } catch(e) {
+        console.warn("발급이력 DB 로드 오류:", e);
+      }
+    };
+    loadFromDB();
+  }, []);
+
   // certHistory → issued 맵 (key: studentId+docType+courseId)
   const issued = useMemo(() => {
     const map = {};
@@ -4068,15 +4097,39 @@ const CertMgmt = ({ students, courses }) => {
     return [record, ...histRef];
   };
 
+  // 발급이력 1건을 Supabase에 저장하는 헬퍼
+  const saveCertIssuanceToDB = async (rec) => {
+    try {
+      await sbInsert("cert_issuances", {
+        id:           rec.id,
+        student_id:   rec.studentId,
+        student_name: rec.studentName,
+        course_id:    rec.courseId,
+        course_name:  rec.courseName,
+        doc_type:     rec.docType,
+        cert_no:      rec.certNo,
+        full_no:      rec.fullNo,
+        issue_date:   rec.issueDate,
+        issued_at:    rec.issuedAt,
+      });
+    } catch(e) {
+      console.warn("발급이력 DB 저장 오류:", e);
+    }
+  };
+
   const handleIssue = async (s, histOverride = null) => {
     const hist = histOverride || certHistory;
     const no = getCertNo(s, hist);
     const nextHist = recordIssue(s, no, hist);
 
+    // 신규 발급인 경우에만 Supabase에 저장
+    const isNewRecord = nextHist.length > hist.length;
+
     if (!histOverride) {
       // 단건 발급: 상태+localStorage 즉시 갱신
       setCertHistory(nextHist);
       saveCertHistory(nextHist);
+      if (isNewRecord) saveCertIssuanceToDB(nextHist[0]);
     }
 
     if (docType==="cert") {
@@ -4133,6 +4186,7 @@ const CertMgmt = ({ students, courses }) => {
 
   const handleIssueAll = async () => {
     // 전체 발급: 번호 중복 없이 순차 부여하기 위해 이력을 로컬에서 누적
+    const prevLen = certHistory.length;
     let runningHist = [...certHistory];
     for (const s of eligible) {
       const no = getCertNo(s, runningHist);
@@ -4141,6 +4195,12 @@ const CertMgmt = ({ students, courses }) => {
     }
     setCertHistory(runningHist);
     saveCertHistory(runningHist);
+    // 전체 발급에서 새로 추가된 이력만 Supabase에 일괄 저장
+    const newCount = runningHist.length - prevLen;
+    const newRecords = newCount > 0 ? runningHist.slice(0, newCount) : [];
+    for (const rec of newRecords) {
+      await saveCertIssuanceToDB(rec);
+    }
   };
 
   const fmtDate = raw => {

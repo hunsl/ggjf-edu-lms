@@ -244,6 +244,7 @@ const toInstructor = r => r ? ({
   cids: r.cids||[],
   note: r.note||"",
   hourlyRate: r.hourly_rate||r.hourlyRate||0,
+  customDates: r.custom_dates||r.customDates||{},
 }) : null;
 
 const fromInstructor = i => ({
@@ -258,6 +259,7 @@ const fromInstructor = i => ({
   cids: i.cids||[],
   note: i.note||"",
   hourly_rate: i.hourlyRate||0,
+  custom_dates: i.customDates||{},
 });
 
 const toRoom = r => r ? ({
@@ -5176,12 +5178,17 @@ const SEED_INSTRUCTORS = [
 ];
 
 const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
-  const empty = { name:"", type:"주강사", category:"경기도 강사", subject:"", phone:"", email:"", career:"", cert:"", cids:[], note:"", hourlyRate:0 };
-  const [form, setForm] = useState(inst ? {...inst, cids:inst.cids||[]} : empty);
+  const empty = { name:"", type:"주강사", category:"경기도 강사", subject:"", phone:"", email:"", career:"", cert:"", cids:[], note:"", hourlyRate:0, customDates:{} };
+  const [form, setForm] = useState(inst ? {...inst, cids:inst.cids||[], customDates:inst.customDates||{}} : empty);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
-  const toggleCid = id => set("cids", form.cids.includes(id) ? form.cids.filter(x=>x!==id) : [...form.cids, id]);
+  const toggleCid = id => {
+    const removing = form.cids.includes(id);
+    const newCids = removing ? form.cids.filter(x=>x!==id) : [...form.cids, id];
+    const newCustomDates = removing ? (() => { const cd = {...(form.customDates||{})}; delete cd[String(id)]; return cd; })() : (form.customDates||{});
+    setForm(p=>({...p, cids: newCids, customDates: newCustomDates}));
+  };
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:999,
@@ -5347,7 +5354,12 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
     const assignedCourses = (inst.cids || []).map(cid => courses.find(c => c.id === cid)).filter(Boolean);
     let totalDays = 0, totalHours = 0;
     const courseDetails = assignedCourses.map(c => {
-      const dates = buildCourseDatesAll(c);
+      const allCourseDates = buildCourseDatesAll(c);
+      // 강사별 커스텀 날짜가 있으면 해당 날짜만 사용
+      const instCustom = inst.customDates && inst.customDates[String(c.id)];
+      const dates = instCustom && instCustom.length > 0
+        ? instCustom.filter(d => allCourseDates.includes(d)).sort()
+        : allCourseDates;
       const hoursPerDay = c.schedTimeFrom && c.schedTimeTo
         ? (() => {
             const [sh, sm] = c.schedTimeFrom.split(":").map(Number);
@@ -5360,7 +5372,8 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
       totalHours += estHours;
       const hasToday = dates.includes(todayStr);
       const nextDate = dates.find(dt => dt > todayStr) || null;
-      return { course: c, dates, hoursPerDay, estDays: dates.length, estHours, hasToday, nextDate };
+      const useCustom = !!(instCustom && instCustom.length > 0);
+      return { course: c, dates, allCourseDates, hoursPerDay, estDays: dates.length, estHours, hasToday, nextDate, useCustom };
     });
     const teachesToday = courseDetails.some(cd => cd.hasToday);
     return { courseDetails, totalDays, totalHours, teachesToday };
@@ -5446,9 +5459,9 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
       const body = fromInstructor(inst);
       let res = await doSave(body);
 
-      if (res.error && (isSchemaErr(res.error, "cids") || isSchemaErr(res.error, "note") || isSchemaErr(res.error, "category") || isSchemaErr(res.error, "hourly_rate"))) {
+      if (res.error && (isSchemaErr(res.error, "cids") || isSchemaErr(res.error, "note") || isSchemaErr(res.error, "category") || isSchemaErr(res.error, "hourly_rate") || isSchemaErr(res.error, "custom_dates"))) {
         console.warn("⚠️ instructors 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload 클릭");
-        const { cids, note, category, hourly_rate, ...fallback } = body;
+        const { cids, note, category, hourly_rate, custom_dates, ...fallback } = body;
         res = await doSave(fallback);
       }
 
@@ -5497,6 +5510,62 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
 
   const typeColors = {"주강사":T.p,"보조강사":T.ok,"외래강사":"#7C3AED","운영요원":T.warn};
   const catColors = {"경기도 강사":"#2563EB","외부 강사":"#9A3412"};
+
+  // ── 강사별 커스텀 날짜 편집 상태 ──
+  const [editingCustomDates, setEditingCustomDates] = useState(null); // {instId, courseId}
+  const [tempCustomDates, setTempCustomDates] = useState([]); // 편집 중인 날짜 배열
+
+  // ── 커스텀 날짜 편집 시작 ──
+  const startCustomDateEdit = (inst, courseId, allCourseDates, currentDates, useCustom) => {
+    setEditingCustomDates({ instId: inst.id, courseId });
+    // useCustom이면 현재 선택된 날짜를 사용, 아니면 전체 날짜를 사용 (전체 선택 상태)
+    setTempCustomDates(useCustom ? [...currentDates] : [...allCourseDates]);
+  };
+
+  // ── 커스텀 날짜 토글 ──
+  const toggleCustomDate = (date) => {
+    setTempCustomDates(prev =>
+      prev.includes(date) ? prev.filter(d => d !== date) : [...prev, date].sort()
+    );
+  };
+
+  // ── 커스텀 날짜 저장 ──
+  const saveCustomDates = async (inst, courseId, allCourseDates) => {
+    const selectedDates = tempCustomDates.sort();
+    // 전체 날짜와 동일하면 커스텀 날짜 제거 (과정 스케줄 그대로 사용)
+    const isAll = selectedDates.length === allCourseDates.length &&
+      selectedDates.every((d, i) => d === allCourseDates[i]);
+    const newCustomDates = { ...(inst.customDates || {}) };
+    if (isAll) {
+      delete newCustomDates[String(courseId)];
+    } else {
+      newCustomDates[String(courseId)] = selectedDates;
+    }
+    const updatedInst = { ...inst, customDates: newCustomDates };
+    try {
+      await handleSave(updatedInst);
+      setInst(p => p.map(x => x.id === inst.id ? updatedInst : x));
+    } catch (err) {
+      // handleSave already shows alert
+    }
+    setEditingCustomDates(null);
+    setTempCustomDates([]);
+  };
+
+  // ── 커스텀 날짜 초기화 (과정 전체 날짜로 복원) ──
+  const resetCustomDates = async (inst, courseId) => {
+    const newCustomDates = { ...(inst.customDates || {}) };
+    delete newCustomDates[String(courseId)];
+    const updatedInst = { ...inst, customDates: newCustomDates };
+    try {
+      await handleSave(updatedInst);
+      setInst(p => p.map(x => x.id === inst.id ? updatedInst : x));
+    } catch (err) {
+      // handleSave already shows alert
+    }
+    setEditingCustomDates(null);
+    setTempCustomDates([]);
+  };
 
   // ── 과정 일정 수정 핸들러 (CourseModal 연결) ──
   const handleCourseScheduleSave = async (updatedCourse) => {
@@ -5735,33 +5804,143 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
                   const dtKey = `${inst.id}-${cd.course.id}`;
                   const showDates = dateToggleIds[dtKey];
                   const monthGroups = groupDatesByMonth(cd.dates);
+                  const isEditingThis = editingCustomDates?.instId === inst.id && editingCustomDates?.courseId === cd.course.id;
+                  const allMonthGroups = groupDatesByMonth(cd.allCourseDates || cd.dates);
                   return (
                   <div key={cd.course.id} style={{ marginBottom:12, paddingBottom:10,
                     borderBottom:`1px solid ${T.bd}` }}>
                     {/* 1행: 과정명/기간/요일/총량 */}
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontSize:12, fontWeight:800, color:cd.course.cc || T.tx, marginBottom:3 }}>
+                        <div style={{ fontSize:12, fontWeight:800, color:cd.course.cc || T.tx, marginBottom:3, display:"flex", alignItems:"center", gap:6 }}>
                           [{cd.course.code}] {cd.course.name}
+                          {cd.useCustom && (
+                            <span style={{ fontSize:8, fontWeight:700, padding:"1px 6px", borderRadius:8,
+                              background:"#DBEAFE", color:"#1D4ED8" }}>개별일정</span>
+                          )}
                         </div>
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:2, fontSize:10, color:T.mu }}>
                           <span>📅 기간: {formatCoursePeriod(cd.course)}</span>
                           <span>🗓️ 요일: {cd.course.schedDays || "미정"}</span>
                           <span>🕘 시간: {cd.course.schedTimeFrom && cd.course.schedTimeTo
                             ? `${cd.course.schedTimeFrom}~${cd.course.schedTimeTo}` : "미정"}</span>
-                          <span>📊 총량: {cd.estDays}일 · {cd.estHours}시간</span>
+                          <span>📊 총량: {cd.estDays}일 · {cd.estHours}시간
+                            {cd.useCustom && cd.allCourseDates && ` (전체 ${cd.allCourseDates.length}일 중)`}
+                          </span>
                         </div>
                       </div>
-                      {/* ─── 5구역: 과정 일정 수정 버튼 ─── */}
-                      {onUpdateCourse && (
-                        <button onClick={()=>setCourseEditTarget(cd.course)}
-                          style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${T.p}`,
-                            background:"transparent", color:T.p, cursor:"pointer",
-                            fontSize:10, fontWeight:700, whiteSpace:"nowrap", marginLeft:8 }}>
-                          일정 수정
-                        </button>
-                      )}
+                      <div style={{ display:"flex", gap:4, marginLeft:8, flexShrink:0 }}>
+                        {/* 강사 개별 일정 수정 버튼 */}
+                        {!isEditingThis && (
+                          <button onClick={()=>startCustomDateEdit(inst, cd.course.id, cd.allCourseDates || cd.dates, cd.dates, cd.useCustom)}
+                            style={{ padding:"4px 10px", borderRadius:6, border:`1px solid #2563EB`,
+                              background:"transparent", color:"#2563EB", cursor:"pointer",
+                              fontSize:10, fontWeight:700, whiteSpace:"nowrap" }}>
+                            📅 날짜 선택
+                          </button>
+                        )}
+                        {/* ─── 5구역: 과정 일정 수정 버튼 ─── */}
+                        {onUpdateCourse && (
+                          <button onClick={()=>setCourseEditTarget(cd.course)}
+                            style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${T.p}`,
+                              background:"transparent", color:T.p, cursor:"pointer",
+                              fontSize:10, fontWeight:700, whiteSpace:"nowrap" }}>
+                            일정 수정
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    {/* ─── 날짜 선택 편집 모드 ─── */}
+                    {isEditingThis && (
+                      <div style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8,
+                        padding:10, marginBottom:8 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:"#1D4ED8", marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <span>📅 강사 수업일 선택 (클릭하여 날짜를 선택/해제)</span>
+                          <span style={{ fontSize:10, fontWeight:600, color:T.mu }}>
+                            {tempCustomDates.length}일 선택됨 / 전체 {(cd.allCourseDates||cd.dates).length}일
+                          </span>
+                        </div>
+                        {/* 전체선택/해제 버튼 */}
+                        <div style={{ display:"flex", gap:4, marginBottom:8 }}>
+                          <button onClick={()=>setTempCustomDates([...(cd.allCourseDates||cd.dates)])}
+                            style={{ padding:"3px 8px", borderRadius:5, border:`1px solid ${T.bd}`,
+                              background:T.s, cursor:"pointer", fontSize:9, fontWeight:600, color:T.tx }}>
+                            ✅ 전체 선택
+                          </button>
+                          <button onClick={()=>setTempCustomDates([])}
+                            style={{ padding:"3px 8px", borderRadius:5, border:`1px solid ${T.bd}`,
+                              background:T.s, cursor:"pointer", fontSize:9, fontWeight:600, color:T.mu }}>
+                            ⬜ 전체 해제
+                          </button>
+                        </div>
+                        {/* 월별 날짜 그리드 */}
+                        {allMonthGroups.map(([month, days]) => {
+                          const monthLabel = `${+month.split("-")[1]}월`;
+                          const selectedInMonth = days.filter(d => tempCustomDates.includes(d)).length;
+                          const allInMonth = selectedInMonth === days.length;
+                          return (
+                            <div key={month} style={{ marginBottom:6 }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+                                <span style={{ fontSize:10, fontWeight:700, color:T.tx }}>{monthLabel}</span>
+                                <button onClick={()=>{
+                                  if (allInMonth) {
+                                    setTempCustomDates(prev => prev.filter(d => !days.includes(d)));
+                                  } else {
+                                    setTempCustomDates(prev => [...new Set([...prev, ...days])].sort());
+                                  }
+                                }}
+                                  style={{ border:"none", background:"transparent", cursor:"pointer",
+                                    fontSize:8, fontWeight:600, color:"#2563EB", padding:0 }}>
+                                  {allInMonth ? "(월 해제)" : "(월 전체)"}
+                                </button>
+                                <span style={{ fontSize:8, color:T.mu }}>({selectedInMonth}/{days.length})</span>
+                              </div>
+                              <div style={{ display:"flex", flexWrap:"wrap", gap:3 }}>
+                                {days.map(d => {
+                                  const selected = tempCustomDates.includes(d);
+                                  const dow = ["일","월","화","수","목","금","토"][new Date(d).getDay()];
+                                  return (
+                                    <button key={d} onClick={()=>toggleCustomDate(d)}
+                                      style={{ padding:"3px 6px", borderRadius:5, border:"none",
+                                        cursor:"pointer", fontSize:9, fontWeight:selected ? 700 : 400,
+                                        background: selected ? "#2563EB" : T.s3,
+                                        color: selected ? "#fff" : T.mu,
+                                        transition:"all .12s", minWidth:42, textAlign:"center" }}>
+                                      {fmtMD(d)}<span style={{ fontSize:7 }}>({dow})</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {/* 저장/취소 버튼 */}
+                        <div style={{ display:"flex", gap:6, marginTop:8, justifyContent:"flex-end" }}>
+                          {cd.useCustom && (
+                            <button onClick={()=>resetCustomDates(inst, cd.course.id)}
+                              style={{ padding:"5px 12px", borderRadius:6, border:`1px solid #FECACA`,
+                                background:"#FEF2F2", color:T.danger, cursor:"pointer",
+                                fontSize:10, fontWeight:700 }}>
+                              🔄 전체 날짜로 초기화
+                            </button>
+                          )}
+                          <button onClick={()=>{setEditingCustomDates(null);setTempCustomDates([]);}}
+                            style={{ padding:"5px 12px", borderRadius:6, border:`1px solid ${T.bd}`,
+                              background:T.s, color:T.mu, cursor:"pointer",
+                              fontSize:10, fontWeight:700 }}>
+                            취소
+                          </button>
+                          <button onClick={()=>saveCustomDates(inst, cd.course.id, cd.allCourseDates||cd.dates)}
+                            style={{ padding:"5px 12px", borderRadius:6, border:"none",
+                              background:"#2563EB", color:"#fff", cursor:"pointer",
+                              fontSize:10, fontWeight:700 }}
+                            disabled={tempCustomDates.length === 0}>
+                            💾 저장 ({tempCustomDates.length}일)
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* 2행: 오늘 수업 여부 / 다음 수업일 */}
                     <div style={{ display:"flex", gap:10, fontSize:10, color:T.mu, marginBottom:4, flexWrap:"wrap" }}>

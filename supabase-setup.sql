@@ -24,3 +24,9 @@ ALTER TABLE cert_issuances ENABLE ROW LEVEL SECURITY;
 -- anon 키로 읽기/쓰기 허용 (관리자 전용 내부 시스템)
 CREATE POLICY IF NOT EXISTS "cert_issuances_all" ON cert_issuances
   FOR ALL USING (true) WITH CHECK (true);
+
+-- ── 강사 테이블 신규 컬럼 추가 (기존 DB 마이그레이션) ────────
+-- category: 경기도 강사 / 외부 강사 구분
+-- hourly_rate: 시간당 강사료 단가
+ALTER TABLE instructors ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '경기도 강사';
+ALTER TABLE instructors ADD COLUMN IF NOT EXISTS hourly_rate INTEGER DEFAULT 0;

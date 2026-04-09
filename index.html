@@ -2703,6 +2703,12 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
               background:mode==="manual"?T.p:T.s3, color:mode==="manual"?"#fff":T.mu }}>
               ✏️ 수동 입력
             </button>
+            <button onClick={()=>setMode("sheet")} style={{
+              padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer",
+              fontSize:11, fontWeight:600,
+              background:mode==="sheet"?T.p:T.s3, color:mode==="sheet"?"#fff":T.mu }}>
+              📋 출석부
+            </button>
           </div>
         }
       />
@@ -2714,6 +2720,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
         <span><b>2026 개정 출결 기준:</b> 하루 수업시간 50% 미만 수강 시 결석 처리 · 총 교육시간 <b>80% 이상</b> 출석 시 수료</span>
       </div>
 
+      {mode !== "sheet" && (<>
       {/* ── 시간 설정 카드 ── */}
       <Card style={{ marginBottom:14, padding:0, overflow:"hidden" }}>
         <button onClick={()=>setShowTimeSetting(v=>!v)}
@@ -2876,6 +2883,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
         </div>
         </div>
       </Card>
+      </>)}
 
       {mode === "qr" ? (
         <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:16 }}>
@@ -3049,8 +3057,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
             </div>
           </Card>
         </div>
-      ) : (
-        /* ── 수동 입력 모드 ── */
+      ) : mode === "manual" ? (
         <Card style={{ overflow:"hidden" }}>
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead>
@@ -3250,6 +3257,379 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
               <Icon n="check" s={13}/>
               전체 일괄 저장
             </Btn>
+          </div>
+        </Card>
+      ) : (
+        /* ── 출석부 모드 ── */
+        <AttendanceSheet course={course} courses={courses} students={students}/>
+      )}
+    </div>
+  );
+};
+
+/* ===========================================================
+   ATTENDANCE SHEET  과정별 출석부 (문서형)
+=========================================================== */
+
+// buildCourseDatesAll: buildCourseDates와 동일하되 미래 날짜까지 포함 (dateTo까지)
+const buildCourseDatesAll = (course) => {
+  const getLocalStr = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const dateFrom = course?.dateFrom ?? course?.date_from;
+  const dateTo = course?.dateTo ?? course?.date_to;
+  const schedDaysRaw = course?.schedDays ?? course?.sched_days;
+  if (!dateFrom) return [];
+  const start = new Date(dateFrom);
+  start.setHours(0, 0, 0, 0);
+  const end = dateTo ? new Date(dateTo) : new Date();
+  end.setHours(0, 0, 0, 0);
+  if (start > end) return [];
+  const DAY_MAP = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
+  const allowedDows =
+    schedDaysRaw && String(schedDaysRaw).trim().length
+      ? new Set(
+          String(schedDaysRaw).split(",").map(s => s.trim()).filter(Boolean)
+            .map(s => (/^[0-6]$/.test(s) ? Number(s) : DAY_MAP[s]))
+            .filter(d => d !== undefined)
+        )
+      : new Set([1, 2, 3, 4, 5]);
+  const out = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    if (allowedDows.has(d.getDay())) out.push(getLocalStr(d));
+  }
+  return out;
+};
+
+const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorName) => {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const period = formatCoursePeriod(course);
+  const schedInfo = course.schedDays ? `${course.schedDays}${course.schedTimeFrom && course.schedTimeTo ? ` / ${course.schedTimeFrom}~${course.schedTimeTo}` : ''}` : '';
+
+  // 날짜를 MM/DD 형태로 표시
+  const fmtDate = d => { const [,m,dd] = d.split("-"); return `${+m}/${+dd}`; };
+  // 요일 표시
+  const getDow = d => { const dw = ["일","월","화","수","목","금","토"]; return dw[new Date(d).getDay()]; };
+
+  // 날짜 열이 많으면 분할 인쇄 (한 페이지당 최대 약 25개 날짜)
+  const MAX_COLS = 25;
+  const chunks = [];
+  for (let i = 0; i < dates.length; i += MAX_COLS) {
+    chunks.push(dates.slice(i, i + MAX_COLS));
+  }
+
+  const buildTable = (datePart, partIdx) => {
+    const colW = Math.max(28, Math.min(36, Math.floor(700 / datePart.length)));
+    return `
+    <table class="att-table">
+      <colgroup>
+        <col style="width:36px"/>
+        <col style="width:70px"/>
+        ${datePart.map(() => `<col style="width:${colW}px"/>`).join('')}
+        <col style="width:50px"/>
+      </colgroup>
+      <thead>
+        <tr>
+          <th rowspan="2" class="th-head">번호</th>
+          <th rowspan="2" class="th-head">성명</th>
+          ${datePart.map(d => `<th class="th-date">${fmtDate(d)}</th>`).join('')}
+          <th rowspan="2" class="th-head">출석<br/>일수</th>
+        </tr>
+        <tr>
+          ${datePart.map(d => `<th class="th-dow">${getDow(d)}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${courseStudents.map((s, idx) => {
+          let presentCount = 0;
+          const cells = datePart.map(d => {
+            const key = `${s.id}_${d}`;
+            const status = attMap[key];
+            if (d > todayStr) return `<td class="cell"></td>`;
+            if (status === "O") { presentCount++; return `<td class="cell cell-o">O</td>`; }
+            if (status === "A") return `<td class="cell cell-x">X</td>`;
+            return `<td class="cell"></td>`;
+          }).join('');
+          return `<tr><td class="cell cell-num">${idx+1}</td><td class="cell cell-name">${s.name}</td>${cells}<td class="cell cell-count">${presentCount}</td></tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  };
+
+  const tables = chunks.map((chunk, i) => buildTable(chunk, i)).join('<div style="page-break-before:always;margin-top:12px;"></div>');
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
+<title>출석부 - ${course.name}</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Pretendard','맑은 고딕',sans-serif; background:#fff; padding:16mm 12mm; }
+  .header { text-align:center; margin-bottom:18px; }
+  .header h1 { font-size:20pt; font-weight:900; letter-spacing:6px; margin-bottom:10px; border-bottom:2px solid #333; display:inline-block; padding-bottom:6px; }
+  .info-table { width:100%; border-collapse:collapse; margin-bottom:14px; font-size:10pt; }
+  .info-table td { padding:6px 10px; border:1px solid #999; }
+  .info-table .label { background:#F5F5F5; font-weight:700; width:100px; text-align:center; }
+  .att-table { width:100%; border-collapse:collapse; font-size:8pt; }
+  .att-table th, .att-table td { border:1px solid #999; }
+  .th-head { background:#E2E8F0; font-weight:700; padding:5px 2px; text-align:center; font-size:8pt; }
+  .th-date { background:#F1F5F9; font-weight:600; padding:3px 1px; text-align:center; font-size:7pt; }
+  .th-dow { background:#F8FAFC; font-weight:500; padding:2px 1px; text-align:center; font-size:7pt; color:#666; }
+  .cell { padding:3px 1px; text-align:center; font-size:9pt; height:22px; }
+  .cell-num { background:#FAFAFA; font-size:8pt; color:#666; }
+  .cell-name { text-align:left; padding-left:6px; font-weight:600; white-space:nowrap; }
+  .cell-o { color:#16A34A; font-weight:700; }
+  .cell-x { color:#DC2626; font-weight:700; }
+  .cell-count { font-weight:700; background:#FAFAFA; }
+  .sign-area { margin-top:24px; display:flex; justify-content:flex-end; gap:40px; font-size:10pt; }
+  .sign-box { text-align:center; }
+  .sign-box .lbl { font-weight:600; margin-bottom:6px; }
+  .sign-box .line { width:80px; border-bottom:1px solid #333; height:30px; }
+  .print-btn { position:fixed; bottom:24px; right:24px; background:#EA580C; color:#fff;
+    border:none; border-radius:10px; padding:12px 24px; font-size:14px; font-weight:700;
+    cursor:pointer; box-shadow:0 4px 20px rgba(234,88,12,.4);
+    font-family:'Pretendard',sans-serif; z-index:99; }
+  @media print {
+    body { padding:10mm 8mm; }
+    .print-btn { display:none; }
+    @page { size:A4 landscape; margin:8mm; }
+  }
+</style></head>
+<body>
+  <div class="header">
+    <h1>출 석 부</h1>
+  </div>
+  <table class="info-table">
+    <tr>
+      <td class="label">과정명</td>
+      <td colspan="3">${course.name}</td>
+      <td class="label">과정코드</td>
+      <td>${course.code}</td>
+    </tr>
+    <tr>
+      <td class="label">훈련기간</td>
+      <td>${period}</td>
+      <td class="label">수업일정</td>
+      <td>${schedInfo}</td>
+      <td class="label">총 시간</td>
+      <td>${course.hours}시간</td>
+    </tr>
+    <tr>
+      <td class="label">담당 강사</td>
+      <td>${instructorName || '-'}</td>
+      <td class="label">담당자</td>
+      <td></td>
+      <td class="label">출력일자</td>
+      <td>${todayStr}</td>
+    </tr>
+  </table>
+  ${tables}
+  <div class="sign-area">
+    <div class="sign-box"><div class="lbl">담당 강사</div><div class="line"></div></div>
+    <div class="sign-box"><div class="lbl">담 당 자</div><div class="line"></div></div>
+    <div class="sign-box"><div class="lbl">센 터 장</div><div class="line"></div></div>
+  </div>
+  <button class="print-btn" onclick="window.print()">🖨️ PDF 저장 / 인쇄</button>
+</body></html>`;
+
+  const w = window.open("", "_blank", "width=1200,height=900");
+  if (w) { w.document.write(html); w.document.close(); }
+  else { alert("팝업이 차단되었습니다. 브라우저에서 팝업 차단을 해제해주세요."); }
+};
+
+const AttendanceSheet = ({ course, courses, students }) => {
+  const [sheetCourse, setSheetCourse] = useState(course);
+  const [attData, setAttData] = useState({});      // { "studentId_date": status }
+  const [loadingSheet, setLoadingSheet] = useState(false);
+  const [instructors, setInstructors] = useState([]);
+
+  // courses prop 변경 시 sheetCourse 동기화
+  useEffect(() => {
+    if (!courses.length) return;
+    setSheetCourse(prev => {
+      if (!prev) return courses[0];
+      const updated = courses.find(c => c.id === prev.id);
+      return updated || courses[0];
+    });
+  }, [courses]);
+
+  // 강사 목록 로드
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await sbGet("instructors", "select=*&order=id");
+        if (data) setInstructors(data.map(toInstructor));
+      } catch {}
+    })();
+  }, []);
+
+  // 출석 데이터 로드
+  useEffect(() => {
+    if (!sheetCourse) return;
+    const load = async () => {
+      setLoadingSheet(true);
+      try {
+        const courseStudentIds = students.filter(s => s.cid === sheetCourse.id).map(s => s.id);
+        if (courseStudentIds.length === 0) { setAttData({}); setLoadingSheet(false); return; }
+        const { data, error } = await sbGet(
+          "attendance",
+          `select=student_id,date,status&course_id=eq.${sheetCourse.id}&student_id=in.(${courseStudentIds.join(",")})`
+        );
+        if (error) throw error;
+        const map = {};
+        (data || []).forEach(att => { map[`${att.student_id}_${att.date}`] = att.status || "U"; });
+        setAttData(map);
+      } catch (err) {
+        console.error("출석부 데이터 로드 오류:", err);
+        setAttData({});
+      }
+      setLoadingSheet(false);
+    };
+    load();
+  }, [sheetCourse, students]);
+
+  const allDates = buildCourseDatesAll(sheetCourse);
+  const courseStudents = students.filter(s => s.cid === sheetCourse?.id);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 담당 강사 찾기
+  const instNames = instructors.filter(i => (i.cids || []).includes(sheetCourse?.id)).map(i => i.name);
+  const instructorName = instNames.join(", ");
+
+  const fmtDateShort = d => { const [,m,dd] = d.split("-"); return `${+m}/${+dd}`; };
+  const getDow = d => { const dw = ["일","월","화","수","목","금","토"]; return dw[new Date(d).getDay()]; };
+
+  // 화면용: 현재 표시할 날짜 (최대 20개씩 페이징)
+  const PAGE_SIZE = 20;
+  const [datePage, setDatePage] = useState(0);
+  const totalDatePages = Math.ceil(allDates.length / PAGE_SIZE);
+  const visibleDates = allDates.slice(datePage * PAGE_SIZE, (datePage + 1) * PAGE_SIZE);
+
+  return (
+    <div>
+      {/* 과정 선택 */}
+      <Card style={{ padding:"14px 18px", marginBottom:16 }}>
+        <div style={{ fontSize:10, color:T.mu, marginBottom:6, fontWeight:600 }}>출석부 — 과정 선택</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10 }}>
+          {courses.map(c => {
+            const active = sheetCourse?.id === c.id;
+            return (
+              <button key={c.id} type="button" onClick={() => { setSheetCourse(c); setDatePage(0); }}
+                style={{ padding:"5px 10px", borderRadius:8,
+                  border:`1.5px solid ${active ? T.p : T.bd}`,
+                  background: active ? T.p : T.s2,
+                  color: active ? "#fff" : T.tx,
+                  cursor:"pointer", fontSize:11, fontWeight:600,
+                  transition:"all .15s", whiteSpace:"nowrap",
+                  boxShadow: active ? `0 2px 6px ${T.p}44` : "none" }}>
+                <span style={{ opacity: active ? .85 : .6, fontSize:10 }}>[{c.code}]</span>
+                {" "}{shortCourseName(c.name)}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display:"flex", gap:14, alignItems:"center", flexWrap:"wrap",
+          borderTop:`1px solid ${T.bd}`, paddingTop:10 }}>
+          <div style={{ fontSize:12, color:T.tx }}>
+            <b>{sheetCourse?.name}</b> · {formatCoursePeriod(sheetCourse)} · 총 {sheetCourse?.hours || 0}시간
+          </div>
+          {instructorName && <Chip label={`강사: ${instructorName}`} bg={T.pbg} color={T.p}/>}
+          <div style={{ marginLeft:"auto", display:"flex", gap:6 }}>
+            <Btn size="sm" onClick={() => {
+              printAttendanceSheet(sheetCourse, courseStudents, allDates, attData, instructorName);
+            }}>
+              🖨️ PDF 출력
+            </Btn>
+          </div>
+        </div>
+      </Card>
+
+      {loadingSheet ? (
+        <Card style={{ padding:40, textAlign:"center", color:T.mu, fontSize:13 }}>
+          ⏳ 출석 데이터를 불러오고 있습니다...
+        </Card>
+      ) : courseStudents.length === 0 ? (
+        <Card style={{ padding:40, textAlign:"center", color:T.mu, fontSize:13 }}>
+          해당 과정에 등록된 훈련생이 없습니다.
+        </Card>
+      ) : allDates.length === 0 ? (
+        <Card style={{ padding:40, textAlign:"center", color:T.mu, fontSize:13 }}>
+          과정 일정이 설정되지 않았습니다.
+        </Card>
+      ) : (
+        <Card style={{ overflow:"hidden" }}>
+          {/* 날짜 페이지 네비게이션 */}
+          {totalDatePages > 1 && (
+            <div style={{ padding:"8px 14px", borderBottom:`1px solid ${T.bd}`, display:"flex", gap:8, alignItems:"center", background:T.s2 }}>
+              <button disabled={datePage===0} onClick={()=>setDatePage(p=>p-1)}
+                style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${T.bd}`,
+                  background:datePage===0?T.s3:"#fff", color:datePage===0?T.mu:T.tx,
+                  cursor:datePage===0?"default":"pointer", fontSize:11, fontWeight:600 }}>◀ 이전</button>
+              <span style={{ fontSize:11, color:T.mu, fontWeight:600 }}>
+                {datePage+1} / {totalDatePages} 페이지
+                ({fmtDateShort(visibleDates[0])} ~ {fmtDateShort(visibleDates[visibleDates.length-1])})
+              </span>
+              <button disabled={datePage>=totalDatePages-1} onClick={()=>setDatePage(p=>p+1)}
+                style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${T.bd}`,
+                  background:datePage>=totalDatePages-1?T.s3:"#fff", color:datePage>=totalDatePages-1?T.mu:T.tx,
+                  cursor:datePage>=totalDatePages-1?"default":"pointer", fontSize:11, fontWeight:600 }}>다음 ▶</button>
+              <span style={{ marginLeft:"auto", fontSize:11, color:T.mu }}>
+                전체 수업일: {allDates.length}일 · 훈련생: {courseStudents.length}명
+              </span>
+            </div>
+          )}
+          <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", minWidth: 120 + visibleDates.length * 36 }}>
+            <thead>
+              <tr style={{ background:T.s2 }}>
+                <th style={{ padding:"8px 6px", fontSize:10, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}`, position:"sticky", left:0, background:T.s2, zIndex:2, minWidth:36, textAlign:"center" }}>번호</th>
+                <th style={{ padding:"8px 6px", fontSize:10, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}`, position:"sticky", left:36, background:T.s2, zIndex:2, minWidth:70, textAlign:"left" }}>성명</th>
+                {visibleDates.map(d => (
+                  <th key={d} style={{ padding:"4px 2px", fontSize:9, color: d > today ? T.mu : T.tx, fontWeight:600,
+                    borderBottom:`1px solid ${T.bd}`, textAlign:"center", minWidth:30, whiteSpace:"nowrap",
+                    background: d === today ? '#FFFBEB' : T.s2 }}>
+                    <div>{fmtDateShort(d)}</div>
+                    <div style={{ fontSize:8, color:T.mu, fontWeight:400 }}>{getDow(d)}</div>
+                  </th>
+                ))}
+                <th style={{ padding:"8px 4px", fontSize:10, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}`, textAlign:"center", minWidth:44 }}>출석<br/>일수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {courseStudents.map((s, idx) => {
+                const presentDays = allDates.filter(d => attData[`${s.id}_${d}`] === "O").length;
+                return (
+                  <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
+                    <td style={{ padding:"6px 4px", fontSize:11, color:T.mu, textAlign:"center", position:"sticky", left:0, background:T.s, zIndex:1 }}>{idx+1}</td>
+                    <td style={{ padding:"6px 6px", fontSize:12, fontWeight:700, color:T.tx, whiteSpace:"nowrap", position:"sticky", left:36, background:T.s, zIndex:1 }}>{s.name}</td>
+                    {visibleDates.map(d => {
+                      const key = `${s.id}_${d}`;
+                      const status = attData[key];
+                      const isFuture = d > today;
+                      let display = "";
+                      let color = T.mu;
+                      if (!isFuture) {
+                        if (status === "O") { display = "O"; color = T.ok; }
+                        else if (status === "A") { display = "X"; color = T.danger; }
+                      }
+                      return (
+                        <td key={d} style={{ padding:"4px 2px", textAlign:"center", fontSize:12,
+                          fontWeight: display ? 700 : 400, color,
+                          background: d === today ? '#FFFBEB' : (isFuture ? T.s2 : 'transparent'),
+                          borderBottom:`1px solid ${T.bd}` }}>
+                          {display}
+                        </td>
+                      );
+                    })}
+                    <td style={{ padding:"6px 4px", textAlign:"center", fontSize:13, fontWeight:800, color:T.p, background:T.s2 }}>{presentDays}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           </div>
         </Card>
       )}

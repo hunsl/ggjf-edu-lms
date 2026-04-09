@@ -5353,13 +5353,18 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
   const calcInstSchedule = (inst) => {
     const assignedCourses = (inst.cids || []).map(cid => courses.find(c => c.id === cid)).filter(Boolean);
     let totalDays = 0, totalHours = 0;
+
     const courseDetails = assignedCourses.map(c => {
       const allCourseDates = buildCourseDatesAll(c);
-      // 강사별 커스텀 날짜가 있으면 해당 날짜만 사용
-      const instCustom = inst.customDates && inst.customDates[String(c.id)];
-      const dates = instCustom && instCustom.length > 0
-        ? instCustom.filter(d => allCourseDates.includes(d)).sort()
+
+      const customMap = inst.customDates || {};
+      const hasCustom = Object.prototype.hasOwnProperty.call(customMap, String(c.id));
+      const rawCustom = hasCustom ? (customMap[String(c.id)] || []) : null;
+
+      const dates = hasCustom
+        ? rawCustom.filter(d => allCourseDates.includes(d)).sort()
         : allCourseDates;
+
       const hoursPerDay = c.schedTimeFrom && c.schedTimeTo
         ? (() => {
             const [sh, sm] = c.schedTimeFrom.split(":").map(Number);
@@ -5367,14 +5372,27 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
             return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
           })()
         : 4;
+
       const estHours = Math.round(dates.length * hoursPerDay);
       totalDays += dates.length;
       totalHours += estHours;
+
       const hasToday = dates.includes(todayStr);
       const nextDate = dates.find(dt => dt > todayStr) || null;
-      const useCustom = !!(instCustom && instCustom.length > 0);
-      return { course: c, dates, allCourseDates, hoursPerDay, estDays: dates.length, estHours, hasToday, nextDate, useCustom };
+
+      return {
+        course: c,
+        dates,
+        allCourseDates,
+        hoursPerDay,
+        estDays: dates.length,
+        estHours,
+        hasToday,
+        nextDate,
+        useCustom: hasCustom,
+      };
     });
+
     const teachesToday = courseDetails.some(cd => cd.hasToday);
     return { courseDetails, totalDays, totalHours, teachesToday };
   };
@@ -5516,10 +5534,16 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
   const [tempCustomDates, setTempCustomDates] = useState([]); // 편집 중인 날짜 배열
 
   // ── 커스텀 날짜 편집 시작 ──
-  const startCustomDateEdit = (inst, courseId, allCourseDates, currentDates, useCustom) => {
+  const startCustomDateEdit = (inst, courseId, allCourseDates) => {
+    const customMap = inst.customDates || {};
+    const hasCustom = Object.prototype.hasOwnProperty.call(customMap, String(courseId));
+
     setEditingCustomDates({ instId: inst.id, courseId });
-    // useCustom이면 현재 선택된 날짜를 사용, 아니면 전체 날짜를 사용 (전체 선택 상태)
-    setTempCustomDates(useCustom ? [...currentDates] : [...allCourseDates]);
+    setTempCustomDates(
+      hasCustom
+        ? [...(customMap[String(courseId)] || [])]
+        : [...allCourseDates]
+    );
   };
 
   // ── 커스텀 날짜 토글 ──
@@ -5832,7 +5856,7 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
                       <div style={{ display:"flex", gap:4, marginLeft:8, flexShrink:0 }}>
                         {/* 강사 개별 일정 수정 버튼 */}
                         {!isEditingThis && (
-                          <button onClick={()=>startCustomDateEdit(inst, cd.course.id, cd.allCourseDates || cd.dates, cd.dates, cd.useCustom)}
+                          <button onClick={()=>startCustomDateEdit(inst, cd.course.id, cd.allCourseDates || cd.dates)}
                             style={{ padding:"4px 10px", borderRadius:6, border:`1px solid #2563EB`,
                               background:"transparent", color:"#2563EB", cursor:"pointer",
                               fontSize:10, fontWeight:700, whiteSpace:"nowrap" }}>
@@ -5935,7 +5959,7 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
                             style={{ padding:"5px 12px", borderRadius:6, border:"none",
                               background:"#2563EB", color:"#fff", cursor:"pointer",
                               fontSize:10, fontWeight:700 }}
-                            disabled={tempCustomDates.length === 0}>
+                            >
                             💾 저장 ({tempCustomDates.length}일)
                           </button>
                         </div>

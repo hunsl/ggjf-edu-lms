@@ -5481,6 +5481,9 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
     }
   };
 
+  // ── 날짜 → M/D 포맷 헬퍼 ──
+  const fmtMD = (d) => { const p = d.split("-"); return `${+p[1]}/${+p[2]}`; };
+
   // ── 날짜 월별 그룹핑 헬퍼 ──
   const groupDatesByMonth = (dates) => {
     const groups = {};
@@ -5766,7 +5769,7 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
                         ? <b style={{color:T.ok}}>✅ 오늘 수업 있음</b>
                         : "⬜ 오늘 수업 없음"}</span>
                       {cd.nextDate && (
-                        <span>📌 다음 수업: <b style={{color:T.tx}}>{cd.nextDate.slice(5).replace("-","/")}
+                        <span>📌 다음 수업: <b style={{color:T.tx}}>{fmtMD(cd.nextDate)}
                         </b></span>
                       )}
                     </div>
@@ -5795,7 +5798,7 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
                                     background: d === todayStr ? `${T.p}20` : d < todayStr ? `${T.ok}12` : T.s3,
                                     color: d === todayStr ? T.p : d < todayStr ? T.ok : T.mu,
                                     fontWeight: d === todayStr ? 800 : 400 }}>
-                                    {+d.split("-")[1]}/{+d.split("-")[2]}
+                                    {fmtMD(d)}
                                   </span>
                                 ))}
                                 {extraDays > 0 && (

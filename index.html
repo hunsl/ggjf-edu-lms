@@ -667,12 +667,15 @@ const Chip = ({ label, bg, color, size=11 }) => (
   </span>
 );
 
-const CertChips = ({ text = "" }) => {
+const CertChips = ({ text = "", maxShow = 0 }) => {
   const items = String(text).split(",").map(v => v.trim()).filter(Boolean);
   if (items.length === 0) return <span style={{ color:T.mu }}>—</span>;
+  const visible = maxShow > 0 ? items.slice(0, maxShow) : items;
+  const extra = maxShow > 0 ? items.length - maxShow : 0;
   return (
     <span style={{ display:"inline-flex", flexWrap:"wrap", gap:3 }}>
-      {items.map(c => <Chip key={c} label={c} bg={T.s3} color={T.mu} size={10}/>)}
+      {visible.map(c => <Chip key={c} label={c} bg={T.s3} color={T.mu} size={10}/>)}
+      {extra > 0 && <Chip label={`+${extra}개 더`} bg={T.pbg} color={T.p} size={10}/>}
     </span>
   );
 };
@@ -5270,7 +5273,7 @@ const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
   );
 };
 
-const InstructorMgmt = ({ courses }) => {
+const InstructorMgmt = ({ courses, onUpdateCourse }) => {
   const [instructors, setInst] = useState(SEED_INSTRUCTORS);
   const [editTarget, setEdit]  = useState(null);
   const [isNew, setIsNew]      = useState(false);
@@ -5278,11 +5281,13 @@ const InstructorMgmt = ({ courses }) => {
   const [typeFilter, setTF]    = useState("전체");
   const [catFilter, setCF]     = useState("전체");
   const [expandedId, setExpandedId] = useState(null);
+  const [dateToggleIds, setDateToggleIds] = useState({}); // {courseId: true/false} per expanded instructor
+  const [courseEditTarget, setCourseEditTarget] = useState(null); // course being edited via CourseModal
 
   // ── DB 연동 상태 ──
-  const [dbStatus, setDbStatus] = useState("loading"); // loading | ok | error
-  const [rtStatus, setRtStatus] = useState("pending"); // pending | connected | disconnected | error
-  const [lastOp,   setLastOp]   = useState(null);      // {type, status, msg}
+  const [dbStatus, setDbStatus] = useState("loading");
+  const [rtStatus, setRtStatus] = useState("pending");
+  const [lastOp,   setLastOp]   = useState(null);
 
   // ── Supabase 초기 로드 ──
   useEffect(() => {
@@ -5305,7 +5310,6 @@ const InstructorMgmt = ({ courses }) => {
     realtimeManager.subscribe("instructors", {
       onInsert: (newRecord) => {
         setInst(prev => {
-          // 이미 있으면 DB 정규 데이터로 갱신, 없으면 추가
           if (prev.find(x => x.id === newRecord.id))
             return prev.map(x => x.id === newRecord.id ? toInstructor(newRecord) : x);
           console.log("🆕 강사 추가 (실시간):", newRecord.name);
@@ -5332,6 +5336,12 @@ const InstructorMgmt = ({ courses }) => {
     return true;
   });
 
+  // ── 오늘 날짜 ──
+  const todayStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  })();
+
   // ── 강사별 일정/시수 계산 헬퍼 ──
   const calcInstSchedule = (inst) => {
     const assignedCourses = (inst.cids || []).map(cid => courses.find(c => c.id === cid)).filter(Boolean);
@@ -5348,15 +5358,25 @@ const InstructorMgmt = ({ courses }) => {
       const estHours = Math.round(dates.length * hoursPerDay);
       totalDays += dates.length;
       totalHours += estHours;
-      return { course: c, dates, hoursPerDay, estDays: dates.length, estHours };
+      const hasToday = dates.includes(todayStr);
+      const nextDate = dates.find(dt => dt > todayStr) || null;
+      return { course: c, dates, hoursPerDay, estDays: dates.length, estHours, hasToday, nextDate };
     });
-    return { courseDetails, totalDays, totalHours };
+    const teachesToday = courseDetails.some(cd => cd.hasToday);
+    return { courseDetails, totalDays, totalHours, teachesToday };
   };
+
+  // ── 오늘의 강사 목록 ──
+  const todayInstructors = instructors.map(inst => {
+    const sched = calcInstSchedule(inst);
+    if (!sched.teachesToday) return null;
+    const todayCourses = sched.courseDetails.filter(cd => cd.hasToday);
+    return { inst, todayCourses, courseCount: todayCourses.length };
+  }).filter(Boolean);
 
   // ── 강사 엑셀 다운로드 ──
   const downloadInstructorExcel = () => {
     const wb = XLSX.utils.book_new();
-    // 시트1: 강사 기본정보 + 시수
     const rows = instructors.map(inst => {
       const sched = calcInstSchedule(inst);
       const courseNames = (inst.cids || []).map(cid => courses.find(c=>c.id===cid)?.name || "").filter(Boolean).join(", ");
@@ -5383,7 +5403,6 @@ const InstructorMgmt = ({ courses }) => {
     ws1["!cols"] = [8,8,10,12,14,18,6,14,14,30,10,10,10,12,20].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb, ws1, "강사_기본정보");
 
-    // 시트2: 강사별 강의일 상세
     const detailRows = [];
     instructors.forEach(inst => {
       const sched = calcInstSchedule(inst);
@@ -5427,7 +5446,6 @@ const InstructorMgmt = ({ courses }) => {
       const body = fromInstructor(inst);
       let res = await doSave(body);
 
-      // cids/note/category/hourly_rate 컬럼 스키마 캐시 미등록 → 해당 필드 제외 후 재시도
       if (res.error && (isSchemaErr(res.error, "cids") || isSchemaErr(res.error, "note") || isSchemaErr(res.error, "category") || isSchemaErr(res.error, "hourly_rate"))) {
         console.warn("⚠️ instructors 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload 클릭");
         const { cids, note, category, hourly_rate, ...fallback } = body;
@@ -5463,14 +5481,44 @@ const InstructorMgmt = ({ courses }) => {
     }
   };
 
+  // ── 날짜 월별 그룹핑 헬퍼 ──
+  const groupDatesByMonth = (dates) => {
+    const groups = {};
+    dates.forEach(d => {
+      const month = d.slice(0, 7); // "2026-04"
+      if (!groups[month]) groups[month] = [];
+      groups[month].push(d);
+    });
+    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  };
+
   const typeColors = {"주강사":T.p,"보조강사":T.ok,"외래강사":"#7C3AED","운영요원":T.warn};
   const catColors = {"경기도 강사":"#2563EB","외부 강사":"#9A3412"};
 
+  // ── 과정 일정 수정 핸들러 (CourseModal 연결) ──
+  const handleCourseScheduleSave = async (updatedCourse) => {
+    if (onUpdateCourse) {
+      await onUpdateCourse(updatedCourse);
+    }
+    setCourseEditTarget(null);
+  };
+
   return (
     <div className="page">
+      {/* 강사 정보 수정 모달 */}
       {editTarget!==null && (
         <InstructorModal inst={isNew?null:editTarget} isNew={isNew} courses={courses}
           onSave={handleSave} onClose={()=>setEdit(null)}/>
+      )}
+
+      {/* 과정 일정 수정 모달 */}
+      {courseEditTarget && (
+        <CourseModal
+          course={courseEditTarget}
+          isNew={false}
+          onSave={handleCourseScheduleSave}
+          onClose={()=>setCourseEditTarget(null)}
+        />
       )}
 
       <SectionHead
@@ -5486,10 +5534,54 @@ const InstructorMgmt = ({ courses }) => {
         </div>}
       />
 
-      {/* DB 연동 상태 체크리스트 */}
+      {/* DB 연동 상태 */}
       <SyncPanel dbStatus={dbStatus} rtStatus={rtStatus} lastOp={lastOp} count={instructors.length}/>
 
-      {/* 필터 바 */}
+      {/* ─── 1구역: 오늘의 강사 ─── */}
+      <Card style={{ padding:"14px 18px", marginBottom:14, background:todayInstructors.length > 0 ? T.pbg : T.s2 }}>
+        <div style={{ fontSize:12, fontWeight:800, color:todayInstructors.length > 0 ? T.p : T.mu, marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>
+          🎓 오늘 강의 강사
+          <span style={{ fontSize:10, fontWeight:600, color:T.mu }}>
+            ({new Date().toLocaleDateString("ko-KR",{month:"long",day:"numeric",weekday:"short"})})
+          </span>
+        </div>
+        {todayInstructors.length > 0 ? (
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {todayInstructors.map(({ inst, todayCourses, courseCount }) => (
+              <button key={inst.id}
+                onClick={() => {
+                  setExpandedId(inst.id);
+                  setTimeout(() => {
+                    const el = document.getElementById(`inst-card-${inst.id}`);
+                    if (el) el.scrollIntoView({ behavior:"smooth", block:"center" });
+                  }, 100);
+                }}
+                style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 12px",
+                  borderRadius:20, border:"none", cursor:"pointer",
+                  background:T.s, boxShadow:"0 1px 3px rgba(0,0,0,.08)",
+                  fontSize:12, fontWeight:700, color:T.tx, transition:"all .15s" }}>
+                <span style={{ width:22, height:22, borderRadius:7, flexShrink:0,
+                  background:`${typeColors[inst.type]||T.p}18`, color:typeColors[inst.type]||T.p,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:10, fontWeight:900 }}>{inst.name[0]}</span>
+                {inst.name}
+                <span style={{ fontSize:10, color:T.mu, fontWeight:600 }}>
+                  · {courseCount > 1 ? `${courseCount}과정` : todayCourses[0]?.course?.code || ""}
+                </span>
+                {todayCourses[0]?.course?.schedTimeFrom && (
+                  <span style={{ fontSize:9, color:T.p, fontWeight:600 }}>
+                    {todayCourses[0].course.schedTimeFrom}~{todayCourses[0].course.schedTimeTo}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize:12, color:T.mu }}>오늘 예정된 강의 강사가 없습니다</div>
+        )}
+      </Card>
+
+      {/* ─── 2구역: 필터/검색 ─── */}
       <Card style={{ padding:"12px 16px", marginBottom:14, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)}
           placeholder="이름 / 담당과목 검색…"
@@ -5519,28 +5611,25 @@ const InstructorMgmt = ({ courses }) => {
         </div>
       </Card>
 
-      {/* 강사 카드 그리드 */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:12 }}>
+      {/* ─── 3구역: 강사 카드 그리드 ─── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))", gap:12 }}>
         {filtered.map(inst=>{
           const sched = calcInstSchedule(inst);
           const isExpanded = expandedId === inst.id;
+          const courseCount = (inst.cids||[]).filter(cid => courses.find(c=>c.id===cid)).length;
           return (
-          <Card key={inst.id} style={{ padding:18, position:"relative" }}>
-            {/* 수정/삭제 */}
-            <div style={{ position:"absolute", top:12, right:12, display:"flex", gap:5 }}>
-              <button onClick={()=>{setIsNew(false);setEdit(inst);}} style={{
-                width:26,height:26,borderRadius:6,border:"none",background:T.pbg,color:T.p,
-                cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <Icon n="edit" s={12}/>
-              </button>
-              <button onClick={()=>handleDel(inst.id)} style={{
-                width:26,height:26,borderRadius:6,border:"none",background:"#FEF2F2",color:T.danger,
-                cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <Icon n="x" s={12}/>
-              </button>
-            </div>
+          <Card key={inst.id} id={`inst-card-${inst.id}`}
+            style={{ padding:18, position:"relative",
+              border: sched.teachesToday ? `2px solid ${T.p}` : `1px solid ${T.bd}` }}>
 
-            {/* 아바타 + 이름 */}
+            {/* 오늘 강의 뱃지 */}
+            {sched.teachesToday && (
+              <div style={{ position:"absolute", top:-1, right:16, background:T.p, color:"#fff",
+                fontSize:9, fontWeight:800, padding:"2px 10px 4px", borderRadius:"0 0 8px 8px",
+                letterSpacing:".3px" }}>오늘 강의</div>
+            )}
+
+            {/* 아바타 + 이름 + 구분 */}
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10, paddingRight:60 }}>
               <div style={{ width:44, height:44, borderRadius:12, flexShrink:0,
                 background:`${typeColors[inst.type]||T.p}18`,
@@ -5554,104 +5643,177 @@ const InstructorMgmt = ({ courses }) => {
                   <Chip label={inst.category||"경기도 강사"}
                     bg={`${catColors[inst.category]||catColors["경기도 강사"]}12`}
                     color={catColors[inst.category]||catColors["경기도 강사"]}/>
-                  {inst.subject && <Chip label={inst.subject} bg={T.s3} color={T.mu}/>}
                 </div>
               </div>
             </div>
 
-            {/* 상세 정보 */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5, marginBottom:8 }}>
-              {[
-                {l:"📞",v:inst.phone},
-                {l:"📧",v:inst.email},
-                {l:"⏳",v:inst.career ? `경력 ${inst.career}` : "—"},
-              ].map(({l,v})=>(
-                <div key={l} style={{ fontSize:11, color:T.mu, display:"flex", gap:4, alignItems:"flex-start" }}>
-                  <span>{l}</span>
-                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{v||"—"}</span>
-                </div>
-              ))}
-            </div>
-            {/* 자격증 칩 */}
-            <div style={{ display:"flex", gap:4, alignItems:"flex-start", marginBottom:8, fontSize:11, color:T.mu }}>
-              <span>🏅</span>
-              <CertChips text={inst.cert}/>
+            {/* 요약 정보 그리드 */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, marginBottom:8, fontSize:11, color:T.mu }}>
+              <span>📚 담당분야: <b style={{color:T.tx}}>{inst.subject || "—"}</b></span>
+              <span>📋 담당과정: <b style={{color:T.tx}}>{courseCount}개</b></span>
+              <span>⏱️ 예상 시수: <b style={{color:T.tx}}>{sched.totalHours > 0 ? `${sched.totalDays}일 · ${sched.totalHours}시간` : "—"}</b></span>
+              <span>💰 예상 강사료: <b style={{color:T.tx}}>{inst.hourlyRate > 0 && sched.totalHours > 0
+                ? `₩${(inst.hourlyRate * sched.totalHours).toLocaleString()}`
+                : "—"}</b></span>
             </div>
 
-            {/* 시수/단가 요약 */}
-            <div style={{ display:"flex", gap:8, marginBottom:8, flexWrap:"wrap" }}>
-              {sched.courseDetails.length > 0 && (
-                <Chip label={`${sched.totalDays}일 / ${sched.totalHours}시간`} bg={T.pbg} color={T.p} size={10}/>
-              )}
-              {inst.hourlyRate > 0 && (
-                <Chip label={`₩${inst.hourlyRate.toLocaleString()}/h`} bg="#FFFBEB" color={T.warn} size={10}/>
-              )}
-              {inst.hourlyRate > 0 && sched.totalHours > 0 && (
-                <Chip label={`예상 ₩${(inst.hourlyRate * sched.totalHours).toLocaleString()}`} bg="#F0FDF4" color={T.ok} size={10}/>
-              )}
-            </div>
+            {/* 자격증 칩 (최대 3개 + 더보기) */}
+            {inst.cert && (
+              <div style={{ display:"flex", gap:4, alignItems:"center", marginBottom:6, fontSize:11, color:T.mu }}>
+                <span>🏅</span>
+                <CertChips text={inst.cert} maxShow={3}/>
+              </div>
+            )}
+
+            {/* 경력 라벨 */}
+            {inst.career && (
+              <div style={{ fontSize:11, color:T.mu, marginBottom:6 }}>
+                ⏳ 경력: <b style={{color:T.tx}}>{inst.career}</b>
+              </div>
+            )}
+
+            {/* 메모 (2줄 제한) */}
+            {inst.note && (
+              <div style={{ fontSize:11, color:T.mu, background:T.s3,
+                borderRadius:6, padding:"5px 9px", marginBottom:6,
+                display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
+                overflow:"hidden", lineHeight:"1.5" }}>📝 {inst.note}</div>
+            )}
 
             {/* 담당 과정 뱃지 */}
-            {(inst.cids||[]).length > 0 && (
-              <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:6 }}>
-                {inst.cids.map(cid=>{
+            {courseCount > 0 && (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:8 }}>
+                {(inst.cids||[]).map(cid=>{
                   const c = courses.find(x=>x.id===cid);
-                  return c ? <Chip key={cid} label={c.code} bg={`${c.cc}15`} color={c.cc}/> : null;
+                  if (!c) return null;
+                  const cd = sched.courseDetails.find(d => d.course.id === cid);
+                  return (
+                    <span key={cid} style={{ display:"inline-flex", alignItems:"center", gap:3,
+                      fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:12,
+                      background:`${c.cc}12`, color:c.cc }}>
+                      {c.code}
+                      {cd?.hasToday && <span style={{ width:5, height:5, borderRadius:"50%",
+                        background:T.ok, display:"inline-block" }}/>}
+                    </span>
+                  );
                 })}
               </div>
             )}
 
-            {/* 강의 일정 상세 토글 */}
-            {sched.courseDetails.length > 0 && (
-              <button onClick={()=>setExpandedId(isExpanded ? null : inst.id)}
-                style={{ width:"100%", padding:"5px 0", border:"none", background:"transparent",
-                  cursor:"pointer", fontSize:10, fontWeight:600, color:T.p, textAlign:"center" }}>
-                {isExpanded ? "▲ 강의 일정 접기" : "▼ 강의 일정 상세 보기"}
+            {/* 버튼: 일정 보기 / 정보 수정 */}
+            <div style={{ display:"flex", gap:6, marginTop:2 }}>
+              {sched.courseDetails.length > 0 && (
+                <button onClick={()=>setExpandedId(isExpanded ? null : inst.id)}
+                  style={{ flex:1, padding:"6px 0", borderRadius:8, border:`1px solid ${T.p}`,
+                    background:isExpanded ? T.p : "transparent",
+                    color:isExpanded ? "#fff" : T.p,
+                    cursor:"pointer", fontSize:11, fontWeight:700, transition:"all .15s" }}>
+                  {isExpanded ? "▲ 일정 접기" : "📅 일정 보기"}
+                </button>
+              )}
+              <button onClick={()=>{setIsNew(false);setEdit(inst);}}
+                style={{ flex:1, padding:"6px 0", borderRadius:8, border:`1px solid ${T.bd}`,
+                  background:T.s2, color:T.mu,
+                  cursor:"pointer", fontSize:11, fontWeight:700 }}>
+                ✏️ 정보 수정
               </button>
-            )}
+              <button onClick={()=>handleDel(inst.id)}
+                style={{ padding:"6px 10px", borderRadius:8, border:`1px solid #FECACA`,
+                  background:"#FEF2F2", color:T.danger,
+                  cursor:"pointer", fontSize:11, fontWeight:700 }}>
+                🗑️
+              </button>
+            </div>
+
+            {/* ─── 4구역: 강의일정 상세보기 (확장 패널) ─── */}
             {isExpanded && sched.courseDetails.length > 0 && (
-              <div style={{ marginTop:4, background:T.s2, borderRadius:8, padding:10 }}>
-                {sched.courseDetails.map(cd => (
-                  <div key={cd.course.id} style={{ marginBottom:8 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:T.tx, marginBottom:4 }}>
-                      [{cd.course.code}] {cd.course.name}
+              <div style={{ marginTop:10, background:T.s2, borderRadius:10, padding:12 }}>
+                {sched.courseDetails.map(cd => {
+                  const dtKey = `${inst.id}-${cd.course.id}`;
+                  const showDates = dateToggleIds[dtKey];
+                  const monthGroups = groupDatesByMonth(cd.dates);
+                  return (
+                  <div key={cd.course.id} style={{ marginBottom:12, paddingBottom:10,
+                    borderBottom:`1px solid ${T.bd}` }}>
+                    {/* 1행: 과정명/기간/요일/총량 */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12, fontWeight:800, color:cd.course.cc || T.tx, marginBottom:3 }}>
+                          [{cd.course.code}] {cd.course.name}
+                        </div>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:2, fontSize:10, color:T.mu }}>
+                          <span>📅 기간: {formatCoursePeriod(cd.course)}</span>
+                          <span>🗓️ 요일: {cd.course.schedDays || "미정"}</span>
+                          <span>🕘 시간: {cd.course.schedTimeFrom && cd.course.schedTimeTo
+                            ? `${cd.course.schedTimeFrom}~${cd.course.schedTimeTo}` : "미정"}</span>
+                          <span>📊 총량: {cd.estDays}일 · {cd.estHours}시간</span>
+                        </div>
+                      </div>
+                      {/* ─── 5구역: 과정 일정 수정 버튼 ─── */}
+                      {onUpdateCourse && (
+                        <button onClick={()=>setCourseEditTarget(cd.course)}
+                          style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${T.p}`,
+                            background:"transparent", color:T.p, cursor:"pointer",
+                            fontSize:10, fontWeight:700, whiteSpace:"nowrap", marginLeft:8 }}>
+                          일정 수정
+                        </button>
+                      )}
                     </div>
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:3, fontSize:10, color:T.mu, marginBottom:4 }}>
-                      <span>📅 {formatCoursePeriod(cd.course)}</span>
-                      <span>🗓️ {cd.course.schedDays || "미정"}</span>
-                      <span>🕘 {cd.course.schedTimeFrom && cd.course.schedTimeTo ? `${cd.course.schedTimeFrom}~${cd.course.schedTimeTo}` : "미정"}</span>
-                      <span>📊 {cd.estDays}일 · {cd.estHours}시간</span>
+
+                    {/* 2행: 오늘 수업 여부 / 다음 수업일 */}
+                    <div style={{ display:"flex", gap:10, fontSize:10, color:T.mu, marginBottom:4, flexWrap:"wrap" }}>
+                      <span>{cd.hasToday
+                        ? <b style={{color:T.ok}}>✅ 오늘 수업 있음</b>
+                        : "⬜ 오늘 수업 없음"}</span>
+                      {cd.nextDate && (
+                        <span>📌 다음 수업: <b style={{color:T.tx}}>{cd.nextDate.slice(5).replace("-","/")}
+                        </b></span>
+                      )}
                     </div>
-                    {cd.dates.length > 0 && cd.dates.length <= 60 && (() => {
-                      const todayCheck = new Date().toISOString().slice(0,10);
-                      return (
-                      <div style={{ display:"flex", flexWrap:"wrap", gap:2, marginTop:2 }}>
-                        {cd.dates.map(d => {
-                          const isPast = d <= todayCheck;
+
+                    {/* 3행: 상세 날짜 보기 토글 */}
+                    {cd.dates.length > 0 && (
+                      <button onClick={() => setDateToggleIds(p => ({...p, [dtKey]: !p[dtKey]}))}
+                        style={{ border:"none", background:"transparent", cursor:"pointer",
+                          fontSize:10, fontWeight:600, color:T.p, padding:"3px 0" }}>
+                        {showDates ? "▲ 상세 날짜 접기" : `▼ 상세 날짜 보기 (${cd.dates.length}일)`}
+                      </button>
+                    )}
+                    {showDates && monthGroups.length > 0 && (
+                      <div style={{ marginTop:4 }}>
+                        {monthGroups.map(([month, days]) => {
+                          const monthLabel = `${+month.split("-")[1]}월`;
+                          const MAX_SHOW = 20;
+                          const visibleDays = days.slice(0, MAX_SHOW);
+                          const extraDays = days.length - MAX_SHOW;
                           return (
-                            <span key={d} style={{ fontSize:8, padding:"1px 4px", borderRadius:3,
-                              background: isPast ? `${T.ok}15` : T.s3,
-                              color: isPast ? T.ok : T.mu }}>
-                              {d.slice(5)}
-                            </span>
+                            <div key={month} style={{ marginBottom:4 }}>
+                              <span style={{ fontSize:10, fontWeight:700, color:T.tx, marginRight:6 }}>{monthLabel}:</span>
+                              <span style={{ display:"inline-flex", flexWrap:"wrap", gap:2 }}>
+                                {visibleDays.map(d => (
+                                  <span key={d} style={{ fontSize:8, padding:"1px 4px", borderRadius:3,
+                                    background: d === todayStr ? `${T.p}20` : d < todayStr ? `${T.ok}12` : T.s3,
+                                    color: d === todayStr ? T.p : d < todayStr ? T.ok : T.mu,
+                                    fontWeight: d === todayStr ? 800 : 400 }}>
+                                    {+d.split("-")[1]}/{+d.split("-")[2]}
+                                  </span>
+                                ))}
+                                {extraDays > 0 && (
+                                  <span style={{ fontSize:8, padding:"1px 4px", borderRadius:3,
+                                    background:T.pbg, color:T.p, fontWeight:600 }}>
+                                    ...+{extraDays}일
+                                  </span>
+                                )}
+                              </span>
+                            </div>
                           );
                         })}
                       </div>
-                      );
-                    })()}
-                    {cd.dates.length > 60 && (
-                      <div style={{ fontSize:9, color:T.mu, marginTop:2 }}>
-                        총 {cd.dates.length}일 ({cd.dates[0]} ~ {cd.dates[cd.dates.length-1]})
-                      </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
-            )}
-
-            {inst.note && (
-              <div style={{ marginTop:6, fontSize:11, color:T.mu, background:T.s3,
-                borderRadius:6, padding:"6px 9px" }}>📝 {inst.note}</div>
             )}
           </Card>
           );
@@ -8879,7 +9041,7 @@ function App() {
       case "courses":     return <CourseList courses={courses} onAdd={addCourse} onUpdate={updateCourse} onDelete={deleteCourse}/>;
       case "progress":    return <ProgressMgmt students={students} courses={courses}/>;
       case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
-      case "instructors": return <InstructorMgmt courses={courses}/>;
+      case "instructors": return <InstructorMgmt courses={courses} onUpdateCourse={updateCourse}/>;
       case "rooms":       return <RoomMgmt courses={courses}/>;
       case "attendance":  return <AttendanceMgmt students={students} courses={courses} onRatesUpdated={recalculateAttendanceRate}/>;
       case "completion":  return <CompletionMgmt students={students} courses={courses}/>;

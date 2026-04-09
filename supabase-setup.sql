@@ -28,5 +28,7 @@ CREATE POLICY IF NOT EXISTS "cert_issuances_all" ON cert_issuances
 -- ── 강사 테이블 신규 컬럼 추가 (기존 DB 마이그레이션) ────────
 -- category: 경기도 강사 / 외부 강사 구분
 -- hourly_rate: 시간당 강사료 단가
+-- custom_dates: 강사별 과정별 커스텀 수업일 (JSON: {"courseId": ["2026-04-01","2026-04-10"]})
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '경기도 강사';
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS hourly_rate INTEGER DEFAULT 0;
+ALTER TABLE instructors ADD COLUMN IF NOT EXISTS custom_dates JSONB DEFAULT '{}';

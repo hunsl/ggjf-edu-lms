@@ -235,6 +235,7 @@ const toInstructor = r => r ? ({
   id: r.id,
   name: r.name||"",
   type: r.type||"주강사",
+  category: r.category||"경기도 강사",
   subject: r.subject||"",
   phone: r.phone||"",
   email: r.email||"",
@@ -242,11 +243,13 @@ const toInstructor = r => r ? ({
   cert: r.cert||"",
   cids: r.cids||[],
   note: r.note||"",
+  hourlyRate: r.hourly_rate||r.hourlyRate||0,
 }) : null;
 
 const fromInstructor = i => ({
   name: i.name||"",
   type: i.type||"주강사",
+  category: i.category||"경기도 강사",
   subject: i.subject||"",
   phone: i.phone||"",
   email: i.email||"",
@@ -254,6 +257,7 @@ const fromInstructor = i => ({
   cert: i.cert||"",
   cids: i.cids||[],
   note: i.note||"",
+  hourly_rate: i.hourlyRate||0,
 });
 
 const toRoom = r => r ? ({
@@ -5152,16 +5156,16 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
    ③ INSTRUCTOR MANAGEMENT  강사관리
 =========================================================== */
 const SEED_INSTRUCTORS = [
-  { id:1, name:"김민준", type:"주강사", subject:"코딩·AI", phone:"010-1111-2222", email:"kim@gjf.or.kr",
-    career:"5년", cert:"직업훈련교사 2급", cids:[1,2], note:"초등 코딩 전문" },
-  { id:2, name:"이수연", type:"주강사", subject:"행정회계", phone:"010-3333-4444", email:"lee@gjf.or.kr",
-    career:"8년", cert:"회계사 2급", cids:[7,8], note:"" },
-  { id:3, name:"박현우", type:"보조강사", subject:"물류·ERP", phone:"010-5555-6666", email:"park@gjf.or.kr",
-    career:"3년", cert:"지게차 면허", cids:[4], note:"" },
+  { id:1, name:"김민준", type:"주강사", category:"경기도 강사", subject:"코딩·AI", phone:"010-1111-2222", email:"kim@gjf.or.kr",
+    career:"5년", cert:"직업훈련교사 2급", cids:[1,2], note:"초등 코딩 전문", hourlyRate:50000 },
+  { id:2, name:"이수연", type:"주강사", category:"경기도 강사", subject:"행정회계", phone:"010-3333-4444", email:"lee@gjf.or.kr",
+    career:"8년", cert:"회계사 2급", cids:[7,8], note:"", hourlyRate:55000 },
+  { id:3, name:"박현우", type:"보조강사", category:"외부 강사", subject:"물류·ERP", phone:"010-5555-6666", email:"park@gjf.or.kr",
+    career:"3년", cert:"지게차 면허", cids:[4], note:"", hourlyRate:40000 },
 ];
 
 const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
-  const empty = { name:"", type:"주강사", subject:"", phone:"", email:"", career:"", cert:"", cids:[], note:"" };
+  const empty = { name:"", type:"주강사", category:"경기도 강사", subject:"", phone:"", email:"", career:"", cert:"", cids:[], note:"", hourlyRate:0 };
   const [form, setForm] = useState(inst ? {...inst, cids:inst.cids||[]} : empty);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
@@ -5192,7 +5196,7 @@ const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding:"20px 22px", display:"flex", flexDirection:"column", gap:12 }}>
-          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:10 }}>
             <FLD label="이름" required><input value={form.name||""} onChange={e=>set("name",e.target.value)} placeholder="홍길동" style={inp}/></FLD>
             <FLD label="구분">
               <select value={form.type||"주강사"} onChange={e=>set("type",e.target.value)}
@@ -5200,10 +5204,17 @@ const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
                 {["주강사","보조강사","외래강사","운영요원"].map(v=><option key={v}>{v}</option>)}
               </select>
             </FLD>
+            <FLD label="소속 구분">
+              <select value={form.category||"경기도 강사"} onChange={e=>set("category",e.target.value)}
+                style={{...inp,cursor:"pointer"}}>
+                {["경기도 강사","외부 강사"].map(v=><option key={v}>{v}</option>)}
+              </select>
+            </FLD>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
             <FLD label="담당 과목/분야"><input value={form.subject||""} onChange={e=>set("subject",e.target.value)} placeholder="코딩·AI" style={inp}/></FLD>
             <FLD label="경력"><input value={form.career||""} onChange={e=>set("career",e.target.value)} placeholder="5년" style={inp}/></FLD>
+            <FLD label="시간당 단가 (원)"><input type="number" value={form.hourlyRate||""} onChange={e=>set("hourlyRate",+e.target.value||0)} placeholder="50000" style={inp}/></FLD>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <FLD label="연락처"><input value={form.phone||""} onChange={e=>set("phone",e.target.value)} placeholder="010-0000-0000" style={inp}/></FLD>
@@ -5257,6 +5268,8 @@ const InstructorMgmt = ({ courses }) => {
   const [isNew, setIsNew]      = useState(false);
   const [search, setSearch]    = useState("");
   const [typeFilter, setTF]    = useState("전체");
+  const [catFilter, setCF]     = useState("전체");
+  const [expandedId, setExpandedId] = useState(null);
 
   // ── DB 연동 상태 ──
   const [dbStatus, setDbStatus] = useState("loading"); // loading | ok | error
@@ -5306,9 +5319,92 @@ const InstructorMgmt = ({ courses }) => {
 
   const filtered = instructors.filter(i => {
     if(typeFilter!=="전체" && i.type!==typeFilter) return false;
+    if(catFilter!=="전체" && i.category!==catFilter) return false;
     if(search && !i.name.includes(search) && !i.subject.includes(search)) return false;
     return true;
   });
+
+  // ── 강사별 일정/시수 계산 헬퍼 ──
+  const calcInstSchedule = (inst) => {
+    const assignedCourses = (inst.cids || []).map(cid => courses.find(c => c.id === cid)).filter(Boolean);
+    let totalDays = 0, totalHours = 0;
+    const courseDetails = assignedCourses.map(c => {
+      const dates = buildCourseDatesAll(c);
+      const hoursPerDay = c.schedTimeFrom && c.schedTimeTo
+        ? (() => {
+            const [sh, sm] = c.schedTimeFrom.split(":").map(Number);
+            const [eh, em] = c.schedTimeTo.split(":").map(Number);
+            return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
+          })()
+        : 4;
+      const estHours = Math.round(dates.length * hoursPerDay);
+      totalDays += dates.length;
+      totalHours += estHours;
+      return { course: c, dates, hoursPerDay, estDays: dates.length, estHours };
+    });
+    return { courseDetails, totalDays, totalHours };
+  };
+
+  // ── 강사 엑셀 다운로드 ──
+  const downloadInstructorExcel = () => {
+    const wb = XLSX.utils.book_new();
+    // 시트1: 강사 기본정보 + 시수
+    const rows = instructors.map(inst => {
+      const sched = calcInstSchedule(inst);
+      const courseNames = (inst.cids || []).map(cid => courses.find(c=>c.id===cid)?.name || "").filter(Boolean).join(", ");
+      const courseCodes = (inst.cids || []).map(cid => courses.find(c=>c.id===cid)?.code || "").filter(Boolean).join(", ");
+      return {
+        "이름": inst.name,
+        "구분": inst.type,
+        "소속": inst.category || "경기도 강사",
+        "담당 과목": inst.subject,
+        "연락처": inst.phone,
+        "이메일": inst.email,
+        "경력": inst.career,
+        "자격증": inst.cert,
+        "담당 과정코드": courseCodes,
+        "담당 과정명": courseNames,
+        "예상 강의일수": sched.totalDays,
+        "예상 총 시수": sched.totalHours,
+        "시간당 단가": inst.hourlyRate || "",
+        "예상 강사료": inst.hourlyRate ? sched.totalHours * inst.hourlyRate : "",
+        "특이사항": inst.note,
+      };
+    });
+    const ws1 = XLSX.utils.json_to_sheet(rows);
+    ws1["!cols"] = [8,8,10,12,14,18,6,14,14,30,10,10,10,12,20].map(w=>({wch:w}));
+    XLSX.utils.book_append_sheet(wb, ws1, "강사_기본정보");
+
+    // 시트2: 강사별 강의일 상세
+    const detailRows = [];
+    instructors.forEach(inst => {
+      const sched = calcInstSchedule(inst);
+      sched.courseDetails.forEach(cd => {
+        cd.dates.forEach(d => {
+          detailRows.push({
+            "강사명": inst.name, "소속": inst.category || "경기도 강사",
+            "과정코드": cd.course.code, "과정명": cd.course.name,
+            "강의일": d,
+            "수업시간": cd.course.schedTimeFrom && cd.course.schedTimeTo
+              ? `${cd.course.schedTimeFrom}~${cd.course.schedTimeTo}` : "",
+            "시간(h)": cd.hoursPerDay,
+            "시간당 단가": inst.hourlyRate || "",
+          });
+        });
+      });
+    });
+    if (detailRows.length > 0) {
+      const ws2 = XLSX.utils.json_to_sheet(detailRows);
+      ws2["!cols"] = [8,10,10,30,12,14,6,10].map(w=>({wch:w}));
+      XLSX.utils.book_append_sheet(wb, ws2, "강의일_상세");
+    }
+
+    const out = XLSX.write(wb, { bookType:"xlsx", type:"array" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([out],{type:"application/octet-stream"}));
+    a.download = `강사_관리_${new Date().toISOString().slice(0,10)}.xlsx`;
+    a.click();
+  };
 
   const handleSave = async inst => {
     const isSchemaErr = (e, col) => {
@@ -5323,10 +5419,10 @@ const InstructorMgmt = ({ courses }) => {
       const body = fromInstructor(inst);
       let res = await doSave(body);
 
-      // cids/note 컬럼 스키마 캐시 미등록 → 해당 필드 제외 후 재시도
-      if (res.error && (isSchemaErr(res.error, "cids") || isSchemaErr(res.error, "note"))) {
-        console.warn("⚠️ instructors.cids/note 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload 클릭");
-        const { cids, note, ...fallback } = body;
+      // cids/note/category/hourly_rate 컬럼 스키마 캐시 미등록 → 해당 필드 제외 후 재시도
+      if (res.error && (isSchemaErr(res.error, "cids") || isSchemaErr(res.error, "note") || isSchemaErr(res.error, "category") || isSchemaErr(res.error, "hourly_rate"))) {
+        console.warn("⚠️ instructors 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload 클릭");
+        const { cids, note, category, hourly_rate, ...fallback } = body;
         res = await doSave(fallback);
       }
 
@@ -5360,6 +5456,7 @@ const InstructorMgmt = ({ courses }) => {
   };
 
   const typeColors = {"주강사":T.p,"보조강사":T.ok,"외래강사":"#7C3AED","운영요원":T.warn};
+  const catColors = {"경기도 강사":"#2563EB","외부 강사":"#9A3412"};
 
   return (
     <div className="page">
@@ -5371,9 +5468,14 @@ const InstructorMgmt = ({ courses }) => {
       <SectionHead
         title="강사 관리"
         sub={`등록 강사 ${instructors.length}명`}
-        right={<Btn size="sm" onClick={()=>{setIsNew(true);setEdit({});}}>
-          <Icon n="plus" s={13}/> 강사 추가
-        </Btn>}
+        right={<div style={{ display:"flex", gap:6 }}>
+          <Btn size="sm" variant="ghost" onClick={downloadInstructorExcel}>
+            📥 엑셀 다운로드
+          </Btn>
+          <Btn size="sm" onClick={()=>{setIsNew(true);setEdit({});}}>
+            <Icon n="plus" s={13}/> 강사 추가
+          </Btn>
+        </div>}
       />
 
       {/* DB 연동 상태 체크리스트 */}
@@ -5394,14 +5496,27 @@ const InstructorMgmt = ({ courses }) => {
               color: typeFilter===t ? "#fff" : T.mu }}>{t}</button>
           ))}
         </div>
+        <div style={{ height:20, width:1, background:T.bd }}/>
+        <div style={{ display:"flex", gap:5 }}>
+          {["전체","경기도 강사","외부 강사"].map(c=>(
+            <button key={c} onClick={()=>setCF(c)} style={{
+              padding:"5px 12px", borderRadius:16, border:"none", cursor:"pointer",
+              fontSize:11, fontWeight:600,
+              background: catFilter===c ? (catColors[c]||T.p) : T.s3,
+              color: catFilter===c ? "#fff" : T.mu }}>{c}</button>
+          ))}
+        </div>
         <div style={{ marginLeft:"auto", fontSize:12, color:T.mu, fontWeight:600 }}>
           {filtered.length}명
         </div>
       </Card>
 
       {/* 강사 카드 그리드 */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
-        {filtered.map(inst=>(
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:12 }}>
+        {filtered.map(inst=>{
+          const sched = calcInstSchedule(inst);
+          const isExpanded = expandedId === inst.id;
+          return (
           <Card key={inst.id} style={{ padding:18, position:"relative" }}>
             {/* 수정/삭제 */}
             <div style={{ position:"absolute", top:12, right:12, display:"flex", gap:5 }}>
@@ -5418,7 +5533,7 @@ const InstructorMgmt = ({ courses }) => {
             </div>
 
             {/* 아바타 + 이름 */}
-            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12, paddingRight:60 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10, paddingRight:60 }}>
               <div style={{ width:44, height:44, borderRadius:12, flexShrink:0,
                 background:`${typeColors[inst.type]||T.p}18`,
                 color:typeColors[inst.type]||T.p,
@@ -5426,15 +5541,18 @@ const InstructorMgmt = ({ courses }) => {
                 fontSize:18, fontWeight:900 }}>{inst.name[0]}</div>
               <div>
                 <div style={{ fontSize:14, fontWeight:800, color:T.tx }}>{inst.name}</div>
-                <div style={{ display:"flex", gap:5, marginTop:3 }}>
+                <div style={{ display:"flex", gap:4, marginTop:3, flexWrap:"wrap" }}>
                   <Chip label={inst.type} bg={`${typeColors[inst.type]||T.p}15`} color={typeColors[inst.type]||T.p}/>
+                  <Chip label={inst.category||"경기도 강사"}
+                    bg={`${catColors[inst.category]||catColors["경기도 강사"]}12`}
+                    color={catColors[inst.category]||catColors["경기도 강사"]}/>
                   {inst.subject && <Chip label={inst.subject} bg={T.s3} color={T.mu}/>}
                 </div>
               </div>
             </div>
 
             {/* 상세 정보 */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:10 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5, marginBottom:8 }}>
               {[
                 {l:"📞",v:inst.phone},
                 {l:"📧",v:inst.email},
@@ -5448,9 +5566,22 @@ const InstructorMgmt = ({ courses }) => {
               ))}
             </div>
 
+            {/* 시수/단가 요약 */}
+            <div style={{ display:"flex", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+              {sched.courseDetails.length > 0 && (
+                <Chip label={`${sched.totalDays}일 / ${sched.totalHours}시간`} bg={T.pbg} color={T.p} size={10}/>
+              )}
+              {inst.hourlyRate > 0 && (
+                <Chip label={`₩${inst.hourlyRate.toLocaleString()}/h`} bg="#FFFBEB" color={T.warn} size={10}/>
+              )}
+              {inst.hourlyRate > 0 && sched.totalHours > 0 && (
+                <Chip label={`예상 ₩${(inst.hourlyRate * sched.totalHours).toLocaleString()}`} bg="#F0FDF4" color={T.ok} size={10}/>
+              )}
+            </div>
+
             {/* 담당 과정 뱃지 */}
             {(inst.cids||[]).length > 0 && (
-              <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:6 }}>
                 {inst.cids.map(cid=>{
                   const c = courses.find(x=>x.id===cid);
                   return c ? <Chip key={cid} label={c.code} bg={`${c.cc}15`} color={c.cc}/> : null;
@@ -5458,12 +5589,58 @@ const InstructorMgmt = ({ courses }) => {
               </div>
             )}
 
+            {/* 강의 일정 상세 토글 */}
+            {sched.courseDetails.length > 0 && (
+              <button onClick={()=>setExpandedId(isExpanded ? null : inst.id)}
+                style={{ width:"100%", padding:"5px 0", border:"none", background:"transparent",
+                  cursor:"pointer", fontSize:10, fontWeight:600, color:T.p, textAlign:"center" }}>
+                {isExpanded ? "▲ 강의 일정 접기" : "▼ 강의 일정 상세 보기"}
+              </button>
+            )}
+            {isExpanded && sched.courseDetails.length > 0 && (
+              <div style={{ marginTop:4, background:T.s2, borderRadius:8, padding:10 }}>
+                {sched.courseDetails.map(cd => (
+                  <div key={cd.course.id} style={{ marginBottom:8 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:T.tx, marginBottom:4 }}>
+                      [{cd.course.code}] {cd.course.name}
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:3, fontSize:10, color:T.mu, marginBottom:4 }}>
+                      <span>📅 {formatCoursePeriod(cd.course)}</span>
+                      <span>🗓️ {cd.course.schedDays || "미정"}</span>
+                      <span>🕘 {cd.course.schedTimeFrom && cd.course.schedTimeTo ? `${cd.course.schedTimeFrom}~${cd.course.schedTimeTo}` : "미정"}</span>
+                      <span>📊 {cd.estDays}일 · {cd.estHours}시간</span>
+                    </div>
+                    {cd.dates.length > 0 && cd.dates.length <= 60 && (
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:2, marginTop:2 }}>
+                        {cd.dates.map(d => {
+                          const isPast = d <= new Date().toISOString().slice(0,10);
+                          return (
+                            <span key={d} style={{ fontSize:8, padding:"1px 4px", borderRadius:3,
+                              background: isPast ? `${T.ok}15` : T.s3,
+                              color: isPast ? T.ok : T.mu }}>
+                              {d.slice(5)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {cd.dates.length > 60 && (
+                      <div style={{ fontSize:9, color:T.mu, marginTop:2 }}>
+                        총 {cd.dates.length}일 ({cd.dates[0]} ~ {cd.dates[cd.dates.length-1]})
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {inst.note && (
-              <div style={{ marginTop:8, fontSize:11, color:T.mu, background:T.s3,
+              <div style={{ marginTop:6, fontSize:11, color:T.mu, background:T.s3,
                 borderRadius:6, padding:"6px 9px" }}>📝 {inst.note}</div>
             )}
           </Card>
-        ))}
+          );
+        })}
 
         {/* 추가 카드 */}
         <div onClick={()=>{setIsNew(true);setEdit({});}} style={{

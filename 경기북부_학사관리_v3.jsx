@@ -2759,7 +2759,7 @@ const InstructorMgmt = ({ courses }) => {
     .sort((a, b) => {
       if(sortKey === "이름순") return a.name.localeCompare(b.name);
       if(sortKey === "구분순") return a.type.localeCompare(b.type);
-      if(sortKey === "경력 많은순") return (parseInt(b.career)||0) - (parseInt(a.career)||0);
+      if(sortKey === "경력 많은순") return (parseInt(b.career,10)||0) - (parseInt(a.career,10)||0);
       if(sortKey === "담당과정 많은순") return (b.cids||[]).length - (a.cids||[]).length;
       return 0;
     });

@@ -2744,12 +2744,25 @@ const InstructorMgmt = ({ courses }) => {
   const [isNew, setIsNew]      = useState(false);
   const [search, setSearch]    = useState("");
   const [typeFilter, setTF]    = useState("전체");
+  const [courseFilter, setCF]  = useState([]);
+  const [sortKey, setSort]     = useState("이름순");
 
-  const filtered = instructors.filter(i => {
-    if(typeFilter!=="전체" && i.type!==typeFilter) return false;
-    if(search && !i.name.includes(search) && !i.subject.includes(search)) return false;
-    return true;
-  });
+  const isFiltered = search !== "" || typeFilter !== "전체" || courseFilter.length > 0 || sortKey !== "이름순";
+
+  const filtered = instructors
+    .filter(i => {
+      if(typeFilter !== "전체" && i.type !== typeFilter) return false;
+      if(search && !i.name.includes(search) && !i.subject.includes(search)) return false;
+      if(courseFilter.length > 0 && !courseFilter.some(cid => (i.cids||[]).includes(cid))) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if(sortKey === "이름순") return a.name.localeCompare(b.name);
+      if(sortKey === "구분순") return a.type.localeCompare(b.type);
+      if(sortKey === "경력 많은순") return (parseInt(b.career,10)||0) - (parseInt(a.career,10)||0);
+      if(sortKey === "담당과정 많은순") return (b.cids||[]).length - (a.cids||[]).length;
+      return 0;
+    });
 
   const handleSave = inst => {
     if(isNew) setInst(p=>[...p, inst]);
@@ -2759,8 +2772,13 @@ const InstructorMgmt = ({ courses }) => {
     if(!window.confirm("강사를 삭제하시겠습니까?")) return;
     setInst(p=>p.filter(x=>x.id!==id));
   };
+  const resetFilters = () => { setSearch(""); setTF("전체"); setCF([]); setSort("이름순"); };
 
   const typeColors = {"주강사":T.p,"보조강사":T.ok,"외래강사":"#7C3AED","운영요원":T.warn};
+
+  const subText = isFiltered
+    ? `전체 ${instructors.length}명 중 ${filtered.length}명 표시`
+    : `등록 강사 ${instructors.length}명`;
 
   return (
     <div className="page">
@@ -2771,19 +2789,42 @@ const InstructorMgmt = ({ courses }) => {
 
       <SectionHead
         title="강사 관리"
-        sub={`등록 강사 ${instructors.length}명`}
+        sub={subText}
         right={<Btn size="sm" onClick={()=>{setIsNew(true);setEdit({});}}>
           <Icon n="plus" s={13}/> 강사 추가
         </Btn>}
       />
 
       {/* 필터 바 */}
-      <Card style={{ padding:"12px 16px", marginBottom:14, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)}
-          placeholder="이름 / 담당과목 검색…"
-          style={{ padding:"7px 11px", border:`1px solid ${T.bd}`, borderRadius:8,
-            fontSize:12, outline:"none", background:T.s2, color:T.tx, width:180 }}/>
-        <div style={{ display:"flex", gap:5 }}>
+      <Card style={{ padding:"12px 16px", marginBottom:14, display:"flex", flexDirection:"column", gap:10 }}>
+        {/* 1행: 검색 + 정렬 + 초기화 */}
+        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="이름 / 담당과목 검색…"
+            style={{ padding:"7px 11px", border:`1px solid ${T.bd}`, borderRadius:8,
+              fontSize:12, outline:"none", background:T.s2, color:T.tx, width:180 }}/>
+          <select value={sortKey} onChange={e=>setSort(e.target.value)} style={{
+            padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
+            fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer" }}>
+            {["이름순","구분순","경력 많은순","담당과정 많은순"].map(k=>(
+              <option key={k}>{k}</option>
+            ))}
+          </select>
+          {isFiltered && (
+            <button onClick={resetFilters} style={{
+              padding:"5px 12px", borderRadius:16, border:`1px solid ${T.bd}`,
+              cursor:"pointer", fontSize:11, fontWeight:600,
+              background:T.s3, color:T.mu, display:"flex", alignItems:"center", gap:4 }}>
+              <Icon n="x" s={11}/> 초기화
+            </button>
+          )}
+          <div style={{ marginLeft:"auto", fontSize:12, color:T.mu, fontWeight:600 }}>
+            {filtered.length}명
+          </div>
+        </div>
+
+        {/* 2행: 타입 필터 */}
+        <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
           {["전체","주강사","보조강사","외래강사","운영요원"].map(t=>(
             <button key={t} onClick={()=>setTF(t)} style={{
               padding:"5px 12px", borderRadius:16, border:"none", cursor:"pointer",
@@ -2792,12 +2833,39 @@ const InstructorMgmt = ({ courses }) => {
               color: typeFilter===t ? "#fff" : T.mu }}>{t}</button>
           ))}
         </div>
-        <div style={{ marginLeft:"auto", fontSize:12, color:T.mu, fontWeight:600 }}>
-          {filtered.length}명
+
+        {/* 3행: 과정 필터 */}
+        <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+          <button onClick={()=>setCF([])} style={{
+            padding:"5px 12px", borderRadius:16, border:"none", cursor:"pointer",
+            fontSize:11, fontWeight:600,
+            background: courseFilter.length===0 ? T.p : T.s3,
+            color: courseFilter.length===0 ? "#fff" : T.mu }}>전체과정</button>
+          {courses.map(c=>{
+            const sel = courseFilter.includes(c.id);
+            return (
+              <button key={c.id} onClick={()=>setCF(prev=>sel ? prev.filter(x=>x!==c.id) : [...prev,c.id])} style={{
+                padding:"5px 12px", borderRadius:16, border:"none", cursor:"pointer",
+                fontSize:11, fontWeight:600,
+                background: sel ? c.cc : T.s3,
+                color: sel ? "#fff" : T.mu }}>{c.code}</button>
+            );
+          })}
         </div>
       </Card>
 
-      {/* 강사 카드 그리드 */}
+      {/* 빈 결과 안내 */}
+      {filtered.length === 0 ? (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+          padding:"60px 20px", gap:14, color:T.mu }}>
+          <Icon n="people" s={40}/>
+          <div style={{ fontSize:14, fontWeight:600 }}>조건에 맞는 강사가 없습니다</div>
+          <button onClick={resetFilters} style={{
+            padding:"7px 18px", borderRadius:16, border:`1px solid ${T.bd}`,
+            cursor:"pointer", fontSize:12, fontWeight:600,
+            background:T.s3, color:T.mu }}>필터 초기화</button>
+        </div>
+      ) : (
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
         {filtered.map(inst=>(
           <Card key={inst.id} style={{ padding:18, position:"relative" }}>
@@ -2875,6 +2943,7 @@ const InstructorMgmt = ({ courses }) => {
           <div style={{ fontSize:12, fontWeight:700, color:T.mu }}>강사 추가</div>
         </div>
       </div>
+      )}
     </div>
   );
 };

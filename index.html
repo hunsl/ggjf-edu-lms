@@ -3988,6 +3988,8 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
   .editable{outline:none;border:1px dashed #a0bfdf !important;border-radius:0;}
   .editable:hover{background:#f0f7ff;cursor:text;}
   .editable:focus{background:#fef3c7;border-color:#f59e0b !important;outline:none;}
+  /* ⑧ 구분 셀 (㉡ 사유/일자 개별 셀) */
+  .subcell{padding:5px 8px;font-size:8.5pt;border-left:1px solid #bbb;}
   /* 서명 영역 */
   .sign-area{margin-top:10px;text-align:center;}
   .sign-date{font-size:11.5pt;font-weight:700;letter-spacing:2px;margin-bottom:8px;color:#111;}
@@ -4020,16 +4022,16 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
 
   <!-- ━━ 메인 테이블 (7열) ━━
        col1=구역레이블(26px) col2=번호(22px) col3=항목명(80px)
-       col4=값(가변)        col5=번호2(22px) col6=항목명2(90px) col7=값2(100px) -->
+       col4=값(가변)        col5=번호2/값2(60px) col6=항목명2(86px) col7=값3/훈련생확인(96px) -->
   <table class="main">
     <colgroup>
       <col style="width:26px"/>
       <col style="width:22px"/>
       <col style="width:80px"/>
       <col/>
-      <col style="width:22px"/>
-      <col style="width:90px"/>
-      <col style="width:100px"/>
+      <col style="width:60px"/>
+      <col style="width:86px"/>
+      <col style="width:96px"/>
     </colgroup>
     <tbody>
       <!-- ━━ 훈련생(수급자격자) — 2행 ━━ -->
@@ -4059,10 +4061,10 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
         <td class="fval editable" contenteditable="true" style="font-size:8.5pt;word-break:keep-all;">${trainingHoursStr}</td>
       </tr>
 
-      <!-- ━━ 수강증명명세 — rowspan=7 (행6~12) ━━ -->
+      <!-- ━━ 수강증명명세 — rowspan=9 (⑥ ⑦ ⑧hdr ㉠hdr ㉠사유 ㉠일자 ㉡hdr ㉡사유 ㉡일자) ━━ -->
       <!-- 행1: ⑥ 증명대상기간 -->
       <tr>
-        <td class="slbl" rowspan="7">수강증명<br/>명세</td>
+        <td class="slbl" rowspan="9">수강증명<br/>명세</td>
         <td class="fno">⑥</td>
         <td class="flbl" style="font-size:8.5pt;">증명대상기간</td>
         <td class="fval editable" contenteditable="true" colspan="4" style="font-size:9.5pt;font-weight:600;">${certPeriodStr}</td>
@@ -4073,40 +4075,53 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
         <td class="flbl" colspan="2" style="font-size:8.5pt;">휴일 등 훈련이<br/>없었던 날</td>
         <td class="fval editable" contenteditable="true" colspan="3" style="font-size:8.5pt;">공휴일 및 법정 휴일 (과정 운영 일정 참조)</td>
       </tr>
-      <!-- 행3: ⑧ 헤더 — ⑧ 번호 셀은 rowspan=5로 행3~7 점유(㉠라벨+㉠데이터+㉡라벨+㉡데이터) -->
+      <!-- 행3: ⑧ 헤더 — ⑧ fno rowspan=7, ※훈련생확인 col7 rowspan=7 -->
       <tr>
-        <td class="fno hd" rowspan="5" style="vertical-align:middle;font-size:9pt;">⑧</td>
-        <td colspan="5" style="background:#f0f0f0;font-size:9pt;font-weight:700;padding:5px 8px;text-align:center;letter-spacing:1px;">
+        <td class="fno hd" rowspan="7" style="vertical-align:middle;font-size:9pt;">⑧</td>
+        <td colspan="4" style="background:#f0f0f0;font-size:9pt;font-weight:700;padding:5px 8px;text-align:left;letter-spacing:0.5px;">
           본인의 사정으로 수강하지 아니한 날
+        </td>
+        <td class="hd" rowspan="7" style="text-align:center;font-size:8pt;font-weight:800;vertical-align:middle;padding:4px 2px;line-height:2;">
+          ※<br/>훈련생<br/>확&nbsp;인
         </td>
       </tr>
       <!-- 행4: ㉠ 라벨 -->
       <tr>
         <td class="fno hd" style="font-size:8pt;vertical-align:middle;">㉠</td>
-        <td colspan="4" style="padding:4px 8px;font-size:9pt;background:#f8f8f8;">
-          질병·부상 등 부득이한 사유가 있는 날 &nbsp;&nbsp;<b>(총 ${excused.length}일)</b>
+        <td colspan="3" style="padding:4px 8px;font-size:8.5pt;background:#f8f8f8;">
+          질병·부상 등 부득이한 사유가 있는 날 &nbsp;<b>(총 ${excused.length}일)</b>
         </td>
       </tr>
-      <!-- 행5: ㉠ 날짜·사유 -->
+      <!-- 행5: ㉠ 사유 -->
       <tr>
-        <td class="col-hd" style="width:30px;">날자</td>
-        <td colspan="2" class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsDates(excused)}</td>
-        <td class="col-hd" style="width:30px;">사유</td>
-        <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsReasons(excused)||'해당없음'}</td>
+        <td class="col-hd" style="font-size:8.5pt;white-space:nowrap;">사&nbsp;유</td>
+        <td colspan="3" class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsReasons(excused)||'해당없음'}</td>
       </tr>
-      <!-- 행6: ㉡ 라벨 -->
+      <!-- 행6: ㉠ 일자 -->
+      <tr>
+        <td class="col-hd" style="font-size:8.5pt;white-space:nowrap;">일&nbsp;자</td>
+        <td colspan="3" class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsDates(excused)}</td>
+      </tr>
+      <!-- 행7: ㉡ 라벨 -->
       <tr>
         <td class="fno hd" style="font-size:8pt;vertical-align:middle;">㉡</td>
-        <td colspan="4" style="padding:4px 8px;font-size:9pt;background:#f8f8f8;">
-          부득이한 사유가 없는 날 &nbsp;&nbsp;<b>(총 ${personal.length}일)</b>
+        <td colspan="3" style="padding:4px 8px;font-size:8.5pt;background:#f8f8f8;">
+          부득이한 사유가 없는 날 &nbsp;<b>(총 ${personal.length}일)</b>
         </td>
       </tr>
-      <!-- 행7: ㉡ 날짜·사유 -->
+      <!-- 행8: ㉡ 사유 — 3개 셀로 분리 (개인사유 레이블 구조) -->
       <tr>
-        <td class="col-hd" style="width:30px;">날자</td>
-        <td colspan="2" class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsDates(personal)}</td>
-        <td class="col-hd" style="width:30px;">사유</td>
+        <td class="col-hd" style="font-size:8.5pt;white-space:nowrap;">사&nbsp;유</td>
         <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsReasons(personal)||'개인사유'}</td>
+        <td class="editable subcell" contenteditable="true"></td>
+        <td class="editable subcell" contenteditable="true">개인사유</td>
+      </tr>
+      <!-- 행9: ㉡ 일자 -->
+      <tr>
+        <td class="col-hd" style="font-size:8.5pt;white-space:nowrap;">일&nbsp;자</td>
+        <td class="editable" contenteditable="true" style="padding:5px 8px;font-size:8.5pt;">${fmtAbsDates(personal)}</td>
+        <td class="editable subcell" contenteditable="true">-</td>
+        <td class="editable subcell" contenteditable="true">-</td>
       </tr>
 
       <!-- ⑨ 취업 사실 — 수강증명명세 rowspan 종료 후, 전체 7열 사용 -->
@@ -4120,17 +4135,9 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
     </tbody>
   </table>
 
-  <!-- ━━ 훈련생 확인 ━━ -->
-  <table style="width:100%;border-collapse:collapse;margin-top:6px;">
-    <tr>
-      <td style="border:1px solid #333;padding:6px 10px;font-size:9pt;line-height:1.8;">
-        <b>※ 훈련생확인</b>&nbsp;&nbsp;위의 사실이 틀림없음을 증명합니다.
-      </td>
-    </tr>
-  </table>
-
-  <!-- ━━ 서명 ━━ -->
+  <!-- ━━ 훈련생 확인 + 서명 ━━ -->
   <div class="sign-area">
+    <div style="font-size:9.5pt;font-weight:600;margin-bottom:8px;">위의 사실이 틀림없음을 증명합니다.</div>
     <div class="sign-date">${issueDate}</div>
     <div class="sign-row">
       <span class="sign-org">경기도일자리재단 대표이사</span>

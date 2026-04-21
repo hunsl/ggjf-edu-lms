@@ -57,6 +57,7 @@ const toStudent = r => r ? ({
   addrCity: r.addr_city||"", itvDate: r.itv_date||"",
   itvScore: r.itv_score||"", itvGrade: r.itv_grade||"",
   itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
+  earlyEmployed: r.early_employed||false, dropout: r.dropout||false,
 }) : null;
 
 const fromStudent = s => ({
@@ -65,6 +66,7 @@ const fromStudent = s => ({
   addr_city: s.addrCity||"", itv_date: s.itvDate||null,
   itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
   itv_pass: s.itvPass||false, memo: s.memo||"", rate: s.rate||0,
+  early_employed: s.earlyEmployed||false, dropout: s.dropout||false,
 });
 
 const toCourse = r => r ? ({
@@ -172,61 +174,61 @@ const SEED_STUDENTS = [
     edu:"대졸", major:"기계공학", career:"물류창고 2년", certs:"지게차 1종",
     empType:"미취업", unemployment:true, disabled:false, veteran:false,
     itvDate:"2026-02-14", itvScore:88, itvGrade:"A", itvPass:true,
-    memo:"취업의지 매우 강함. 지게차 자격 보유.", rate:94 },
+    memo:"취업의지 매우 강함. 지게차 자격 보유.", rate:94, earlyEmployed:true, dropout:false },
   { id:2,  cid:4,  name:"이서연", gender:"여", birth:"1997-07-22", idBack:"2345678",
     phone:"010-2345-6789", phoneEmer:"010-8888-2222", addrCity:"양주시", addrDong:"회천동",
     edu:"대졸", major:"경영학", career:"없음", certs:"컴퓨터활용능력 2급",
     empType:"미취업", unemployment:false, disabled:false, veteran:false,
     itvDate:"2026-02-14", itvScore:72, itvGrade:"B", itvPass:true,
-    memo:"경력 없으나 학습 의지 높음.", rate:75 },
+    memo:"경력 없으나 학습 의지 높음.", rate:75, earlyEmployed:false, dropout:false },
   { id:3,  cid:4,  name:"박지훈", gender:"남", birth:"1990-01-30", idBack:"3456789",
     phone:"010-3456-7890", phoneEmer:"010-7777-3333", addrCity:"포천시", addrDong:"신읍동",
     edu:"고졸", major:"-", career:"제조업 5년", certs:"없음",
     empType:"미취업", unemployment:true, disabled:false, veteran:false,
     itvDate:"2026-02-15", itvScore:65, itvGrade:"C", itvPass:true,
-    memo:"실업급여 수급 중. 출석 관리 주의.", rate:62 },
+    memo:"실업급여 수급 중. 출석 관리 주의.", rate:62, earlyEmployed:false, dropout:true },
   { id:4,  cid:4,  name:"최수아", gender:"여", birth:"1999-11-05", idBack:"4567890",
     phone:"010-4567-8901", phoneEmer:"010-6666-4444", addrCity:"의정부시", addrDong:"용현동",
     edu:"대졸", major:"교육학", career:"없음", certs:"정보처리기사",
     empType:"미취업", unemployment:false, disabled:false, veteran:false,
     itvDate:"2026-02-15", itvScore:95, itvGrade:"A+", itvPass:true,
-    memo:"성실하고 적극적. 우수 학습자 기대.", rate:97 },
+    memo:"성실하고 적극적. 우수 학습자 기대.", rate:97, earlyEmployed:false, dropout:false },
   { id:5,  cid:4,  name:"정우진", gender:"남", birth:"1995-08-14", idBack:"5678901",
     phone:"010-5678-9012", phoneEmer:"010-5555-5555", addrCity:"남양주시", addrDong:"화도읍",
     edu:"대졸", major:"산업공학", career:"물류업 1년", certs:"ERP정보관리사",
     empType:"미취업", unemployment:false, disabled:false, veteran:true,
     itvDate:"2026-02-16", itvScore:83, itvGrade:"B+", itvPass:true,
-    memo:"국가유공자 자녀. 이수 의지 강함.", rate:88 },
+    memo:"국가유공자 자녀. 이수 의지 강함.", rate:88, earlyEmployed:false, dropout:false },
   { id:6,  cid:8,  name:"강다은", gender:"여", birth:"1993-03-20", idBack:"6789012",
     phone:"010-6789-0123", phoneEmer:"010-4444-6666", addrCity:"의정부시", addrDong:"금오동",
     edu:"대졸", major:"회계학", career:"사무보조 3년", certs:"전산세무 2급",
     empType:"미취업", unemployment:true, disabled:false, veteran:false,
     itvDate:"2026-02-10", itvScore:90, itvGrade:"A", itvPass:true,
-    memo:"회계 경력 보유. 즉시 취업 가능.", rate:91 },
+    memo:"회계 경력 보유. 즉시 취업 가능.", rate:91, earlyEmployed:true, dropout:false },
   { id:7,  cid:8,  name:"윤서준", gender:"남", birth:"1996-12-08", idBack:"7890123",
     phone:"010-7890-1234", phoneEmer:"010-3333-7777", addrCity:"동두천시", addrDong:"소요동",
     edu:"고졸", major:"-", career:"편의점 아르바이트 2년", certs:"없음",
     empType:"미취업", unemployment:false, disabled:true, veteran:false,
     itvDate:"2026-02-10", itvScore:70, itvGrade:"B", itvPass:true,
-    memo:"장애 3급. 배려 필요.", rate:78 },
+    memo:"장애 3급. 배려 필요.", rate:78, earlyEmployed:false, dropout:false },
   { id:8,  cid:1,  name:"임지수", gender:"여", birth:"2000-06-17", idBack:"8901234",
     phone:"010-8901-2345", phoneEmer:"010-2222-8888", addrCity:"양주시", addrDong:"백석읍",
     edu:"대졸", major:"컴퓨터교육", career:"없음", certs:"정보교육사 2급",
     empType:"미취업", unemployment:false, disabled:false, veteran:false,
     itvDate:"2026-02-18", itvScore:98, itvGrade:"A+", itvPass:true,
-    memo:"코딩 교육 관심 매우 높음.", rate:100 },
+    memo:"코딩 교육 관심 매우 높음.", rate:100, earlyEmployed:false, dropout:false },
   { id:9,  cid:1,  name:"한예린", birth:"1988-09-11", gender:"여", idBack:"9012345",
     phone:"010-9012-3456", phoneEmer:"010-1111-9999", addrCity:"의정부시", addrDong:"호원동",
     edu:"대학원졸", major:"교육공학", career:"강사 5년", certs:"직업훈련교사 3급",
     empType:"미취업", unemployment:false, disabled:false, veteran:false,
     itvDate:"2026-02-18", itvScore:87, itvGrade:"A", itvPass:true,
-    memo:"강사 경력 풍부. 취업 연계 기대.", rate:83 },
+    memo:"강사 경력 풍부. 취업 연계 기대.", rate:83, earlyEmployed:false, dropout:false },
   { id:10, cid:10, name:"오민혁", gender:"남", birth:"1994-02-25", idBack:"0123456",
     phone:"010-0123-4567", phoneEmer:"010-9876-0000", addrCity:"포천시", addrDong:"군내면",
     edu:"고졸", major:"-", career:"식품공장 3년", certs:"식품기사",
     empType:"미취업", unemployment:true, disabled:false, veteran:false,
     itvDate:"2026-02-20", itvScore:60, itvGrade:"C", itvPass:true,
-    memo:"HACCP 실무 경험 있음. 결석 주의.", rate:55 },
+    memo:"HACCP 실무 경험 있음. 결석 주의.", rate:55, earlyEmployed:false, dropout:true },
 ];
 
 const DATES = ["2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06",
@@ -918,6 +920,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
   const [search, setSearch] = useState("");
   const [cFilter, setCFilter] = useState(0);
   const [riskOnly, setRisk] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "early" | "dropout"
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState(null);   // parsed excel rows
   const [tab, setTab] = useState("list");          // "list" | "import"
@@ -926,9 +929,11 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
   const filtered = useMemo(() => students.filter(s => {
     if(cFilter && s.cid!==cFilter) return false;
     if(riskOnly && s.rate>=80) return false;
+    if(statusFilter==="early" && !s.earlyEmployed) return false;
+    if(statusFilter==="dropout" && !s.dropout) return false;
     if(search && !s.name.includes(search) && !s.phone.includes(search)) return false;
     return true;
-  }), [students, cFilter, riskOnly, search]);
+  }), [students, cFilter, riskOnly, statusFilter, search]);
 
   const parseFile = file => {
     const reader = new FileReader();
@@ -952,7 +957,8 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
       return {
         id: Date.now()+i, cid:c.id, name:r["이름"]||"", birth:r["생년월일"]||"",
         phone:r["연락처"]||"", addr:r["주소"]||"", edu:r["최종학력"]||"",
-        status:r["취업여부"]||"미취업", rate:Math.round(60+Math.random()*40)
+        status:r["취업여부"]||"미취업", rate:Math.round(60+Math.random()*40),
+        earlyEmployed:false, dropout:false
       };
     });
     onAdd(newStudents);
@@ -1100,6 +1106,27 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
               cursor:"pointer", fontSize:12, fontWeight:600, transition:"all .15s" }}>
               <Icon n="alert" s={13}/> 위험만
             </button>
+            <button onClick={()=>setStatusFilter(statusFilter==="early"?"all":"early")} style={{
+              display:"flex", alignItems:"center", gap:5, padding:"7px 13px",
+              border:`1px solid ${statusFilter==="early"?"#059669":T.bd}`, borderRadius:8,
+              background:statusFilter==="early"?"#ECFDF5":T.s2, color:statusFilter==="early"?"#059669":T.mu,
+              cursor:"pointer", fontSize:12, fontWeight:600, transition:"all .15s" }}>
+              🏢 조기수료만
+            </button>
+            <button onClick={()=>setStatusFilter(statusFilter==="dropout"?"all":"dropout")} style={{
+              display:"flex", alignItems:"center", gap:5, padding:"7px 13px",
+              border:`1px solid ${statusFilter==="dropout"?"#DC2626":T.bd}`, borderRadius:8,
+              background:statusFilter==="dropout"?"#FEF2F2":T.s2, color:statusFilter==="dropout"?"#DC2626":T.mu,
+              cursor:"pointer", fontSize:12, fontWeight:600, transition:"all .15s" }}>
+              ⛔ 중도탈락만
+            </button>
+            <button onClick={()=>{ setRisk(false); setStatusFilter("all"); }} style={{
+              display:"flex", alignItems:"center", gap:5, padding:"7px 13px",
+              border:`1px solid ${(!riskOnly&&statusFilter==="all")?T.p:T.bd}`, borderRadius:8,
+              background:(!riskOnly&&statusFilter==="all")?T.pbg:T.s2, color:(!riskOnly&&statusFilter==="all")?T.p:T.mu,
+              cursor:"pointer", fontSize:12, fontWeight:600, transition:"all .15s" }}>
+              전체
+            </button>
             <div style={{ marginLeft:"auto", fontSize:12, color:T.mu, fontWeight:600 }}>
               총 {filtered.length}명
             </div>
@@ -1132,6 +1159,8 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
                 {filtered.map(s=>{
                   const c = courses.find(x=>x.id===s.cid);
                   const col = rateColor(s.rate);
+                  const totalHours = c?.hours || 0;
+                  const attendedHours = Math.round(totalHours * (s.rate||0) / 100);
                   // 나이 계산
                   const age = (() => {
                     if(!s.birth) return "-";
@@ -1146,8 +1175,16 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
                     s.veteran      && {l:"보훈",    bg:"#ECFDF5",c:"#059669"},
                   ].filter(Boolean);
                   const gradeColor = g => g?.startsWith("A")?T.ok:g?.startsWith("B")?T.warn:T.danger;
+                  const stateBadges = [
+                    s.earlyEmployed && {l:"🏢 조기수료",bg:"#ECFDF5",c:"#059669"},
+                    s.dropout && {l:"⛔ 중도탈락",bg:"#FEF2F2",c:"#DC2626"},
+                  ].filter(Boolean);
                   return (
-                    <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
+                    <tr key={s.id} className="row-hover" style={{
+                      borderBottom:`1px solid ${T.bd}`,
+                      background:s.dropout ? T.s : (s.earlyEmployed ? "#F0FDF4" : "transparent"),
+                      opacity:s.dropout ? 0.55 : 1
+                    }}>
 
                       {/* 이름·성별·나이 */}
                       <td style={{ padding:"11px 12px" }}>
@@ -1168,6 +1205,13 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
                               </span>
                             </div>
                             <div style={{ fontSize:10, color:T.mu }}>{age} · {s.birth||"-"}</div>
+                            {stateBadges.length > 0 && (
+                              <div style={{ display:"flex", gap:4, marginTop:3, flexWrap:"wrap" }}>
+                                {stateBadges.map(b=>(
+                                  <Chip key={b.l} label={b.l} bg={b.bg} color={b.c} size={10}/>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -1247,8 +1291,8 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
                       <td style={{ padding:"11px 12px", textAlign:"center", minWidth:80 }}>
                         <div style={{ fontSize:14, fontWeight:800, color:col }}>{s.rate}%</div>
                         <RBar r={s.rate} h={4}/>
-                        <div style={{ fontSize:9, color:col, marginTop:2 }}>
-                          {s.rate>=80?"정상":s.rate>=70?"주의":"위험"}
+                        <div style={{ fontSize:10, color:T.mu, marginTop:3 }}>
+                          {attendedHours}h / {totalHours}h
                         </div>
                       </td>
 
@@ -2464,9 +2508,10 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
     phone: "",
     itvDate: new Date().toISOString().slice(0,10),
     itvScore: "", itvGrade: "B", itvPass: true,
+    earlyEmployed: false, dropout: false,
     memo: "", rate: 0,
   };
-  const [form, setForm] = useState(student ? { ...student } : empty);
+  const [form, setForm] = useState(student ? { ...empty, ...student } : empty);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   // 나이: 생년월일 또는 주민번호 앞자리(birth)에서 계산
@@ -2620,6 +2665,28 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
             </div>
           )}
 
+          {divider("훈련 상태")}
+          <div style={{ display:"flex", gap:8 }}>
+            <button type="button" onClick={()=>setForm(p=>({ ...p, earlyEmployed:!p.earlyEmployed, dropout:!p.earlyEmployed?false:p.dropout }))} style={{
+              flex:1, padding:"9px 0", borderRadius:8, border:"none", cursor:"pointer",
+              fontWeight:700, fontSize:12, transition:"all .15s",
+              background: form.earlyEmployed ? "#ECFDF5" : T.s3,
+              color: form.earlyEmployed ? "#059669" : T.mu,
+              borderWidth:1.5, borderStyle:"solid",
+              borderColor: form.earlyEmployed ? "#059669" : T.bd }}>
+              🏢 조기취업 수료
+            </button>
+            <button type="button" onClick={()=>setForm(p=>({ ...p, dropout:!p.dropout, earlyEmployed:!p.dropout?false:p.earlyEmployed }))} style={{
+              flex:1, padding:"9px 0", borderRadius:8, border:"none", cursor:"pointer",
+              fontWeight:700, fontSize:12, transition:"all .15s",
+              background: form.dropout ? "#FEF2F2" : T.s3,
+              color: form.dropout ? "#DC2626" : T.mu,
+              borderWidth:1.5, borderStyle:"solid",
+              borderColor: form.dropout ? "#DC2626" : T.bd }}>
+              ⛔ 중도탈락
+            </button>
+          </div>
+
           <FLD label="특이사항 · 메모">
             <textarea value={form.memo||""} onChange={e=>set("memo",e.target.value)}
               placeholder="면접 특이사항, 취업 의지, 배려 필요 사항 등 자유 기재"
@@ -2631,7 +2698,16 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
         <div style={{ padding:"13px 22px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"flex-end", gap:8, background:T.s2, flexShrink:0 }}>
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
-          <Btn onClick={()=>{ onSave({ ...form, id: form.id||Date.now() }); onClose(); }}>
+          <Btn onClick={()=>{
+            const payload = {
+              ...form,
+              id: form.id||Date.now(),
+              earlyEmployed: !!form.earlyEmployed,
+              dropout: !!form.dropout && !form.earlyEmployed,
+            };
+            onSave(payload);
+            onClose();
+          }}>
             <Icon n="check" s={13}/> {isNew ? "등록" : "저장"}
           </Btn>
         </div>
@@ -3416,6 +3492,9 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
         "과정코드":c?.code||"", "과정명":c?.name||"", "분야":c?.cat||"",
         "면접일":s.itvDate||"", "면접점수":s.itvScore||"", "면접등급":s.itvGrade||"",
         "합격여부":s.itvPass?"합격":"불합격", "특이사항":s.memo||"",
+        "조기수료":s.earlyEmployed?"Y":"",
+        "중도탈락":s.dropout?"Y":"",
+        "현재이수시간":Math.round((c?.hours||0)*(s.rate||0)/100)+"h",
         "출석률(%)":s.rate, "수료여부":s.rate>=80?"수료":"미수료",
       };
     });
@@ -3449,6 +3528,9 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
       "연락처":s.phone,"거주시군":s.addrCity||"",
       "면접일":s.itvDate||"","면접점수":s.itvScore||"","면접등급":s.itvGrade||"",
       "합격여부":s.itvPass?"합격":"불합격","특이사항":s.memo||"",
+      "조기수료":s.earlyEmployed?"Y":"",
+      "중도탈락":s.dropout?"Y":"",
+      "현재이수시간":Math.round((c?.hours||0)*(s.rate||0)/100)+"h",
       "출석률(%)":s.rate,"수료여부":s.rate>=80?"수료":"미수료",
     }));
     const wb = XLSX.utils.book_new();

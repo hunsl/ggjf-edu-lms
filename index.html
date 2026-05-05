@@ -4068,9 +4068,7 @@ const printCertificate = (s, c, certNo, issueDate) => {
 
   const USE_PREVIEW = true;
   if (USE_PREVIEW && window._showPrintPreview) {
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    window._showPrintPreview(container.firstElementChild, 'certificate', 'portrait');
+    window._showPrintPreview(html, 'certificate', 'portrait');
   } else {
     const w = window.open("", "_blank", "width=900,height=1100");
     w.document.write(html); w.document.close();
@@ -4436,9 +4434,7 @@ const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate =
 
   const USE_PREVIEW = true;
   if (USE_PREVIEW && window._showPrintPreview) {
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    window._showPrintPreview(container.firstElementChild, 'attendCert83', 'portrait');
+    window._showPrintPreview(html, 'attendCert83', 'portrait');
   } else {
     const w = window.open("", "_blank", "width=900,height=1200");
     w.document.write(html); w.document.close();
@@ -4592,9 +4588,7 @@ const printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
 
   const USE_PREVIEW = true;
   if (USE_PREVIEW && window._showPrintPreview) {
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    window._showPrintPreview(container.firstElementChild, 'attendCertSelf', 'portrait');
+    window._showPrintPreview(html, 'attendCertSelf', 'portrait');
   } else {
     const w = window.open("", "_blank", "width=900,height=1200");
     if (w) { w.document.write(html); w.document.close(); }
@@ -5177,35 +5171,27 @@ const calcAge = birth => {
 /* ===========================================================
    🖥️ PRINT PREVIEW MODAL — 통합 미리보기 시스템
 =========================================================== */
-const PrintPreviewModal = ({ isOpen, onClose, docElement, docType, orientation = 'portrait' }) => {
+const PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = 'portrait' }) => {
   const [zoom, setZoom] = useState(100);
   const [exporting, setExporting] = useState(false);
-  const previewRef = useRef(null);
+  const iframeRef = useRef(null);
 
-  if (!isOpen || !docElement) return null;
+  if (!isOpen || !docHtml) return null;
 
   const pageW = orientation === 'portrait' ? 210 : 297;
   const pageH = orientation === 'portrait' ? 297 : 210;
   const scale = zoom / 100;
 
   const handlePrint = () => {
-    const w = window.open('', '_blank');
-    if (!w) { alert('팝업이 차단되었습니다.'); return; }
-    w.document.write(`<!DOCTYPE html><html><head>
-      <style>@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-      *{box-sizing:border-box;margin:0;padding:0;}
-      body{font-family:'Pretendard',sans-serif;}
-      @media print{@page{size:${orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape'};margin:0;}}</style>
-      </head><body>${previewRef.current?.innerHTML || ''}</body></html>`);
-    w.document.close();
-    setTimeout(() => w.print(), 300);
+    if (!iframeRef.current || !iframeRef.current.contentWindow) return;
+    iframeRef.current.contentWindow.print();
   };
 
   const handlePDF = async () => {
-    if (!previewRef.current) return;
+    if (!iframeRef.current) return;
     setExporting(true);
     try {
-      const el = previewRef.current.firstElementChild;
+      const el = iframeRef.current.contentDocument?.body?.firstElementChild;
       if (el) {
         const fname = generatePrintFilename(docType, '', '', 'pdf');
         await generatePDF(el, { orientation, filename: fname });
@@ -5217,10 +5203,12 @@ const PrintPreviewModal = ({ isOpen, onClose, docElement, docType, orientation =
   };
 
   const handleImage = async () => {
-    if (!previewRef.current?.firstElementChild) return;
+    if (!iframeRef.current) return;
     setExporting(true);
     try {
-      const canvas = await html2canvas(previewRef.current.firstElementChild, {
+      const el = iframeRef.current.contentDocument?.body?.firstElementChild;
+      if (!el) { setExporting(false); return; }
+      const canvas = await html2canvas(el, {
         scale: 2, useCORS: true, backgroundColor: '#ffffff',
       });
       const a = document.createElement('a');
@@ -5277,12 +5265,14 @@ const PrintPreviewModal = ({ isOpen, onClose, docElement, docType, orientation =
 
       {/* 문서 미리보기 영역 */}
       <div style={{ flex:1, overflow:'auto', padding:20, display:'flex', justifyContent:'center' }}>
-        <div ref={previewRef}
-          style={{ width: `${pageW * MM_TO_PX * scale}px`, minHeight: `${pageH * MM_TO_PX * scale}px`,
-            background:'#fff', boxShadow:'0 8px 40px rgba(0,0,0,.4)', borderRadius:4,
-            transform: `scale(${scale})`, transformOrigin: 'top center' }}
-          dangerouslySetInnerHTML={{ __html: docElement.outerHTML }}
-        />
+        <div style={{ transformOrigin:'top center', transform:`scale(${scale})` }}>
+          <iframe
+            ref={iframeRef}
+            srcDoc={docHtml}
+            style={{ border:'none', width:`${pageW * MM_TO_PX}px`, height:`${pageH * MM_TO_PX}px`,
+              boxShadow:'0 8px 40px rgba(0,0,0,.4)', borderRadius:4, background:'#fff' }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -9183,12 +9173,12 @@ function App() {
 
   // ── 미리보기 모달 상태 ──
   const [previewState, setPreviewState] = useState({
-    isOpen: false, docElement: null, docType: '', orientation: 'portrait'
+    isOpen: false, docHtml: '', docType: '', orientation: 'portrait'
   });
 
   // 전역 미리보기 함수 (기존 인쇄 함수에서 호출)
-  window._showPrintPreview = (element, docType, orientation) => {
-    setPreviewState({ isOpen: true, docElement: element, docType, orientation });
+  window._showPrintPreview = (html, docType, orientation) => {
+    setPreviewState({ isOpen: true, docHtml: html, docType, orientation });
   };
 
   // ── 감사 로그 (Audit Log) — localStorage 영구 보관 ──
@@ -9616,7 +9606,7 @@ function App() {
       <GStyle/>
       <PrintPreviewModal
         isOpen={previewState.isOpen}
-        docElement={previewState.docElement}
+        docHtml={previewState.docHtml}
         docType={previewState.docType}
         orientation={previewState.orientation}
         onClose={() => setPreviewState(p => ({ ...p, isOpen: false }))}

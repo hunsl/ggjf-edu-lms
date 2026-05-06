@@ -1700,7 +1700,7 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
 /* ===========================================================
    STUDENT MANAGEMENT  ★ Excel Upload / Download
 =========================================================== */
-const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew }) => {
+const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew, currentUser }) => {
   const [search, setSearch] = useState("");
   const [cFilter, setCFilter] = useState(0);
   const [riskOnly, setRisk] = useState(false);
@@ -2399,7 +2399,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
         <StatusChangeDialog
           student={statusTarget.student}
           course={statusTarget.course}
-          currentUser={null}
+          currentUser={currentUser}
           onStatusChanged={() => {
             // 학생 목록은 window._setStudents를 통해 업데이트됨
           }}
@@ -3000,9 +3000,9 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
               });
               alert(`✅ ${absentStudents.length}명 결석 일괄 처리 완료`);
               if (onRatesUpdated) onRatesUpdated(course.id);
-              absentStudents.forEach(s => {
-                recalculateHoursAndRate(Number(s.id), Number(course.id)).catch(console.warn);
-              });
+              Promise.all(absentStudents.map(s =>
+                recalculateHoursAndRate(Number(s.id), Number(course.id))
+              )).catch(console.warn);
             } catch(err) {
               alert("마감 오류: " + fmtSaveError(err));
             }
@@ -3391,10 +3391,9 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 });
                 alert(`✅ ${unsaved.length}명 출결 일괄 저장 완료`);
                 if (onRatesUpdated) onRatesUpdated(course.id);
-                // 시간 기반 출석률 재계산 (각 학생별)
-                unsaved.forEach(s => {
-                  recalculateHoursAndRate(Number(s.id), Number(course.id)).catch(console.warn);
-                });
+                Promise.all(unsaved.map(s =>
+                  recalculateHoursAndRate(Number(s.id), Number(course.id))
+                )).catch(console.warn);
               } catch(err) {
                 alert("저장 오류: " + fmtSaveError(err));
               }
@@ -3904,7 +3903,10 @@ const CompletionMgmt = ({ students, courses }) => {
                     <RBar r={s.rate} h={3}/>
                   </td>
                   <td style={{ padding:"12px 16px", textAlign:"center" }}>
-                    <Chip label={autoBase} bg={autoBase==="수료"||autoBase==="조기취업 수료"?T.pbg:"#FEF2F2"} color={autoBase==="수료"||autoBase==="조기취업 수료"?T.p:T.danger}/>
+                  {(() => {
+                    const isAutoComplete = autoBase === '수료' || autoBase === '조기취업 수료';
+                    return <Chip label={autoBase} bg={isAutoComplete ? T.pbg : "#FEF2F2"} color={isAutoComplete ? T.p : T.danger}/>;
+                  })()}
                   </td>
                   <td style={{ padding:"12px 16px" }}>
                     <div style={{ display:"flex", gap:6, justifyContent:"center" }}>
@@ -10159,7 +10161,7 @@ function App() {
       case "dash":        return <Dashboard students={students} courses={courses}/>;
       case "courses":     return <CourseList courses={courses} onAdd={addCourse} onUpdate={updateCourse} onDelete={deleteCourse}/>;
       case "progress":    return <ProgressMgmt students={students} courses={courses}/>;
-      case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)}/>;
+      case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)} currentUser={currentUser}/>;
       case "instructors": return <InstructorMgmt courses={courses} onUpdateCourse={updateCourse}/>;
       case "rooms":       return <RoomMgmt courses={courses}/>;
       case "attendance":  return <AttendanceMgmt students={students} courses={courses} onRatesUpdated={recalculateAttendanceRate}/>;

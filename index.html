@@ -4567,7 +4567,11 @@ const printCertificate = (s, c, certNo, issueDate) => {
   const hours  = c.hours ? `${c.hours}시간` : "시간 미정";
   const completeDate = c?.dateTo ? fmtDot(c.dateTo) : "수료일 미정";
   const issueDateText = issueDate || "　　년　　월　　일";
-  const year2 = String(new Date().getFullYear()).slice(2);
+  const issueYear = (() => {
+    const m = String(issueDateText).match(/(\d{4})/);
+    return m ? m[1] : String(new Date().getFullYear());
+  })();
+  const year2 = issueYear.slice(2);
   const certNoStr = certNo ? `제${year2}${String(certNo).padStart(6, "0")}호` : "";
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>

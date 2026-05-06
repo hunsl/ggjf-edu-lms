@@ -104,6 +104,17 @@
     const BUSINESS_DAYS_PER_MONTH = 21;
     const WEEKS_PER_MONTH = 4.3;
 
+    function moagiMonthlyAmount(moagiAmount, freq) {
+      if (freq === "daily") return (moagiAmount || 0) * BUSINESS_DAYS_PER_MONTH;
+      if (freq === "weekly") return Math.round((moagiAmount || 0) * WEEKS_PER_MONTH);
+      return moagiAmount || 0;
+    }
+
+    function validateActualAmount(amount) {
+      const n = Number(amount);
+      return !(!amount || isNaN(n) || n <= 0);
+    }
+
     const INFLOW_CATEGORIES = {
       salary: "월급", side: "부수입", support: "지원금",
       asset_withdrawal: "자산 인출", transfer: "내부 투입", other: "기타"
@@ -254,7 +265,7 @@
         });
         stocks.filter(s => s.isMoagi && s.moagiAmount > 0).forEach(s => {
           const freq = s.moagiFreq || "monthly";
-          const monthly = freq === "daily" ? s.moagiAmount * BUSINESS_DAYS_PER_MONTH : freq === "weekly" ? Math.round(s.moagiAmount * WEEKS_PER_MONTH) : s.moagiAmount;
+          const monthly = moagiMonthlyAmount(s.moagiAmount, freq);
           items.push({ id: s.id, name: s.name + " (주식모으기)", amount: monthly, group: "saving", subtype: "stock", source: s, displayOnly: true });
         });
         return items;
@@ -277,8 +288,7 @@
 
       const monthlyMoagi = accounts.filter(a => a.type === "적금" && a.isMoagi).reduce((s,a) => s + (a.moagiAmount||0), 0);
       const monthlySavMoagi = stocks.filter(s => s.isMoagi).reduce((s,st) => {
-        const freq = st.moagiFreq || "monthly";
-        return s + (freq === "daily" ? (st.moagiAmount||0)*BUSINESS_DAYS_PER_MONTH : freq === "weekly" ? Math.round((st.moagiAmount||0)*WEEKS_PER_MONTH) : (st.moagiAmount||0));
+        return s + moagiMonthlyAmount(st.moagiAmount, st.moagiFreq || "monthly");
       }, 0);
       const totalDebtFixed = liabilities.filter(l => l.monthly > 0).reduce((s,l) => s + (l.monthly||0), 0);
       const totalCashflowFixed = totalDebtFixed + monthlyMoagi + monthlySavMoagi;
@@ -765,7 +775,7 @@
       const [showEditModal, setShowEditModal] = useState(false);
 
       function handleSave() {
-        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) { showToast("금액을 올바르게 입력하세요."); return; }
+        if (!validateActualAmount(amount)) { showToast("금액을 올바르게 입력하세요."); return; }
         const newItem = { id: uid(), month: cfMonth, date: td(), category, name: memo || category, amount: Number(amount), paymentMethod, memo, updatedAt: nowIso() };
         setCfActuals(prev => [newItem, ...prev]);
         setAmount(""); setMemo(""); setPaymentMethod("");
@@ -1385,7 +1395,7 @@
           if ((field === "qty" || field === "cur") && !s._manualValue) {
             updated.value = updated.qty * updated.cur;
           }
-          if (field === "value") updated._manualValue = true;
+          if (field === "value") updated._manualValue = true; // prevent auto-recalc from overwriting manually entered value
           return updated;
         }));
       }

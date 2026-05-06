@@ -4625,9 +4625,6 @@ const printCertificate = (s, c, certNo, issueDate) => {
   <div class="date">${issueDateText}</div>
   <div class="sign-wrap">
     <div class="sign-title">경기도일자리재단 대표이사</div>
-    <div class="stamp-area" onclick="document.getElementById('cert-stamp-up').click()" title="직인 이미지 첨부">
-      <span>직인<br/>첨부</span>
-      <img id="cert-stamp-img" class="stamp-img" alt="직인"/>
     </div>
     <input type="file" id="cert-stamp-up" accept="image/png,image/jpeg,image/gif" style="display:none;" onchange="attachStamp(event)"/>
   </div>

@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CFO Dashboard</title>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -19,7 +19,8 @@
     const DATA_VERSION = 13;
 
     function uid() {
-      return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+      return Math.random().toString(36).slice(2, 10) + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     }
     function nowIso() { return new Date().toISOString(); }
     function currentMonth() { return new Date().toISOString().slice(0, 7); }
@@ -100,6 +101,9 @@
     }
 
     // ===== CONSTANTS =====
+    const BUSINESS_DAYS_PER_MONTH = 21;
+    const WEEKS_PER_MONTH = 4.3;
+
     const INFLOW_CATEGORIES = {
       salary: "월급", side: "부수입", support: "지원금",
       asset_withdrawal: "자산 인출", transfer: "내부 투입", other: "기타"
@@ -250,7 +254,7 @@
         });
         stocks.filter(s => s.isMoagi && s.moagiAmount > 0).forEach(s => {
           const freq = s.moagiFreq || "monthly";
-          const monthly = freq === "daily" ? s.moagiAmount * 21 : freq === "weekly" ? Math.round(s.moagiAmount * 4.3) : s.moagiAmount;
+          const monthly = freq === "daily" ? s.moagiAmount * BUSINESS_DAYS_PER_MONTH : freq === "weekly" ? Math.round(s.moagiAmount * WEEKS_PER_MONTH) : s.moagiAmount;
           items.push({ id: s.id, name: s.name + " (주식모으기)", amount: monthly, group: "saving", subtype: "stock", source: s, displayOnly: true });
         });
         return items;
@@ -274,7 +278,7 @@
       const monthlyMoagi = accounts.filter(a => a.type === "적금" && a.isMoagi).reduce((s,a) => s + (a.moagiAmount||0), 0);
       const monthlySavMoagi = stocks.filter(s => s.isMoagi).reduce((s,st) => {
         const freq = st.moagiFreq || "monthly";
-        return s + (freq === "daily" ? (st.moagiAmount||0)*21 : freq === "weekly" ? Math.round((st.moagiAmount||0)*4.3) : (st.moagiAmount||0));
+        return s + (freq === "daily" ? (st.moagiAmount||0)*BUSINESS_DAYS_PER_MONTH : freq === "weekly" ? Math.round((st.moagiAmount||0)*WEEKS_PER_MONTH) : (st.moagiAmount||0));
       }, 0);
       const totalDebtFixed = liabilities.filter(l => l.monthly > 0).reduce((s,l) => s + (l.monthly||0), 0);
       const totalCashflowFixed = totalDebtFixed + monthlyMoagi + monthlySavMoagi;
@@ -1055,8 +1059,8 @@
 
       function handleSave() {
         if (!name) return;
-        const qtyN = Number(qty), curN = Number(cur), buyN = Number(buy);
-        const valueN = value !== "" ? Number(value) : qtyN * curN;
+        const qtyN = Number(qty) || 0, curN = Number(cur) || 0, buyN = Number(buy) || 0;
+        const valueN = value !== "" && !isNaN(Number(value)) ? Number(value) : qtyN * curN;
         onSave({ id: initial?.id || uid(), name, code, qty: qtyN, cur: curN, buy: buyN, value: valueN, currency, isMoagi, moagiAmount: isMoagi ? Number(moagiAmount) : 0, moagiFreq: isMoagi ? moagiFreq : "monthly", updatedAt: nowIso() });
       }
 
@@ -1376,8 +1380,12 @@
         setStocks(prev => prev.map(s => {
           if (s.id !== id) return s;
           const nums = ["qty","cur","buy","value","moagiAmount"];
-          const updated = { ...s, [field]: nums.includes(field) ? Number(value) : value, updatedAt: nowIso() };
-          if (field === "qty" || field === "cur") updated.value = updated.qty * updated.cur;
+          const updated = { ...s, [field]: nums.includes(field) ? (Number(value) || 0) : value, updatedAt: nowIso() };
+          // Only auto-calc value when qty or cur changes AND value hasn't been manually set
+          if ((field === "qty" || field === "cur") && !s._manualValue) {
+            updated.value = updated.qty * updated.cur;
+          }
+          if (field === "value") updated._manualValue = true;
           return updated;
         }));
       }

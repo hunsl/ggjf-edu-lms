@@ -4568,7 +4568,7 @@ const printCertificate = (s, c, certNo, issueDate) => {
   const completeDate = c?.dateTo ? fmtDot(c.dateTo) : "수료일 미정";
   const issueDateText = issueDate || "　　년　　월　　일";
   const issueYear = (() => {
-    const m = String(issueDateText).match(/(\d{4})/);
+    const m = String(issueDateText).match(/^\s*(\d{4})/);
     return m ? m[1] : String(new Date().getFullYear());
   })();
   const year2 = issueYear.slice(2);

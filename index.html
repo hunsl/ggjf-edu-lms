@@ -168,6 +168,11 @@ const toStudent = r => r ? ({
   disabled: r.disabled||false, veteran: r.veteran||false,
   itvDate: r.itv_date||"", itvScore: r.itv_score||"", itvGrade: r.itv_grade||"",
   itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
+  enrollmentStatus: r.enrollment_status || '재학중',
+  accumulatedHours: parseFloat(r.accumulated_hours) || 0,
+  statusChangeDate: r.status_change_date || null,
+  dropoutReason: r.dropout_reason || null,
+  employerName: r.employer_name || null,
 }) : null;
 
 // Excel serial date number → ISO "YYYY-MM-DD" string (or null if empty)
@@ -194,6 +199,11 @@ const fromStudent = s => {
     disabled: !!s.disabled, veteran: !!s.veteran,
     itv_date: excelDateToISO(s.itvDate), itv_score: toNum(s.itvScore), itv_grade: s.itvGrade||"",
     itv_pass: !!s.itvPass, memo: s.memo||"", rate: toNum(s.rate) ?? 0,
+    enrollment_status: s.enrollmentStatus || '재학중',
+    accumulated_hours: toNum(s.accumulatedHours) ?? 0,
+    status_change_date: s.statusChangeDate || null,
+    dropout_reason: s.dropoutReason || null,
+    employer_name: s.employerName || null,
   };
 };
 
@@ -496,6 +506,49 @@ const T = {
 };
 
 /* ===========================================================
+   📅 HOLIDAY CALENDAR — 공휴일 관리
+=========================================================== */
+let _holidaySet = new Set();
+
+const loadHolidays = async () => {
+  try {
+    const cached = safeLocal.get("gjf_holidays");
+    if (cached) {
+      const { data, ts } = JSON.parse(cached);
+      // 캐시 유효기간: 24시간
+      if (Date.now() - ts < 86400000 && Array.isArray(data)) {
+        _holidaySet = new Set(data);
+        return;
+      }
+    }
+  } catch {}
+  try {
+    const { data, error } = await sbGet("holidays", "select=date&order=date");
+    if (!error && data) {
+      const dates = data.map(r => r.date);
+      _holidaySet = new Set(dates);
+      try { safeLocal.set("gjf_holidays", JSON.stringify({ data: dates, ts: Date.now() })); } catch {}
+    }
+  } catch (e) {
+    console.warn("공휴일 로드 실패:", e);
+  }
+};
+
+const isHoliday = (dateStr) => _holidaySet.has(dateStr);
+
+const getHolidaysInRange = (from, to) => {
+  const result = [];
+  if (!from || !to) return result;
+  const start = new Date(from); start.setHours(0,0,0,0);
+  const end   = new Date(to);   end.setHours(0,0,0,0);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+    const s = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (_holidaySet.has(s)) result.push(s);
+  }
+  return result;
+};
+
+/* ===========================================================
    DATA
 =========================================================== */
 const COURSES = [
@@ -627,7 +680,8 @@ const buildCourseDates = (course) => {
   // 💡 잘려있던 반복문 추가 및 시차 버그 없는 getLocalStr 적용
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     if (allowedDows.has(d.getDay())) {
-      out.push(getLocalStr(d));
+      const ds = getLocalStr(d);
+      if (!isHoliday(ds)) out.push(ds);
     }
   }
 
@@ -1655,6 +1709,9 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
   const [tab, setTab] = useState("list");          // "list" | "import"
   const fileRef = useRef();
 
+  // ── 상태 변경 다이얼로그 ──
+  const [statusTarget, setStatusTarget] = useState(null); // { student, course }
+
   // ── 출결 상세 모달 ──
   const [attModal, setAttModal] = useState(null);         // 선택된 학생 (또는 null)
   const [attRecords, setAttRecords] = useState([]);       // 출결 일별 기록
@@ -2005,6 +2062,8 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                     {h:"학력·경력",       align:"left"},
                     {h:"취약계층",        align:"center"},
                     {h:"면접",            align:"center"},
+                    {h:"등록상태",        align:"center"},
+                    {h:"누적시간",        align:"center"},
                     {h:"출석률",          align:"center"},
                     {h:"출결조회",        align:"center"},
                     {h:"",               align:"center"},
@@ -2130,6 +2189,34 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         ) : <span style={{ fontSize:10, color:T.bd }}>미입력</span>}
                       </td>
 
+                      {/* 등록상태 */}
+                      <td style={{ padding:"11px 12px", textAlign:"center" }}>
+                        {(() => {
+                          const es = s.enrollmentStatus || '재학중';
+                          const sc = STATUS_COLORS[es] || { bg:T.s3, color:T.mu };
+                          return (
+                            <Chip label={es} bg={sc.bg} color={sc.color} size={11}/>
+                          );
+                        })()}
+                      </td>
+
+                      {/* 누적시간 */}
+                      <td style={{ padding:"11px 12px", textAlign:"center" }}>
+                        {(() => {
+                          const tc = getTotalCourseHours(c);
+                          return (
+                            <>
+                              <div style={{ fontSize:13, fontWeight:700, color:T.tx }}>
+                                {(s.accumulatedHours || 0).toFixed(1)}h
+                              </div>
+                              <div style={{ fontSize:10, color:T.mu }}>
+                                / {tc > 0 ? tc + 'h' : '-'}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </td>
+
                       {/* 출석률 */}
                       <td style={{ padding:"11px 12px", textAlign:"center", minWidth:80 }}>
                         <div style={{ fontSize:14, fontWeight:800, color:col }}>{s.rate}%</div>
@@ -2149,7 +2236,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         </button>
                       </td>
 
-                      {/* 수정·삭제 */}
+                      {/* 수정·삭제·상태변경 */}
                       <td style={{ padding:"11px 12px", textAlign:"center" }}>
                         <div style={{ display:"flex", gap:4, justifyContent:"center" }}>
                           <button onClick={()=>onEdit(s)} title="수정" style={{
@@ -2157,6 +2244,14 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                             background:T.pbg, color:T.p, cursor:"pointer",
                             display:"flex", alignItems:"center", justifyContent:"center" }}>
                             <Icon n="edit" s={13}/>
+                          </button>
+                          <button onClick={()=>setStatusTarget({ student:s, course:c })}
+                            title="상태 변경" style={{
+                            width:28, height:28, borderRadius:6, border:"none",
+                            background:"#F0FDF4", color:"#15803D", cursor:"pointer",
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            fontSize:13 }}>
+                            ⚙
                           </button>
                           <button onClick={()=>onDelete(s.id)} title="삭제" style={{
                             width:28, height:28, borderRadius:6, border:"none",
@@ -2299,6 +2394,18 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
           </div>
         );
       })()}
+      {/* ── 상태 변경 다이얼로그 ── */}
+      {statusTarget && statusTarget.course && (
+        <StatusChangeDialog
+          student={statusTarget.student}
+          course={statusTarget.course}
+          currentUser={null}
+          onStatusChanged={() => {
+            // 학생 목록은 window._setStudents를 통해 업데이트됨
+          }}
+          onClose={() => setStatusTarget(null)}
+        />
+      )}
     </div>
   );
 };
@@ -2893,6 +3000,9 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
               });
               alert(`✅ ${absentStudents.length}명 결석 일괄 처리 완료`);
               if (onRatesUpdated) onRatesUpdated(course.id);
+              absentStudents.forEach(s => {
+                recalculateHoursAndRate(Number(s.id), Number(course.id)).catch(console.warn);
+              });
             } catch(err) {
               alert("마감 오류: " + fmtSaveError(err));
             }
@@ -3084,7 +3194,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead>
               <tr style={{ background:T.s2 }}>
-                {["이름","누적 출석률","입실 시간","퇴실 시간","출결 상태","결석 사유","저장"].map(h=>(
+                {["이름","누적 출석률","입실 시간","퇴실 시간","일별 시간","출결 상태","결석 사유","저장"].map(h=>(
                   <th key={h} style={{ padding:"10px 12px",
                     textAlign:h==="이름"?"left":"center",
                     fontSize:11, color:T.mu, fontWeight:700,
@@ -3137,6 +3247,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                       return next;
                     });
                     if (onRatesUpdated) onRatesUpdated(course.id);
+                    recalculateHoursAndRate(Number(s.id), Number(course.id)).catch(console.warn);
                   } catch(err) {
                     alert("저장 오류: " + fmtSaveError(err));
                   }
@@ -3166,6 +3277,14 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                         onChange={e=>setRow({outTime:e.target.value})}
                         style={{ width:90, padding:"5px 6px", borderRadius:6, fontSize:12,
                           border:`1px solid ${curOut?T.p:T.bd}`, outline:"none" }}/>
+                    </td>
+                    {/* 일별 시간 */}
+                    <td style={{ padding:"10px 8px", textAlign:"center" }}>
+                      {(() => {
+                        if (!curIn || !curOut) return <span style={{ fontSize:11, color:T.mu }}>—</span>;
+                        const daily = calculateDailyHours({ check_in: curIn, check_out: curOut, status: curStatus || 'O' });
+                        return <span style={{ fontSize:12, fontWeight:700, color:T.ok }}>{daily.toFixed(1)}h</span>;
+                      })()}
                     </td>
                     {/* 출결 상태 */}
                     <td style={{ padding:"10px 8px" }}>
@@ -3272,6 +3391,10 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 });
                 alert(`✅ ${unsaved.length}명 출결 일괄 저장 완료`);
                 if (onRatesUpdated) onRatesUpdated(course.id);
+                // 시간 기반 출석률 재계산 (각 학생별)
+                unsaved.forEach(s => {
+                  recalculateHoursAndRate(Number(s.id), Number(course.id)).catch(console.warn);
+                });
               } catch(err) {
                 alert("저장 오류: " + fmtSaveError(err));
               }
@@ -3321,7 +3444,10 @@ const buildCourseDatesAll = (course) => {
       : new Set([1, 2, 3, 4, 5]);
   const out = [];
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    if (allowedDows.has(d.getDay())) out.push(getLocalStr(d));
+    if (allowedDows.has(d.getDay())) {
+      const ds = getLocalStr(d);
+      if (!isHoliday(ds)) out.push(ds);
+    }
   }
   return out;
 };
@@ -3678,9 +3804,17 @@ const CompletionMgmt = ({ students, courses }) => {
   }, [courses]);
 
   if (!course) return null;
-  const list = students.filter(s=>s.cid===course.id);
-  const get  = s => overrides[s.id] ?? (s.rate>=threshold?"수료":"미수료");
-  const completed = list.filter(s=>get(s)==="수료").length;
+  const list = students.filter(s => {
+    if (s.cid !== course.id) return false;
+    if (s.enrollmentStatus === '중도탈락') return false; // 중도탈락 제외
+    return true;
+  });
+  const get = s => {
+    if (s.enrollmentStatus === '조기취업' && s.rate >= threshold) return '조기취업 수료';
+    if (overrides[s.id] !== undefined) return overrides[s.id];
+    return s.rate >= threshold ? '수료' : '미수료';
+  };
+  const completed = list.filter(s => get(s) === '수료' || get(s) === '조기취업 수료').length;
   const rate = list.length ? Math.round(completed/list.length*100) : 0;
 
   return (
@@ -3714,7 +3848,10 @@ const CompletionMgmt = ({ students, courses }) => {
           </div>
           <Btn onClick={()=>{
             const j={};
-            list.forEach(s=>{ j[s.id]=s.rate>=threshold?"수료":"미수료"; });
+            list.forEach(s=>{
+              if (s.enrollmentStatus === '조기취업' && s.rate >= threshold) j[s.id] = '조기취업 수료';
+              else j[s.id] = s.rate >= threshold ? '수료' : '미수료';
+            });
             setOvr(j);
           }}>자동 판정</Btn>
         </Card>
@@ -3745,18 +3882,29 @@ const CompletionMgmt = ({ students, courses }) => {
           </thead>
           <tbody>
             {list.map(s=>{
-              const auto = s.rate>=threshold?"수료":"미수료";
+              const autoBase = s.enrollmentStatus === '조기취업' && s.rate >= threshold ? '조기취업 수료' : s.rate>=threshold?"수료":"미수료";
               const final = get(s);
-              const changed = overrides[s.id]!==undefined && overrides[s.id]!==auto;
+              const changed = overrides[s.id]!==undefined && overrides[s.id]!==autoBase;
+              const finalBg = final==='수료'?T.pbg : final==='조기취업 수료'?"#F3E8FF" : "#FEF2F2";
+              const finalC  = final==='수료'?T.p   : final==='조기취업 수료'?"#7E22CE"  : T.danger;
               return (
                 <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
-                  <td style={{ padding:"12px 16px", fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</td>
+                  <td style={{ padding:"12px 16px", fontSize:13, fontWeight:700, color:T.tx }}>
+                    {s.name}
+                    {s.enrollmentStatus && s.enrollmentStatus !== '재학중' && (
+                      <Chip label={s.enrollmentStatus}
+                        bg={STATUS_COLORS[s.enrollmentStatus]?.bg||T.s3}
+                        color={STATUS_COLORS[s.enrollmentStatus]?.color||T.mu}
+                        size={10}
+                        style={{ marginLeft:6 }}/>
+                    )}
+                  </td>
                   <td style={{ padding:"12px 16px", textAlign:"center" }}>
                     <span style={{ fontSize:15, fontWeight:800, color:rateColor(s.rate) }}>{s.rate}%</span>
                     <RBar r={s.rate} h={3}/>
                   </td>
                   <td style={{ padding:"12px 16px", textAlign:"center" }}>
-                    <Chip label={auto} bg={auto==="수료"?T.pbg:"#FEF2F2"} color={auto==="수료"?T.p:T.danger}/>
+                    <Chip label={autoBase} bg={autoBase==="수료"||autoBase==="조기취업 수료"?T.pbg:"#FEF2F2"} color={autoBase==="수료"||autoBase==="조기취업 수료"?T.p:T.danger}/>
                   </td>
                   <td style={{ padding:"12px 16px" }}>
                     <div style={{ display:"flex", gap:6, justifyContent:"center" }}>
@@ -3770,6 +3918,11 @@ const CompletionMgmt = ({ students, courses }) => {
                         </button>
                       ))}
                     </div>
+                    {final==='조기취업 수료' && (
+                      <div style={{ textAlign:"center", marginTop:4 }}>
+                        <Chip label="조기취업 수료" bg="#F3E8FF" color="#7E22CE" size={10}/>
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding:"12px 16px", textAlign:"center", fontSize:11 }}>
                     {changed && <Chip label="수동조정" bg="#FFFBEB" color={T.warn}/>}
@@ -3997,6 +4150,218 @@ const generateCertQRDataUrl = (certNumber) => {
 };
 
 // 수료증 HTML 생성 함수 — 새 창에서 인쇄/PDF 저장
+/* ===========================================================
+   ⏱️ HOURS CALCULATOR — 시간 기반 출석률 계산
+=========================================================== */
+
+// HH:MM → 분(minutes) 변환
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const parts = timeStr.split(':');
+  if (parts.length !== 2) return null;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+};
+
+// 일별 출석시간 계산 (시간 단위, 소수점 2자리)
+const calculateDailyHours = (record) => {
+  if (record.status === 'A') return 0;
+  const checkInMin  = parseTimeToMinutes(record.check_in);
+  const checkOutMin = parseTimeToMinutes(record.check_out);
+  if (checkInMin === null || checkOutMin === null) return 0;
+  if (checkOutMin <= checkInMin) return 0;
+  const diffMinutes = checkOutMin - checkInMin;
+  return Math.round((diffMinutes / 60) * 100) / 100;
+};
+
+// 누적 훈련시간 계산
+const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null) => {
+  const invalidRecords = [];
+  let totalHours = 0;
+  for (const record of attendanceRecords) {
+    if (cutoffDate && record.date > cutoffDate) continue;
+    const dailyHours = calculateDailyHours(record);
+    if (dailyHours === 0 && record.status !== 'A') {
+      if (!record.check_in || !record.check_out) {
+        invalidRecords.push({ ...record, reason: 'incomplete' });
+      } else if (parseTimeToMinutes(record.check_out) <= parseTimeToMinutes(record.check_in)) {
+        invalidRecords.push({ ...record, reason: 'invalid_time' });
+      }
+    }
+    totalHours += dailyHours;
+  }
+  return { accumulatedHours: totalHours, invalidRecords };
+};
+
+// 과정 총 교육시간 산출
+const getTotalCourseHours = (course) => {
+  if (!course) return 0;
+  if (course.hours && course.hours > 0) return course.hours;
+  const fromMin = parseTimeToMinutes(course.schedTimeFrom);
+  const toMin   = parseTimeToMinutes(course.schedTimeTo);
+  if (fromMin === null || toMin === null || toMin <= fromMin) return 0;
+  const dailyHours = (toMin - fromMin) / 60;
+  const trainingDays = buildCourseDatesAll(course).length;
+  return dailyHours * trainingDays;
+};
+
+// 조기취업자 비례 과정시간 산출
+const getProportionalCourseHours = (course, cutoffDate) => {
+  const totalHours = getTotalCourseHours(course);
+  const allDates   = buildCourseDatesAll(course);
+  const totalDays  = allDates.length;
+  if (totalDays === 0) return 0;
+  const daysUntilCutoff = allDates.filter(d => d <= cutoffDate).length;
+  return (daysUntilCutoff / totalDays) * totalHours;
+};
+
+// 시간 기반 출석률 계산
+const calculateHoursBasedRate = (accumulatedHours, totalCourseHours) => {
+  if (!totalCourseHours || totalCourseHours <= 0) return 0;
+  const rate    = (accumulatedHours / totalCourseHours) * 100;
+  const rounded = Math.round(rate * 10) / 10;
+  return Math.min(rounded, 100.0);
+};
+
+// 시간 기반 출석률 재계산 및 DB/상태 업데이트
+const recalculateHoursAndRate = async (studentId, courseId) => {
+  try {
+    const student = window._studentsRef?.current?.find(s => s.id === studentId);
+    const course  = window._coursesRef?.current?.find(c => c.id === courseId);
+    if (!student || !course) return;
+
+    const { data: attRecords, error } = await sbGet("attendance",
+      `select=*&student_id=eq.${studentId}&course_id=eq.${courseId}`);
+    if (error) throw error;
+
+    const cutoffDate = (student.enrollmentStatus === '조기취업' || student.enrollmentStatus === '중도탈락')
+      ? student.statusChangeDate
+      : null;
+
+    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate);
+
+    let totalHours = getTotalCourseHours(course);
+    if (student.enrollmentStatus === '조기취업' && cutoffDate) {
+      totalHours = getProportionalCourseHours(course, cutoffDate);
+    }
+    const rate = calculateHoursBasedRate(accumulatedHours, totalHours);
+
+    await sbUpdate("students", `id=eq.${studentId}`, {
+      accumulated_hours: accumulatedHours,
+      rate: rate,
+    });
+
+    if (window._setStudents) {
+      window._setStudents(prev => prev.map(s =>
+        s.id === studentId ? { ...s, accumulatedHours, rate } : s
+      ));
+    }
+    console.log(`✅ 시간 재계산: ${student.name} — ${accumulatedHours.toFixed(1)}h / ${totalHours}h = ${rate}%`);
+  } catch (err) {
+    console.error("시간 재계산 오류:", err);
+  }
+};
+
+/* ===========================================================
+   📊 ENROLLMENT STATUS MANAGER — 등록 상태 관리
+=========================================================== */
+
+const ENROLLMENT_STATUSES = ['재학중', '수료', '조기취업', '중도탈락', '수료예정'];
+const DROPOUT_REASONS     = ['개인사유', '취업', '건강', '기타'];
+
+const VALID_TRANSITIONS = {
+  '재학중':   ['수료예정', '조기취업', '중도탈락'],
+  '수료예정': ['수료', '조기취업', '중도탈락'],
+  '수료':     [],
+  '조기취업': [],
+  '중도탈락': [],
+};
+
+const STATUS_COLORS = {
+  '재학중':   { bg: '#DBEAFE', color: '#1D4ED8' },
+  '수료':     { bg: '#DCFCE7', color: '#15803D' },
+  '조기취업': { bg: '#F3E8FF', color: '#7E22CE' },
+  '중도탈락': { bg: '#FEE2E2', color: '#DC2626' },
+  '수료예정': { bg: '#FFF7ED', color: '#C2410C' },
+};
+
+const isValidTransition = (fromStatus, toStatus) => {
+  const allowed = VALID_TRANSITIONS[fromStatus];
+  return allowed ? allowed.includes(toStatus) : false;
+};
+
+const changeEnrollmentStatus = async (params) => {
+  const { studentId, courseId, newStatus, changeDate, dropoutReason, reasonDetail, employerName, changedBy } = params;
+
+  const student = window._studentsRef?.current?.find(s => s.id === studentId);
+  if (!student) throw new Error("학생을 찾을 수 없습니다.");
+
+  const prevStatus = student.enrollmentStatus || '재학중';
+
+  if (!isValidTransition(prevStatus, newStatus))
+    throw new Error(`${prevStatus}에서 ${newStatus}로 변경할 수 없습니다.`);
+
+  if (!changeDate) throw new Error("변경일은 필수입니다.");
+  if (newStatus === '중도탈락' && !dropoutReason) throw new Error("중도탈락 사유는 필수입니다.");
+  if (newStatus === '중도탈락' && dropoutReason === '기타' && !reasonDetail) throw new Error("기타 사유 상세 내용은 필수입니다.");
+
+  let warning = null;
+  if ((newStatus === '수료' || newStatus === '수료예정') && student.rate < 80) {
+    warning = `출석률이 ${student.rate}%로 80% 미만입니다. 계속하시겠습니까?`;
+  }
+
+  const finalReason = newStatus === '중도탈락'
+    ? (dropoutReason === '기타' ? reasonDetail : dropoutReason)
+    : null;
+
+  await sbUpdate("students", `id=eq.${studentId}`, {
+    enrollment_status: newStatus,
+    status_change_date: changeDate,
+    dropout_reason: finalReason,
+    employer_name: newStatus === '조기취업' ? (employerName || null) : null,
+  });
+
+  try {
+    await sbInsert("status_changes", {
+      student_id:      studentId,
+      course_id:       courseId,
+      previous_status: prevStatus,
+      new_status:      newStatus,
+      change_date:     changeDate,
+      reason:          finalReason,
+      employer_name:   newStatus === '조기취업' ? (employerName || null) : null,
+      changed_by:      changedBy,
+    });
+  } catch (e) {
+    console.warn("상태 변경 이력 저장 실패:", e);
+  }
+
+  if (window._setStudents) {
+    window._setStudents(prev => prev.map(s =>
+      s.id === studentId
+        ? { ...s,
+            enrollmentStatus: newStatus,
+            statusChangeDate: changeDate,
+            dropoutReason: finalReason,
+            employerName: newStatus === '조기취업' ? (employerName || null) : null,
+          }
+        : s
+    ));
+  }
+
+  await recalculateHoursAndRate(studentId, courseId);
+
+  return { success: true, warning };
+};
+
+const getStatusHistory = async (studentId, courseId) => {
+  const { data, error } = await sbGet("status_changes",
+    `select=*&student_id=eq.${studentId}&course_id=eq.${courseId}&order=created_at.desc`);
+  return error ? [] : (data || []);
+};
+
 /* ── 공통 인쇄 스타일 ── */
 const PRINT_STYLE = `
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -4669,8 +5034,13 @@ const CertMgmt = ({ students, courses }) => {
   if (!course) return null;
   // 수료증: 출석률 80% 이상
   // 수강증명서/수강증명서(자체): 해당 과정 수강자 전체 (출석률 무관 — 등록 자체가 기준)
-  const certEligible   = students.filter(s => Number(s.cid)===Number(course.id) && s.rate>=80);
-  const attendEligible = students.filter(s => Number(s.cid)===Number(course.id));
+  const certEligible   = students.filter(s => {
+    if (Number(s.cid) !== Number(course.id)) return false;
+    if (s.enrollmentStatus === '중도탈락') return false; // 중도탈락 제외
+    if (s.enrollmentStatus === '수료' || s.enrollmentStatus === '조기취업') return true; // 항상 포함
+    return s.rate >= 80; // 재학중/수료예정은 출석률 기준
+  });
+  const attendEligible = students.filter(s => Number(s.cid)===Number(course.id) && s.enrollmentStatus !== '중도탈락');
   const eligible = docType==="cert" ? certEligible : attendEligible;
 
   // docType별 series 반환
@@ -5272,6 +5642,198 @@ const PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = 'p
             style={{ border:'none', width:`${pageW * MM_TO_PX}px`, height:`${pageH * MM_TO_PX}px`,
               boxShadow:'0 8px 40px rgba(0,0,0,.4)', borderRadius:4, background:'#fff' }}
           />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ===========================================================
+   📊 STATUS CHANGE DIALOG — 등록 상태 변경 다이얼로그
+=========================================================== */
+const StatusChangeDialog = ({ student, course, onStatusChanged, onClose, currentUser }) => {
+  const currentStatus = student.enrollmentStatus || '재학중';
+  const allowedStatuses = VALID_TRANSITIONS[currentStatus] || [];
+
+  const [newStatus,     setNewStatus]     = useState(allowedStatuses[0] || '');
+  const [changeDate,    setChangeDate]    = useState(new Date().toISOString().slice(0,10));
+  const [dropoutReason, setDropoutReason] = useState('개인사유');
+  const [reasonDetail,  setReasonDetail]  = useState('');
+  const [employerName,  setEmployerName]  = useState('');
+  const [warning,       setWarning]       = useState('');
+  const [saving,        setSaving]        = useState(false);
+
+  const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
+    borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
+
+  const handleSubmit = async () => {
+    if (!newStatus) { setWarning("변경할 상태를 선택하세요."); return; }
+    setSaving(true);
+    setWarning('');
+    try {
+      const result = await changeEnrollmentStatus({
+        studentId:    student.id,
+        courseId:     course.id,
+        newStatus,
+        changeDate,
+        dropoutReason: newStatus === '중도탈락' ? dropoutReason : null,
+        reasonDetail:  newStatus === '중도탈락' && dropoutReason === '기타' ? reasonDetail : null,
+        employerName:  newStatus === '조기취업' ? employerName : null,
+        changedBy:     currentUser?.name || '시스템',
+      });
+      if (result.warning && !window.confirm(result.warning)) {
+        setSaving(false);
+        return;
+      }
+      alert(`✅ ${student.name}의 상태가 ${currentStatus} → ${newStatus}로 변경되었습니다.`);
+      onStatusChanged();
+      onClose();
+    } catch (err) {
+      setWarning(err.message);
+    }
+    setSaving(false);
+  };
+
+  const sc = STATUS_COLORS[currentStatus] || {};
+
+  return (
+    <div className="modal-backdrop" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", zIndex:1200,
+      display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={e => { if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:T.s, borderRadius:16, width:440, maxWidth:"96vw",
+        boxShadow:"0 24px 64px rgba(0,0,0,.28)", overflow:"hidden", animation:"fadeUp .2s ease" }}>
+
+        {/* 헤더 */}
+        <div style={{ background:`linear-gradient(135deg,#1E293B,#334155)`,
+          padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:800, color:"#fff" }}>등록 상태 변경</div>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,.55)", marginTop:2 }}>{student.name}</div>
+          </div>
+          <button onClick={onClose} style={{ width:28, height:28, borderRadius:6, border:"none",
+            background:"rgba(255,255,255,.15)", color:"#fff", cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>×</button>
+        </div>
+
+        {/* 바디 */}
+        <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:14 }}>
+
+          {/* 현재 상태 + 출석률 */}
+          <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>현재 상태</div>
+              <span style={{ padding:"4px 12px", borderRadius:20, fontSize:12, fontWeight:700,
+                background: sc.bg || T.s3, color: sc.color || T.tx }}>
+                {currentStatus}
+              </span>
+            </div>
+            <div>
+              <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>출석률</div>
+              <span style={{ fontSize:14, fontWeight:800, color: student.rate >= 80 ? T.ok : T.danger }}>
+                {student.rate || 0}%
+              </span>
+            </div>
+            <div>
+              <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>누적시간</div>
+              <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>
+                {(student.accumulatedHours || 0).toFixed(1)}h
+              </span>
+            </div>
+          </div>
+
+          {allowedStatuses.length === 0 ? (
+            <div style={{ padding:"12px 16px", background:"#FEF2F2", borderRadius:8,
+              fontSize:12, color:"#DC2626" }}>
+              현재 상태에서는 더 이상 변경할 수 없습니다.
+            </div>
+          ) : (
+            <>
+              {/* 변경할 상태 */}
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
+                  변경할 상태 <span style={{ color:T.danger }}>*</span>
+                </label>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {allowedStatuses.map(st => {
+                    const sc2 = STATUS_COLORS[st] || {};
+                    return (
+                      <button key={st} onClick={() => setNewStatus(st)} style={{
+                        padding:"6px 14px", borderRadius:20, border:`2px solid ${newStatus===st ? (sc2.color||T.p) : T.bd}`,
+                        background: newStatus===st ? (sc2.bg||T.pbg) : T.s2,
+                        color: newStatus===st ? (sc2.color||T.p) : T.mu,
+                        cursor:"pointer", fontWeight:700, fontSize:12, transition:"all .15s" }}>
+                        {st}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 변경일 */}
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
+                  변경일 <span style={{ color:T.danger }}>*</span>
+                </label>
+                <input type="date" value={changeDate} onChange={e => setChangeDate(e.target.value)} style={inp}/>
+              </div>
+
+              {/* 중도탈락 사유 */}
+              {newStatus === '중도탈락' && (
+                <>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
+                      탈락 사유 <span style={{ color:T.danger }}>*</span>
+                    </label>
+                    <select value={dropoutReason} onChange={e => setDropoutReason(e.target.value)} style={inp}>
+                      {DROPOUT_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  {dropoutReason === '기타' && (
+                    <div>
+                      <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
+                        기타 사유 상세 <span style={{ color:T.danger }}>*</span>
+                      </label>
+                      <input value={reasonDetail} onChange={e => setReasonDetail(e.target.value)}
+                        placeholder="사유를 입력하세요" style={inp}/>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 취업 기업 */}
+              {newStatus === '조기취업' && (
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
+                    취업 기업명
+                  </label>
+                  <input value={employerName} onChange={e => setEmployerName(e.target.value)}
+                    placeholder="기업명 입력" style={inp}/>
+                </div>
+              )}
+
+              {/* 경고 메시지 */}
+              {warning && (
+                <div style={{ padding:"10px 14px", background:"#FEF2F2", borderRadius:8,
+                  fontSize:12, color:"#DC2626" }}>
+                  ⚠️ {warning}
+                </div>
+              )}
+
+              {/* 버튼 */}
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end", paddingTop:4 }}>
+                <button onClick={onClose} style={{ padding:"8px 18px", borderRadius:8, border:`1px solid ${T.bd}`,
+                  background:T.s2, color:T.mu, cursor:"pointer", fontSize:12, fontWeight:600 }}>
+                  취소
+                </button>
+                <button onClick={handleSubmit} disabled={saving || !newStatus} style={{
+                  padding:"8px 18px", borderRadius:8, border:"none",
+                  background: saving||!newStatus ? "#CBD5E1" : T.p, color:"#fff",
+                  cursor: saving||!newStatus ? "not-allowed" : "pointer", fontSize:12, fontWeight:700 }}>
+                  {saving ? "저장 중…" : "상태 변경"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -9207,6 +9769,10 @@ function App() {
   const studentsRef = useRef(students);
   useEffect(() => { coursesRef.current  = courses;  }, [courses]);
   useEffect(() => { studentsRef.current = students; }, [students]);
+  // 시간 계산 모듈에서 접근할 수 있도록 window에 노출
+  useEffect(() => { window._coursesRef  = coursesRef;  }, []);
+  useEffect(() => { window._studentsRef = studentsRef; }, []);
+  useEffect(() => { window._setStudents = setStudents; }, [setStudents]);
 
   // ── 계정 로드 (앱 시작 시 1회) ──
   useEffect(() => {
@@ -9256,6 +9822,8 @@ function App() {
         if (cRes.data && cRes.data.length > 0) setCourses(cRes.data.map(toCourse));
         setStudents((sRes.data || []).map(toStudent));
         setLoading(false);
+        // 공휴일 로드 (실패해도 앱 동작에 영향 없음)
+        loadHolidays().catch(console.warn);
       } catch (e) {
         setDbError(diagErr(e));
         setLoading(false);

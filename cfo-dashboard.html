@@ -1,0 +1,1614 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CFO Dashboard</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    // ===== STORAGE LAYER =====
+    const STORAGE_KEY = "cfo_dashboard_v1";
+    const DATA_VERSION = 13;
+
+    function uid() {
+      return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    }
+    function nowIso() { return new Date().toISOString(); }
+    function currentMonth() { return new Date().toISOString().slice(0, 7); }
+    function td() { return new Date().toISOString().slice(0, 10); }
+    function fmt(n) { return (n || 0).toLocaleString("ko-KR"); }
+
+    function buildPersistedData(s) {
+      return {
+        version: DATA_VERSION,
+        lastSavedAt: nowIso(),
+        exchangeRate: s.exchangeRate,
+        userCfg: s.userCfg,
+        accounts: s.accounts,
+        stocks: s.stocks,
+        shorts: s.shorts,
+        liabilities: s.liabilities,
+        snapshots: s.snapshots,
+        cfIncome: s.cfIncome,
+        cfFixed: s.cfFixed,
+        cfVar: s.cfVar,
+        cfMonth: s.cfMonth,
+        cfInflows: s.cfInflows,
+        cfBudgets: s.cfBudgets,
+        cfActuals: s.cfActuals,
+      };
+    }
+
+    async function saveAll(data) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        if (window.storage && typeof window.storage.set === 'function') {
+          try { await window.storage.set(STORAGE_KEY, data); } catch(e) {}
+        }
+        return true;
+      } catch(e) {
+        console.error("saveAll failed", e);
+        return false;
+      }
+    }
+
+    function saveAllSync(data) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        return true;
+      } catch(e) {
+        console.error("saveAllSync failed", e);
+        return false;
+      }
+    }
+
+    function loadAll() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch(e) {
+        console.error("loadAll failed", e);
+        return null;
+      }
+    }
+
+    function exportD(data) {
+      const filename = `cfo_${td()}_v${DATA_VERSION}.json`;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importD(file, callback) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try { callback(null, JSON.parse(e.target.result)); }
+        catch(err) { callback(err, null); }
+      };
+      reader.readAsText(file);
+    }
+
+    // ===== CONSTANTS =====
+    const INFLOW_CATEGORIES = {
+      salary: "월급", side: "부수입", support: "지원금",
+      asset_withdrawal: "자산 인출", transfer: "내부 투입", other: "기타"
+    };
+    const SPENDING_CATEGORIES = ["식비","카페","교통","쇼핑","생활용품","병원","경조사","기타"];
+
+    // ===== OCR PARSERS =====
+    function parseNH(text) {
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const results = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const m = line.match(/^(.+?)\s+([A-Z0-9]{2,10})\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/);
+        if (m) {
+          const name = m[1].trim();
+          const code = m[2];
+          const qty = parseInt(m[3].replace(/,/g,''));
+          const avgPrice = parseInt(m[4].replace(/,/g,''));
+          const value = parseInt(m[6].replace(/,/g,''));
+          results.push({ source:"nh", name, code, qty, value, buy: avgPrice, cur: qty > 0 ? Math.round(value/qty) : value, avgPrice });
+        }
+      }
+      return results;
+    }
+
+    function parseKakaoPay(text) {
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const results = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const m = line.match(/^(.+?)\s+([\d,]+)\s*원?$/);
+        if (m) {
+          const name = m[1].trim();
+          const balance = parseInt(m[2].replace(/,/g,''));
+          if (!isNaN(balance) && balance > 0) {
+            results.push({ source:"kakao", name, balance, currency:"KRW" });
+          }
+        }
+      }
+      return results;
+    }
+
+    // ===== MAIN APP =====
+    function App() {
+      const [loading, setLoading] = useState(true);
+      const [saveStatus, setSaveStatus] = useState("idle");
+
+      const [exchangeRate, setExchangeRate] = useState(1350);
+      const [userCfg, setUserCfg] = useState({});
+
+      const [accounts, setAccounts] = useState([]);
+      const [stocks, setStocks] = useState([]);
+      const [shorts, setShorts] = useState([]);
+      const [liabilities, setLiabilities] = useState([]);
+      const [snapshots, setSnapshots] = useState([]);
+
+      const [cfIncome, setCfIncome] = useState(0);
+      const [cfFixed, setCfFixed] = useState(0);
+      const [cfVar, setCfVar] = useState(0);
+
+      const [cfMonth, setCfMonth] = useState(currentMonth());
+      const [cfInflows, setCfInflows] = useState([]);
+      const [cfBudgets, setCfBudgets] = useState([]);
+      const [cfActuals, setCfActuals] = useState([]);
+
+      const [activeTab, setActiveTab] = useState("home");
+      const [cashflowMode, setCashflowMode] = useState("plan");
+      const [toast, setToast] = useState(null);
+
+      const latestDataRef = useRef(null);
+      const saveTimer = useRef(null);
+
+      function showToast(msg, type = "info") {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 3000);
+      }
+
+      // Load on mount
+      useEffect(() => {
+        const saved = loadAll();
+        if (saved) {
+          setExchangeRate(saved.exchangeRate || 1350);
+          setUserCfg(saved.userCfg || {});
+          setAccounts(saved.accounts || []);
+          setStocks(saved.stocks || []);
+          setShorts(saved.shorts || []);
+          setLiabilities(saved.liabilities || []);
+          setSnapshots(saved.snapshots || []);
+          setCfIncome(saved.cfIncome || 0);
+          setCfFixed(saved.cfFixed || 0);
+          setCfVar(saved.cfVar || 0);
+          setCfMonth(saved.cfMonth || currentMonth());
+
+          if (saved.cfInflows && saved.cfInflows.length > 0) {
+            setCfInflows(saved.cfInflows);
+          } else if (saved.cfIncome > 0) {
+            setCfInflows([{ id: uid(), month: currentMonth(), name: "월 수입", amount: saved.cfIncome, category: "salary", recurring: true, updatedAt: nowIso() }]);
+          }
+
+          if (saved.cfBudgets && saved.cfBudgets.length > 0) {
+            setCfBudgets(saved.cfBudgets);
+          } else {
+            const budgets = [];
+            if (saved.cfFixed > 0) budgets.push({ id: uid(), month: currentMonth(), name: "고정비", budget: saved.cfFixed, type: "fixed", category: "fixed", updatedAt: nowIso() });
+            if (saved.cfVar > 0) budgets.push({ id: uid(), month: currentMonth(), name: "생활비", budget: saved.cfVar, type: "living", category: "living", updatedAt: nowIso() });
+            setCfBudgets(budgets);
+          }
+          setCfActuals(saved.cfActuals || []);
+        }
+        setLoading(false);
+      }, []);
+
+      // Auto-save
+      useEffect(() => {
+        if (loading) return;
+        const data = buildPersistedData({ exchangeRate, userCfg, accounts, stocks, shorts, liabilities, snapshots, cfIncome, cfFixed, cfVar, cfMonth, cfInflows, cfBudgets, cfActuals });
+        latestDataRef.current = data;
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        setSaveStatus("saving");
+        saveTimer.current = setTimeout(async () => {
+          const ok = await saveAll(data);
+          setSaveStatus(ok ? "saved" : "error");
+          if (!ok) showToast("저장 실패 - JSON 백업을 권장합니다.");
+        }, 700);
+      }, [exchangeRate, userCfg, accounts, stocks, shorts, liabilities, snapshots, cfIncome, cfFixed, cfVar, cfMonth, cfInflows, cfBudgets, cfActuals]);
+
+      useEffect(() => {
+        const handler = () => { if (latestDataRef.current) saveAllSync(latestDataRef.current); };
+        window.addEventListener("beforeunload", handler);
+        return () => window.removeEventListener("beforeunload", handler);
+      }, []);
+
+      // Auto outflows
+      const autoOutflows = useMemo(() => {
+        const items = [];
+        liabilities.filter(l => l.type === "카드" && !l.isInstallment && l.balance > 0).forEach(l => {
+          items.push({ id: l.id, name: l.name, amount: l.monthly > 0 ? l.monthly : l.balance, group: "settlement", subtype: "card", source: l });
+        });
+        liabilities.filter(l => l.type === "카드" && l.isInstallment && (l.totalMonths - (l.paidMonths||0)) > 0).forEach(l => {
+          const remaining = l.totalMonths - (l.paidMonths||0);
+          items.push({ id: l.id, name: l.name + " (할부)", amount: Math.round(l.balance / remaining), group: "settlement", subtype: "installment", source: l });
+        });
+        liabilities.filter(l => l.type !== "카드" && l.monthly > 0).forEach(l => {
+          items.push({ id: l.id, name: l.name, amount: l.monthly, group: "settlement", subtype: "loan", source: l });
+        });
+        accounts.filter(a => a.type === "적금" && a.isMoagi && a.moagiAmount > 0).forEach(a => {
+          items.push({ id: a.id, name: a.name + " (적금)", amount: a.moagiAmount, group: "saving", subtype: "savings", source: a });
+        });
+        stocks.filter(s => s.isMoagi && s.moagiAmount > 0).forEach(s => {
+          const freq = s.moagiFreq || "monthly";
+          const monthly = freq === "daily" ? s.moagiAmount * 21 : freq === "weekly" ? Math.round(s.moagiAmount * 4.3) : s.moagiAmount;
+          items.push({ id: s.id, name: s.name + " (주식모으기)", amount: monthly, group: "saving", subtype: "stock", source: s, displayOnly: true });
+        });
+        return items;
+      }, [liabilities, accounts, stocks]);
+
+      const toKRW = useCallback((amount, currency) => currency === "USD" ? amount * exchangeRate : amount, [exchangeRate]);
+
+      const totalAssets = useMemo(() => {
+        return accounts.reduce((s,a) => s + toKRW(a.balance||0, a.currency), 0)
+          + stocks.reduce((s,st) => s + toKRW(st.value||0, st.currency), 0)
+          + shorts.reduce((s,sh) => s + toKRW(sh.value||0, sh.currency), 0);
+      }, [accounts, stocks, shorts, toKRW]);
+
+      const totalLiabilities = useMemo(() => liabilities.reduce((s,l) => s + (l.balance||0), 0), [liabilities]);
+      const netWorth = totalAssets - totalLiabilities;
+
+      const totalCash = accounts.filter(a => a.currency === "KRW" && a.type === "현금").reduce((s,a) => s + (a.balance||0), 0);
+      const totalSavings = accounts.filter(a => a.type === "적금").reduce((s,a) => s + (a.balance||0), 0);
+      const operationalCash = totalCash + totalSavings;
+
+      const monthlyMoagi = accounts.filter(a => a.type === "적금" && a.isMoagi).reduce((s,a) => s + (a.moagiAmount||0), 0);
+      const monthlySavMoagi = stocks.filter(s => s.isMoagi).reduce((s,st) => {
+        const freq = st.moagiFreq || "monthly";
+        return s + (freq === "daily" ? (st.moagiAmount||0)*21 : freq === "weekly" ? Math.round((st.moagiAmount||0)*4.3) : (st.moagiAmount||0));
+      }, 0);
+      const totalDebtFixed = liabilities.filter(l => l.monthly > 0).reduce((s,l) => s + (l.monthly||0), 0);
+      const totalCashflowFixed = totalDebtFixed + monthlyMoagi + monthlySavMoagi;
+
+      const earnedIncome = cfInflows.filter(i => ["salary","side"].includes(i.category)).reduce((s,i) => s + (i.amount||0), 0);
+      const extraInput = cfInflows.filter(i => !["salary","side"].includes(i.category)).reduce((s,i) => s + (i.amount||0), 0);
+      const settlementOutflow = autoOutflows.filter(o => o.group === "settlement").reduce((s,o) => s + o.amount, 0);
+      const savingInvestmentOutflow = autoOutflows.filter(o => o.group === "saving").reduce((s,o) => s + o.amount, 0);
+      const livingBudget = cfBudgets.filter(b => b.type === "living").reduce((s,b) => s + (b.budget||0), 0);
+      const actualSpending = cfActuals.filter(a => a.month === cfMonth).reduce((s,a) => s + (a.amount||0), 0);
+      const expectedRemaining = earnedIncome + extraInput - settlementOutflow - savingInvestmentOutflow - livingBudget;
+
+      if (loading) return (
+        <div className="flex items-center justify-center h-screen bg-gray-50">
+          <div className="text-gray-500 text-lg">로딩 중...</div>
+        </div>
+      );
+
+      const sharedCfProps = {
+        cashflowMode, setCashflowMode, cfMonth, setCfMonth,
+        cfInflows, setCfInflows, cfBudgets, setCfBudgets, cfActuals, setCfActuals,
+        autoOutflows, earnedIncome, extraInput, settlementOutflow, savingInvestmentOutflow,
+        livingBudget, actualSpending, expectedRemaining,
+        liabilities, setLiabilities, accounts, setAccounts, showToast
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <header className="bg-white shadow-sm sticky top-0 z-40">
+            <div className="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+              <h1 className="text-xl font-bold text-gray-800">💼 CFO Dashboard</h1>
+              <div className="text-sm">
+                {saveStatus === "saving" && <span className="text-yellow-600">⏳ 저장 중...</span>}
+                {saveStatus === "saved" && <span className="text-green-600">✓ 로컬 자동 저장됨</span>}
+                {saveStatus === "error" && <span className="text-red-600">⚠ 저장 실패 - 백업 필요</span>}
+              </div>
+            </div>
+            <nav className="max-w-4xl mx-auto px-4 flex gap-1 pb-2 overflow-x-auto">
+              {[["home","홈"],["cashflow","현금흐름"],["assets","자산"],["liabilities","부채"],["update","업데이트"],["settings","설정"]].map(([k,label]) => (
+                <button key={k} onClick={() => setActiveTab(k)}
+                  className={`px-3 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors ${activeTab===k ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </header>
+
+          <main className="max-w-4xl mx-auto px-4 py-4 pb-16">
+            {activeTab === "home" && (
+              <HomeTab totalAssets={totalAssets} totalLiabilities={totalLiabilities} netWorth={netWorth}
+                operationalCash={operationalCash} totalCashflowFixed={totalCashflowFixed}
+                accounts={accounts} stocks={stocks} shorts={shorts} toKRW={toKRW} />
+            )}
+            {activeTab === "cashflow" && <CashFlowTab {...sharedCfProps} />}
+            {activeTab === "assets" && (
+              <AssetsTab accounts={accounts} setAccounts={setAccounts}
+                stocks={stocks} setStocks={setStocks}
+                shorts={shorts} setShorts={setShorts} showToast={showToast} />
+            )}
+            {activeTab === "liabilities" && (
+              <LiabilitiesTab liabilities={liabilities} setLiabilities={setLiabilities} showToast={showToast} />
+            )}
+            {activeTab === "update" && (
+              <UpdateTab accounts={accounts} setAccounts={setAccounts}
+                stocks={stocks} setStocks={setStocks}
+                shorts={shorts} setShorts={setShorts}
+                liabilities={liabilities} setLiabilities={setLiabilities} showToast={showToast} />
+            )}
+            {activeTab === "settings" && (
+              <SettingsTab
+                exchangeRate={exchangeRate} setExchangeRate={setExchangeRate}
+                saveStatus={saveStatus} setSaveStatus={setSaveStatus}
+                latestDataRef={latestDataRef}
+                accounts={accounts} setAccounts={setAccounts}
+                stocks={stocks} setStocks={setStocks}
+                shorts={shorts} setShorts={setShorts}
+                liabilities={liabilities} setLiabilities={setLiabilities}
+                snapshots={snapshots} setSnapshots={setSnapshots}
+                cfIncome={cfIncome} setCfIncome={setCfIncome}
+                cfFixed={cfFixed} setCfFixed={setCfFixed}
+                cfVar={cfVar} setCfVar={setCfVar}
+                cfMonth={cfMonth} setCfMonth={setCfMonth}
+                cfInflows={cfInflows} setCfInflows={setCfInflows}
+                cfBudgets={cfBudgets} setCfBudgets={setCfBudgets}
+                cfActuals={cfActuals} setCfActuals={setCfActuals}
+                userCfg={userCfg} setUserCfg={setUserCfg}
+                showToast={showToast} />
+            )}
+          </main>
+
+          {toast && (
+            <div className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white text-sm max-w-xs
+              ${toast.type === "error" ? "bg-red-500" : toast.type === "success" ? "bg-green-500" : "bg-blue-500"}`}>
+              {toast.msg}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ===== HOME TAB =====
+    function HomeTab({ totalAssets, totalLiabilities, netWorth, operationalCash, totalCashflowFixed, accounts, stocks, shorts, toKRW }) {
+      const totalAccKRW = accounts.reduce((s,a) => s + toKRW(a.balance||0, a.currency), 0);
+      const totalStockKRW = stocks.reduce((s,st) => s + toKRW(st.value||0, st.currency), 0);
+      const totalShortKRW = shorts.reduce((s,sh) => s + toKRW(sh.value||0, sh.currency), 0);
+      const totalSavingsKRW = accounts.filter(a => a.type === "적금").reduce((s,a) => s + toKRW(a.balance||0, a.currency), 0);
+      const cashAndDeposit = totalAccKRW - totalSavingsKRW;
+
+      return (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-gray-700">순자산 현황</h2>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-blue-50 rounded-xl p-4 text-center">
+              <div className="text-xs text-blue-500 mb-1">총 자산</div>
+              <div className="text-base font-bold text-blue-700">₩{fmt(Math.round(totalAssets))}</div>
+            </div>
+            <div className="bg-red-50 rounded-xl p-4 text-center">
+              <div className="text-xs text-red-500 mb-1">총 부채</div>
+              <div className="text-base font-bold text-red-700">₩{fmt(totalLiabilities)}</div>
+            </div>
+            <div className={`rounded-xl p-4 text-center ${netWorth >= 0 ? "bg-green-50" : "bg-orange-50"}`}>
+              <div className={`text-xs mb-1 ${netWorth >= 0 ? "text-green-500" : "text-orange-500"}`}>순자산</div>
+              <div className={`text-base font-bold ${netWorth >= 0 ? "text-green-700" : "text-orange-700"}`}>₩{fmt(Math.round(netWorth))}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <div className="text-xs text-gray-500 mb-1">운용 가능 현금</div>
+              <div className="text-xl font-bold text-gray-800">₩{fmt(operationalCash)}</div>
+              <div className="text-xs text-gray-400 mt-1">현금 + 적금</div>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <div className="text-xs text-gray-500 mb-1">월 고정 유출</div>
+              <div className="text-xl font-bold text-gray-800">₩{fmt(totalCashflowFixed)}</div>
+              <div className="text-xs text-gray-400 mt-1">부채 + 적립</div>
+            </div>
+          </div>
+
+          <h2 className="text-lg font-bold text-gray-700">자산 구성</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <div className="text-xs text-gray-500 mb-1">현금/예금</div>
+              <div className="text-lg font-bold text-gray-800">₩{fmt(Math.round(cashAndDeposit))}</div>
+              <div className="text-xs text-gray-400">{accounts.filter(a => a.type !== "적금").length}개 계좌</div>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <div className="text-xs text-gray-500 mb-1">주식/ETF</div>
+              <div className="text-lg font-bold text-gray-800">₩{fmt(Math.round(totalStockKRW))}</div>
+              <div className="text-xs text-gray-400">{stocks.length}개 종목</div>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <div className="text-xs text-gray-500 mb-1">단기금융</div>
+              <div className="text-lg font-bold text-gray-800">₩{fmt(Math.round(totalShortKRW))}</div>
+              <div className="text-xs text-gray-400">{shorts.length}개 상품</div>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <div className="text-xs text-gray-500 mb-1">적금</div>
+              <div className="text-lg font-bold text-gray-800">₩{fmt(Math.round(totalSavingsKRW))}</div>
+              <div className="text-xs text-gray-400">{accounts.filter(a => a.type === "적금").length}개 계좌</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ===== CASH FLOW TAB =====
+    function CashFlowTab({ cashflowMode, setCashflowMode, cfMonth, setCfMonth, cfInflows, setCfInflows, cfBudgets, setCfBudgets, cfActuals, setCfActuals, autoOutflows, earnedIncome, extraInput, settlementOutflow, savingInvestmentOutflow, livingBudget, actualSpending, expectedRemaining, liabilities, setLiabilities, accounts, setAccounts, showToast }) {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-600">기준 월:</label>
+            <input type="month" value={cfMonth} onChange={e => setCfMonth(e.target.value)}
+              className="border rounded px-2 py-1 text-sm" />
+          </div>
+
+          <MonthlySummaryCard earnedIncome={earnedIncome} extraInput={extraInput}
+            settlementOutflow={settlementOutflow} savingInvestmentOutflow={savingInvestmentOutflow}
+            livingBudget={livingBudget} actualSpending={actualSpending} expectedRemaining={expectedRemaining} />
+
+          <div className="flex gap-2">
+            {[["plan","계획"],["actual","실제 사용"],["review","정산"]].map(([k,label]) => (
+              <button key={k} onClick={() => setCashflowMode(k)}
+                className={`px-4 py-2 rounded font-semibold text-sm ${cashflowMode===k ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {cashflowMode === "plan" && (
+            <PlanTab cfInflows={cfInflows} setCfInflows={setCfInflows}
+              cfBudgets={cfBudgets} setCfBudgets={setCfBudgets}
+              autoOutflows={autoOutflows} cfMonth={cfMonth}
+              liabilities={liabilities} setLiabilities={setLiabilities}
+              accounts={accounts} setAccounts={setAccounts} showToast={showToast} />
+          )}
+          {cashflowMode === "actual" && (
+            <ActualTab cfActuals={cfActuals} setCfActuals={setCfActuals} cfMonth={cfMonth} showToast={showToast} />
+          )}
+          {cashflowMode === "review" && (
+            <ReviewTab cfActuals={cfActuals} cfBudgets={cfBudgets} cfMonth={cfMonth} />
+          )}
+        </div>
+      );
+    }
+
+    function MonthlySummaryCard({ earnedIncome, extraInput, settlementOutflow, savingInvestmentOutflow, livingBudget, actualSpending, expectedRemaining }) {
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="font-bold text-gray-700 mb-3">월간 요약</h3>
+          <div className="grid grid-cols-3 gap-2 text-sm">
+            <div className="bg-green-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-green-600 mb-1">근로 수입</div>
+              <div className="font-bold text-green-700">₩{fmt(earnedIncome)}</div>
+            </div>
+            <div className="bg-teal-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-teal-600 mb-1">추가 유입</div>
+              <div className="font-bold text-teal-700">₩{fmt(extraInput)}</div>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-orange-600 mb-1">결제/상환</div>
+              <div className="font-bold text-orange-700">-₩{fmt(settlementOutflow)}</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-purple-600 mb-1">저축/투자</div>
+              <div className="font-bold text-purple-700">-₩{fmt(savingInvestmentOutflow)}</div>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-yellow-600 mb-1">생활예산</div>
+              <div className="font-bold text-yellow-700">-₩{fmt(livingBudget)}</div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-blue-600 mb-1">실제 지출</div>
+              <div className="font-bold text-blue-700">₩{fmt(actualSpending)}</div>
+            </div>
+          </div>
+          <div className={`mt-3 p-3 rounded-lg text-center font-bold text-sm
+            ${expectedRemaining >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+            예상 잔여: ₩{fmt(Math.round(expectedRemaining))}
+          </div>
+        </div>
+      );
+    }
+
+    // ===== PLAN TAB =====
+    function PlanTab({ cfInflows, setCfInflows, cfBudgets, setCfBudgets, autoOutflows, cfMonth, liabilities, setLiabilities, accounts, setAccounts, showToast }) {
+      const [showInflowModal, setShowInflowModal] = useState(false);
+      const [showBudgetModal, setShowBudgetModal] = useState(false);
+      const [editInflow, setEditInflow] = useState(null);
+      const [editBudget, setEditBudget] = useState(null);
+
+      function handleDeleteInflow(id) {
+        setCfInflows(prev => prev.filter(i => i.id !== id));
+        showToast("삭제되었습니다.");
+      }
+
+      function handleDeleteBudget(id) {
+        setCfBudgets(prev => prev.filter(b => b.id !== id));
+        showToast("삭제되었습니다.");
+      }
+
+      function handlePaymentComplete(outflow) {
+        if (outflow.displayOnly) return;
+        setLiabilities(prev => prev.map(l => {
+          if (l.id !== outflow.source.id) return l;
+          if (l.type === "카드" && l.isInstallment) {
+            const newPaid = (l.paidMonths||0) + 1;
+            return { ...l, paidMonths: newPaid, balance: newPaid >= l.totalMonths ? 0 : l.balance, updatedAt: nowIso() };
+          }
+          return { ...l, balance: Math.max(0, (l.balance||0) - outflow.amount), updatedAt: nowIso() };
+        }));
+        showToast(`${outflow.name} 납부 완료 처리되었습니다.`, "success");
+      }
+
+      function handleSavingsComplete(outflow) {
+        setAccounts(prev => prev.map(a => {
+          if (a.id !== outflow.source.id) return a;
+          return { ...a, balance: (a.balance||0) + outflow.amount, updatedAt: nowIso() };
+        }));
+        showToast(`${outflow.name} 적립 완료 처리되었습니다.`, "success");
+      }
+
+      const settlementItems = autoOutflows.filter(o => o.group === "settlement");
+      const savingItems = autoOutflows.filter(o => o.group === "saving");
+      const livingBudgets = cfBudgets.filter(b => b.type === "living");
+
+      return (
+        <div className="space-y-4">
+          {/* 들어올 돈 */}
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-700">💰 들어올 돈</h3>
+              <button onClick={() => { setEditInflow(null); setShowInflowModal(true); }}
+                className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">+ 유입 추가</button>
+            </div>
+            {cfInflows.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-2">수입이 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {cfInflows.map(item => (
+                  <div key={item.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{item.name}</span>
+                      <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{INFLOW_CATEGORIES[item.category] || item.category}</span>
+                      {item.recurring && <span className="ml-1 text-xs text-gray-400">반복</span>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-bold text-green-600">+₩{fmt(item.amount)}</span>
+                      <button onClick={() => { setEditInflow(item); setShowInflowModal(true); }} className="text-xs text-blue-500 hover:underline">수정</button>
+                      <button onClick={() => handleDeleteInflow(item.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 결제/상환 예정 */}
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <h3 className="font-bold text-gray-700 mb-3">
+              💳 결제/상환 예정
+              <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">자동연동</span>
+            </h3>
+            {settlementItems.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-2">결제/상환 항목이 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {settlementItems.map(item => (
+                  <div key={item.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                    <div>
+                      <span className="text-sm font-medium">{item.name}</span>
+                      <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">자동연동</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-orange-600">-₩{fmt(item.amount)}</span>
+                      {!item.displayOnly && (
+                        <button onClick={() => handlePaymentComplete(item)}
+                          className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200">납부완료</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 저축/투자 예정 */}
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <h3 className="font-bold text-gray-700 mb-3">
+              🏦 저축/투자 예정
+              <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">자동연동</span>
+            </h3>
+            {savingItems.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-2">저축/투자 항목이 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {savingItems.map(item => (
+                  <div key={item.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                    <div>
+                      <span className="text-sm font-medium">{item.name}</span>
+                      <span className="ml-2 text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">자동연동</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-purple-600">-₩{fmt(item.amount)}</span>
+                      {item.subtype === "savings" && !item.displayOnly && (
+                        <button onClick={() => handleSavingsComplete(item)}
+                          className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200">적립완료</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 생활 예산 */}
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-700">🛒 생활 예산</h3>
+              <button onClick={() => { setEditBudget(null); setShowBudgetModal(true); }}
+                className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">+ 생활예산 추가</button>
+            </div>
+            {livingBudgets.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-2">생활 예산이 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {livingBudgets.map(item => (
+                  <div key={item.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                    <span className="text-sm font-medium">{item.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-yellow-600">₩{fmt(item.budget)}</span>
+                      <button onClick={() => { setEditBudget(item); setShowBudgetModal(true); }} className="text-xs text-blue-500 hover:underline">수정</button>
+                      <button onClick={() => handleDeleteBudget(item.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {showInflowModal && (
+            <InflowModal initial={editInflow} cfMonth={cfMonth}
+              onSave={(item) => {
+                if (editInflow) setCfInflows(prev => prev.map(i => i.id===item.id ? item : i));
+                else setCfInflows(prev => [...prev, item]);
+                setShowInflowModal(false);
+                showToast(editInflow ? "수정되었습니다." : "추가되었습니다.", "success");
+              }}
+              onClose={() => setShowInflowModal(false)} />
+          )}
+          {showBudgetModal && (
+            <BudgetModal initial={editBudget} cfMonth={cfMonth}
+              onSave={(item) => {
+                if (editBudget) setCfBudgets(prev => prev.map(b => b.id===item.id ? item : b));
+                else setCfBudgets(prev => [...prev, item]);
+                setShowBudgetModal(false);
+                showToast(editBudget ? "수정되었습니다." : "추가되었습니다.", "success");
+              }}
+              onClose={() => setShowBudgetModal(false)} />
+          )}
+        </div>
+      );
+    }
+
+    function InflowModal({ initial, cfMonth, onSave, onClose }) {
+      const [name, setName] = useState(initial?.name || "");
+      const [amount, setAmount] = useState(initial?.amount || "");
+      const [category, setCategory] = useState(initial?.category || "salary");
+      const [recurring, setRecurring] = useState(initial?.recurring ?? true);
+
+      function handleSave() {
+        if (!name || !amount) return;
+        onSave({ id: initial?.id || uid(), month: cfMonth, name, amount: Number(amount), category, recurring, updatedAt: nowIso() });
+      }
+
+      return (
+        <Modal title={initial ? "유입 수정" : "유입 추가"} onClose={onClose} onSave={handleSave}>
+          <Field label="이름"><input value={name} onChange={e=>setName(e.target.value)} placeholder="수입명" className={inputCls} /></Field>
+          <Field label="금액"><input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0" className={inputCls} /></Field>
+          <Field label="카테고리">
+            <select value={category} onChange={e=>setCategory(e.target.value)} className={inputCls}>
+              {Object.entries(INFLOW_CATEGORIES).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)} />
+            매월 반복
+          </label>
+        </Modal>
+      );
+    }
+
+    function BudgetModal({ initial, cfMonth, onSave, onClose }) {
+      const [name, setName] = useState(initial?.name || "");
+      const [budget, setBudget] = useState(initial?.budget || "");
+      const [category, setCategory] = useState(initial?.category || "living");
+
+      function handleSave() {
+        if (!name || !budget) return;
+        onSave({ id: initial?.id || uid(), month: cfMonth, name, budget: Number(budget), type: "living", category, updatedAt: nowIso() });
+      }
+
+      return (
+        <Modal title={initial ? "예산 수정" : "생활예산 추가"} onClose={onClose} onSave={handleSave}>
+          <Field label="이름"><input value={name} onChange={e=>setName(e.target.value)} placeholder="예산 항목명" className={inputCls} /></Field>
+          <Field label="예산 금액"><input type="number" value={budget} onChange={e=>setBudget(e.target.value)} placeholder="0" className={inputCls} /></Field>
+          <Field label="카테고리">
+            <select value={category} onChange={e=>setCategory(e.target.value)} className={inputCls}>
+              {SPENDING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="living">생활비 (합산)</option>
+            </select>
+          </Field>
+        </Modal>
+      );
+    }
+
+    // ===== ACTUAL TAB =====
+    function ActualTab({ cfActuals, setCfActuals, cfMonth, showToast }) {
+      const [amount, setAmount] = useState("");
+      const [category, setCategory] = useState("식비");
+      const [memo, setMemo] = useState("");
+      const [paymentMethod, setPaymentMethod] = useState("");
+      const [editItem, setEditItem] = useState(null);
+      const [showEditModal, setShowEditModal] = useState(false);
+
+      function handleSave() {
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) { showToast("금액을 올바르게 입력하세요."); return; }
+        const newItem = { id: uid(), month: cfMonth, date: td(), category, name: memo || category, amount: Number(amount), paymentMethod, memo, updatedAt: nowIso() };
+        setCfActuals(prev => [newItem, ...prev]);
+        setAmount(""); setMemo(""); setPaymentMethod("");
+        showToast("지출이 추가되었습니다.", "success");
+      }
+
+      function handleDelete(id) { setCfActuals(prev => prev.filter(a => a.id !== id)); showToast("삭제되었습니다."); }
+
+      const monthActuals = cfActuals.filter(a => a.month === cfMonth);
+      const total = monthActuals.reduce((s,a) => s + (a.amount||0), 0);
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <h3 className="font-bold text-gray-700 mb-3">빠른 입력</h3>
+            <div className="space-y-2">
+              <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="금액" className={inputCls} />
+              <select value={category} onChange={e=>setCategory(e.target.value)} className={inputCls}>
+                {SPENDING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input value={memo} onChange={e=>setMemo(e.target.value)} placeholder="메모" className={inputCls} />
+              <input value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)} placeholder="결제수단 (선택)" className={inputCls} />
+              <button onClick={handleSave} className="w-full bg-blue-600 text-white rounded-lg py-2.5 font-semibold text-sm hover:bg-blue-700">저장</button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-700">이번 달 지출 ({monthActuals.length}건)</h3>
+              <span className="text-sm font-bold text-red-600">합계: ₩{fmt(total)}</span>
+            </div>
+            {monthActuals.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">지출 내역이 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {monthActuals.map(item => (
+                  <div key={item.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{item.name}</div>
+                      <div className="text-xs text-gray-400">{item.date} · {item.category}{item.paymentMethod ? ` · ${item.paymentMethod}` : ""}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-bold text-red-600">-₩{fmt(item.amount)}</span>
+                      <button onClick={() => { setEditItem(item); setShowEditModal(true); }} className="text-xs text-blue-500 hover:underline">수정</button>
+                      <button onClick={() => handleDelete(item.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {showEditModal && editItem && (
+            <EditActualModal initial={editItem}
+              onSave={(updated) => { setCfActuals(prev => prev.map(a => a.id===updated.id ? updated : a)); setShowEditModal(false); showToast("수정되었습니다.", "success"); }}
+              onClose={() => setShowEditModal(false)} />
+          )}
+        </div>
+      );
+    }
+
+    function EditActualModal({ initial, onSave, onClose }) {
+      const [amount, setAmount] = useState(initial.amount);
+      const [category, setCategory] = useState(initial.category);
+      const [memo, setMemo] = useState(initial.memo || "");
+      const [paymentMethod, setPaymentMethod] = useState(initial.paymentMethod || "");
+
+      return (
+        <Modal title="지출 수정" onClose={onClose} onSave={() => onSave({ ...initial, amount: Number(amount), category, name: memo || category, memo, paymentMethod, updatedAt: nowIso() })}>
+          <Field label="금액"><input type="number" value={amount} onChange={e=>setAmount(e.target.value)} className={inputCls} /></Field>
+          <Field label="카테고리">
+            <select value={category} onChange={e=>setCategory(e.target.value)} className={inputCls}>
+              {SPENDING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="메모"><input value={memo} onChange={e=>setMemo(e.target.value)} className={inputCls} /></Field>
+          <Field label="결제수단"><input value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)} className={inputCls} /></Field>
+        </Modal>
+      );
+    }
+
+    // ===== REVIEW TAB =====
+    function ReviewTab({ cfActuals, cfBudgets, cfMonth }) {
+      const monthActuals = cfActuals.filter(a => a.month === cfMonth);
+      const categoryMap = {};
+      monthActuals.forEach(a => { categoryMap[a.category] = (categoryMap[a.category]||0) + (a.amount||0); });
+
+      const budgetMap = {};
+      cfBudgets.filter(b => b.type === "living").forEach(b => { budgetMap[b.category] = (budgetMap[b.category]||0) + (b.budget||0); });
+
+      const allCategories = Array.from(new Set([...Object.keys(categoryMap), ...Object.keys(budgetMap)]));
+      const rows = allCategories.map(cat => {
+        const actual = categoryMap[cat] || 0;
+        const budget = budgetMap[cat] || 0;
+        const diff = budget - actual;
+        const pct = budget > 0 ? Math.round((actual/budget)*100) : null;
+        return { cat, actual, budget, diff, pct };
+      }).sort((a,b) => b.actual - a.actual);
+
+      const totalActual = rows.reduce((s,r) => s + r.actual, 0);
+      const totalBudget = rows.reduce((s,r) => s + r.budget, 0);
+
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="font-bold text-gray-700 mb-3">정산 ({cfMonth})</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 text-gray-500 font-medium">카테고리</th>
+                  <th className="text-right py-2 text-gray-500 font-medium">예산</th>
+                  <th className="text-right py-2 text-gray-500 font-medium">실제</th>
+                  <th className="text-right py-2 text-gray-500 font-medium">남음/초과</th>
+                  <th className="text-right py-2 text-gray-500 font-medium">사용률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.cat} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-2 font-medium">{r.cat}</td>
+                    <td className="py-2 text-right text-gray-500">{r.budget > 0 ? `₩${fmt(r.budget)}` : "-"}</td>
+                    <td className="py-2 text-right">₩{fmt(r.actual)}</td>
+                    <td className={`py-2 text-right font-semibold ${r.budget === 0 ? "text-orange-500" : r.diff < 0 ? "text-red-600" : "text-green-600"}`}>
+                      {r.budget === 0 ? "예산없음" : r.diff < 0 ? `-₩${fmt(Math.abs(r.diff))}` : `+₩${fmt(r.diff)}`}
+                    </td>
+                    <td className={`py-2 text-right ${r.pct !== null && r.pct > 100 ? "text-red-600 font-semibold" : "text-gray-600"}`}>
+                      {r.pct !== null ? `${r.pct}%` : "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 font-bold bg-gray-50">
+                  <td className="py-2">합계</td>
+                  <td className="py-2 text-right">₩{fmt(totalBudget)}</td>
+                  <td className="py-2 text-right">₩{fmt(totalActual)}</td>
+                  <td className={`py-2 text-right ${totalBudget - totalActual < 0 ? "text-red-600" : "text-green-600"}`}>
+                    {totalBudget > 0 ? (totalBudget - totalActual < 0 ? `-₩${fmt(Math.abs(totalBudget-totalActual))}` : `+₩${fmt(totalBudget-totalActual)}`) : "-"}
+                  </td>
+                  <td className="py-2 text-right">{totalBudget > 0 ? `${Math.round((totalActual/totalBudget)*100)}%` : "-"}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // ===== ASSETS TAB =====
+    function AssetsTab({ accounts, setAccounts, stocks, setStocks, shorts, setShorts, showToast }) {
+      const [assetTab, setAssetTab] = useState("accounts");
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            {[["accounts","계좌"],["stocks","주식"],["shorts","단기금융"]].map(([k,l]) => (
+              <button key={k} onClick={() => setAssetTab(k)}
+                className={`px-4 py-2 rounded font-semibold text-sm ${assetTab===k ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}>{l}</button>
+            ))}
+          </div>
+          {assetTab === "accounts" && <AccountsPanel accounts={accounts} setAccounts={setAccounts} showToast={showToast} />}
+          {assetTab === "stocks" && <StocksPanel stocks={stocks} setStocks={setStocks} showToast={showToast} />}
+          {assetTab === "shorts" && <ShortsPanel shorts={shorts} setShorts={setShorts} showToast={showToast} />}
+        </div>
+      );
+    }
+
+    function AccountsPanel({ accounts, setAccounts, showToast }) {
+      const [showModal, setShowModal] = useState(false);
+      const [editItem, setEditItem] = useState(null);
+      function handleDelete(id) { setAccounts(prev => prev.filter(a => a.id !== id)); showToast("삭제되었습니다."); }
+      return (
+        <ListPanel title={`계좌 (${accounts.length})`} onAdd={() => { setEditItem(null); setShowModal(true); }}>
+          {accounts.map(item => (
+            <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <div>
+                <div className="text-sm font-medium">{item.name}</div>
+                <div className="text-xs text-gray-400">{item.type} · {item.currency}
+                  {item.isMoagi && <span className="ml-1 text-blue-500">· 적립 {item.currency==="USD"?"$":"₩"}{fmt(item.moagiAmount)}/{item.moagiFreq==="daily"?"일":item.moagiFreq==="weekly"?"주":"월"}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">{item.currency==="USD"?"$":"₩"}{fmt(item.balance)}</span>
+                <button onClick={() => { setEditItem(item); setShowModal(true); }} className="text-xs text-blue-500 hover:underline">수정</button>
+                <button onClick={() => handleDelete(item.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+              </div>
+            </div>
+          ))}
+          {accounts.length === 0 && <p className="text-sm text-gray-400 text-center py-4">계좌가 없습니다.</p>}
+          {showModal && (
+            <AccountModal initial={editItem}
+              onSave={(item) => { if (editItem) setAccounts(prev => prev.map(a => a.id===item.id ? item : a)); else setAccounts(prev => [...prev, item]); setShowModal(false); showToast(editItem?"수정되었습니다.":"추가되었습니다.", "success"); }}
+              onClose={() => setShowModal(false)} />
+          )}
+        </ListPanel>
+      );
+    }
+
+    function AccountModal({ initial, onSave, onClose }) {
+      const [name, setName] = useState(initial?.name || "");
+      const [type, setType] = useState(initial?.type || "현금");
+      const [balance, setBalance] = useState(initial?.balance ?? "");
+      const [currency, setCurrency] = useState(initial?.currency || "KRW");
+      const [isMoagi, setIsMoagi] = useState(initial?.isMoagi || false);
+      const [moagiAmount, setMoagiAmount] = useState(initial?.moagiAmount || "");
+      const [moagiFreq, setMoagiFreq] = useState(initial?.moagiFreq || "monthly");
+
+      function handleSave() {
+        if (!name) return;
+        onSave({ id: initial?.id || uid(), name, type, balance: Number(balance), currency, isMoagi, moagiAmount: isMoagi ? Number(moagiAmount) : 0, moagiFreq: isMoagi ? moagiFreq : "monthly", updatedAt: nowIso() });
+      }
+
+      return (
+        <Modal title={initial ? "계좌 수정" : "계좌 추가"} onClose={onClose} onSave={handleSave}>
+          <Field label="이름"><input value={name} onChange={e=>setName(e.target.value)} placeholder="계좌명" className={inputCls} /></Field>
+          <Field label="유형">
+            <select value={type} onChange={e=>setType(e.target.value)} className={inputCls}>
+              {["현금","적금","예금","CMA"].map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </Field>
+          <Field label="잔액"><input type="number" value={balance} onChange={e=>setBalance(e.target.value)} placeholder="0" className={inputCls} /></Field>
+          <Field label="통화">
+            <select value={currency} onChange={e=>setCurrency(e.target.value)} className={inputCls}>
+              <option value="KRW">KRW</option><option value="USD">USD</option>
+            </select>
+          </Field>
+          {type === "적금" && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={isMoagi} onChange={e=>setIsMoagi(e.target.checked)} /> 적립식
+              </label>
+              {isMoagi && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="적립 금액"><input type="number" value={moagiAmount} onChange={e=>setMoagiAmount(e.target.value)} placeholder="0" className={inputCls} /></Field>
+                  <Field label="적립 주기">
+                    <select value={moagiFreq} onChange={e=>setMoagiFreq(e.target.value)} className={inputCls}>
+                      <option value="daily">매일</option><option value="weekly">매주</option><option value="monthly">매월</option>
+                    </select>
+                  </Field>
+                </div>
+              )}
+            </>
+          )}
+        </Modal>
+      );
+    }
+
+    function StocksPanel({ stocks, setStocks, showToast }) {
+      const [showModal, setShowModal] = useState(false);
+      const [editItem, setEditItem] = useState(null);
+      function handleDelete(id) { setStocks(prev => prev.filter(s => s.id !== id)); showToast("삭제되었습니다."); }
+      return (
+        <ListPanel title={`주식/ETF (${stocks.length})`} onAdd={() => { setEditItem(null); setShowModal(true); }}>
+          {stocks.map(item => (
+            <div key={item.id} className="p-3 bg-gray-50 rounded-lg">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="text-sm font-medium">{item.name} {item.code && <span className="text-xs text-gray-400">({item.code})</span>}</div>
+                  <div className="text-xs text-gray-400">{item.qty}주 · 현재가 {item.currency==="USD"?"$":"₩"}{fmt(item.cur)} · 매수가 {item.currency==="USD"?"$":"₩"}{fmt(item.buy)}
+                    {item.isMoagi && <span className="ml-1 text-blue-500">· 적립 ₩{fmt(item.moagiAmount)}/{item.moagiFreq==="daily"?"일":item.moagiFreq==="weekly"?"주":"월"}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold">{item.currency==="USD"?"$":"₩"}{fmt(item.value)}</span>
+                  <button onClick={() => { setEditItem(item); setShowModal(true); }} className="text-xs text-blue-500 hover:underline">수정</button>
+                  <button onClick={() => handleDelete(item.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {stocks.length === 0 && <p className="text-sm text-gray-400 text-center py-4">종목이 없습니다.</p>}
+          {showModal && (
+            <StockModal initial={editItem}
+              onSave={(item) => { if (editItem) setStocks(prev => prev.map(s => s.id===item.id ? item : s)); else setStocks(prev => [...prev, item]); setShowModal(false); showToast(editItem?"수정되었습니다.":"추가되었습니다.", "success"); }}
+              onClose={() => setShowModal(false)} />
+          )}
+        </ListPanel>
+      );
+    }
+
+    function StockModal({ initial, onSave, onClose }) {
+      const [name, setName] = useState(initial?.name || "");
+      const [code, setCode] = useState(initial?.code || "");
+      const [qty, setQty] = useState(initial?.qty ?? "");
+      const [cur, setCur] = useState(initial?.cur ?? "");
+      const [buy, setBuy] = useState(initial?.buy ?? "");
+      const [value, setValue] = useState(initial?.value ?? "");
+      const [currency, setCurrency] = useState(initial?.currency || "KRW");
+      const [isMoagi, setIsMoagi] = useState(initial?.isMoagi || false);
+      const [moagiAmount, setMoagiAmount] = useState(initial?.moagiAmount || "");
+      const [moagiFreq, setMoagiFreq] = useState(initial?.moagiFreq || "monthly");
+
+      function handleSave() {
+        if (!name) return;
+        const qtyN = Number(qty), curN = Number(cur), buyN = Number(buy);
+        const valueN = value !== "" ? Number(value) : qtyN * curN;
+        onSave({ id: initial?.id || uid(), name, code, qty: qtyN, cur: curN, buy: buyN, value: valueN, currency, isMoagi, moagiAmount: isMoagi ? Number(moagiAmount) : 0, moagiFreq: isMoagi ? moagiFreq : "monthly", updatedAt: nowIso() });
+      }
+
+      return (
+        <Modal title={initial ? "종목 수정" : "종목 추가"} onClose={onClose} onSave={handleSave}>
+          <Field label="종목명"><input value={name} onChange={e=>setName(e.target.value)} placeholder="종목명" className={inputCls} /></Field>
+          <Field label="코드"><input value={code} onChange={e=>setCode(e.target.value)} placeholder="티커/코드" className={inputCls} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="수량"><input type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="0" className={inputCls} /></Field>
+            <Field label="현재가"><input type="number" value={cur} onChange={e=>setCur(e.target.value)} placeholder="0" className={inputCls} /></Field>
+            <Field label="매수가"><input type="number" value={buy} onChange={e=>setBuy(e.target.value)} placeholder="0" className={inputCls} /></Field>
+            <Field label="평가금액"><input type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="자동계산" className={inputCls} /></Field>
+          </div>
+          <Field label="통화">
+            <select value={currency} onChange={e=>setCurrency(e.target.value)} className={inputCls}>
+              <option value="KRW">KRW</option><option value="USD">USD</option>
+            </select>
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input type="checkbox" checked={isMoagi} onChange={e=>setIsMoagi(e.target.checked)} /> 적립식 (주식모으기)
+          </label>
+          {isMoagi && (
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="적립 금액"><input type="number" value={moagiAmount} onChange={e=>setMoagiAmount(e.target.value)} placeholder="0" className={inputCls} /></Field>
+              <Field label="적립 주기">
+                <select value={moagiFreq} onChange={e=>setMoagiFreq(e.target.value)} className={inputCls}>
+                  <option value="daily">매일</option><option value="weekly">매주</option><option value="monthly">매월</option>
+                </select>
+              </Field>
+            </div>
+          )}
+        </Modal>
+      );
+    }
+
+    function ShortsPanel({ shorts, setShorts, showToast }) {
+      const [showModal, setShowModal] = useState(false);
+      const [editItem, setEditItem] = useState(null);
+      function handleDelete(id) { setShorts(prev => prev.filter(s => s.id !== id)); showToast("삭제되었습니다."); }
+      return (
+        <ListPanel title={`단기금융 (${shorts.length})`} onAdd={() => { setEditItem(null); setShowModal(true); }}>
+          {shorts.map(item => (
+            <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <div>
+                <div className="text-sm font-medium">{item.name}</div>
+                <div className="text-xs text-gray-400">{item.broker} · 원금 {item.currency==="USD"?"$":"₩"}{fmt(item.principal)} · {item.currency}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">{item.currency==="USD"?"$":"₩"}{fmt(item.value)}</span>
+                <button onClick={() => { setEditItem(item); setShowModal(true); }} className="text-xs text-blue-500 hover:underline">수정</button>
+                <button onClick={() => handleDelete(item.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+              </div>
+            </div>
+          ))}
+          {shorts.length === 0 && <p className="text-sm text-gray-400 text-center py-4">단기금융 상품이 없습니다.</p>}
+          {showModal && (
+            <ShortModal initial={editItem}
+              onSave={(item) => { if (editItem) setShorts(prev => prev.map(s => s.id===item.id ? item : s)); else setShorts(prev => [...prev, item]); setShowModal(false); showToast(editItem?"수정되었습니다.":"추가되었습니다.", "success"); }}
+              onClose={() => setShowModal(false)} />
+          )}
+        </ListPanel>
+      );
+    }
+
+    function ShortModal({ initial, onSave, onClose }) {
+      const [name, setName] = useState(initial?.name || "");
+      const [broker, setBroker] = useState(initial?.broker || "");
+      const [principal, setPrincipal] = useState(initial?.principal ?? "");
+      const [value, setValue] = useState(initial?.value ?? "");
+      const [currency, setCurrency] = useState(initial?.currency || "KRW");
+
+      function handleSave() {
+        if (!name) return;
+        onSave({ id: initial?.id || uid(), name, broker, principal: Number(principal), value: Number(value), currency, updatedAt: nowIso() });
+      }
+
+      return (
+        <Modal title={initial ? "단기금융 수정" : "단기금융 추가"} onClose={onClose} onSave={handleSave}>
+          <Field label="상품명"><input value={name} onChange={e=>setName(e.target.value)} placeholder="상품명" className={inputCls} /></Field>
+          <Field label="증권사"><input value={broker} onChange={e=>setBroker(e.target.value)} placeholder="증권사명" className={inputCls} /></Field>
+          <Field label="원금"><input type="number" value={principal} onChange={e=>setPrincipal(e.target.value)} placeholder="0" className={inputCls} /></Field>
+          <Field label="현재가치"><input type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0" className={inputCls} /></Field>
+          <Field label="통화">
+            <select value={currency} onChange={e=>setCurrency(e.target.value)} className={inputCls}>
+              <option value="KRW">KRW</option><option value="USD">USD</option>
+            </select>
+          </Field>
+        </Modal>
+      );
+    }
+
+    // ===== LIABILITIES TAB =====
+    function LiabilitiesTab({ liabilities, setLiabilities, showToast }) {
+      const [showModal, setShowModal] = useState(false);
+      const [editItem, setEditItem] = useState(null);
+      const totalBalance = liabilities.reduce((s,l) => s + (l.balance||0), 0);
+      function handleDelete(id) { setLiabilities(prev => prev.filter(l => l.id !== id)); showToast("삭제되었습니다."); }
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+            <div className="text-xs text-red-500 mb-1">총 부채</div>
+            <div className="text-2xl font-bold text-red-700">₩{fmt(totalBalance)}</div>
+          </div>
+          <ListPanel title={`부채 목록 (${liabilities.length})`} onAdd={() => { setEditItem(null); setShowModal(true); }}>
+            {liabilities.map(item => (
+              <div key={item.id} className="p-3 bg-gray-50 rounded-lg">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-sm font-medium">{item.name}</div>
+                    <div className="text-xs text-gray-400">{item.type}
+                      {item.monthly > 0 && ` · 월 ₩${fmt(item.monthly)}`}
+                      {item.isInstallment && ` · 할부 ${item.paidMonths||0}/${item.totalMonths}회`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-red-600">₩{fmt(item.balance)}</span>
+                    <button onClick={() => { setEditItem(item); setShowModal(true); }} className="text-xs text-blue-500 hover:underline">수정</button>
+                    <button onClick={() => handleDelete(item.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {liabilities.length === 0 && <p className="text-sm text-gray-400 text-center py-4">부채가 없습니다.</p>}
+            {showModal && (
+              <LiabilityModal initial={editItem}
+                onSave={(item) => { if (editItem) setLiabilities(prev => prev.map(l => l.id===item.id ? item : l)); else setLiabilities(prev => [...prev, item]); setShowModal(false); showToast(editItem?"수정되었습니다.":"추가되었습니다.", "success"); }}
+                onClose={() => setShowModal(false)} />
+            )}
+          </ListPanel>
+        </div>
+      );
+    }
+
+    function LiabilityModal({ initial, onSave, onClose }) {
+      const [name, setName] = useState(initial?.name || "");
+      const [type, setType] = useState(initial?.type || "카드");
+      const [balance, setBalance] = useState(initial?.balance ?? "");
+      const [monthly, setMonthly] = useState(initial?.monthly ?? "");
+      const [isInstallment, setIsInstallment] = useState(initial?.isInstallment || false);
+      const [totalMonths, setTotalMonths] = useState(initial?.totalMonths ?? "");
+      const [paidMonths, setPaidMonths] = useState(initial?.paidMonths ?? "");
+
+      function handleSave() {
+        if (!name) return;
+        onSave({ id: initial?.id || uid(), name, type, balance: Number(balance), monthly: Number(monthly), isInstallment, totalMonths: Number(totalMonths), paidMonths: Number(paidMonths), updatedAt: nowIso() });
+      }
+
+      return (
+        <Modal title={initial ? "부채 수정" : "부채 추가"} onClose={onClose} onSave={handleSave}>
+          <Field label="이름"><input value={name} onChange={e=>setName(e.target.value)} placeholder="부채명" className={inputCls} /></Field>
+          <Field label="종류">
+            <select value={type} onChange={e=>setType(e.target.value)} className={inputCls}>
+              <option value="카드">카드</option><option value="대출">대출</option><option value="기타">기타</option>
+            </select>
+          </Field>
+          <Field label="잔액"><input type="number" value={balance} onChange={e=>setBalance(e.target.value)} placeholder="0" className={inputCls} /></Field>
+          <Field label="월 납부액"><input type="number" value={monthly} onChange={e=>setMonthly(e.target.value)} placeholder="0" className={inputCls} /></Field>
+          {type === "카드" && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={isInstallment} onChange={e=>setIsInstallment(e.target.checked)} /> 할부
+              </label>
+              {isInstallment && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="총 회차"><input type="number" value={totalMonths} onChange={e=>setTotalMonths(e.target.value)} placeholder="12" className={inputCls} /></Field>
+                  <Field label="납부 회차"><input type="number" value={paidMonths} onChange={e=>setPaidMonths(e.target.value)} placeholder="0" className={inputCls} /></Field>
+                </div>
+              )}
+            </>
+          )}
+        </Modal>
+      );
+    }
+
+    // ===== UPDATE TAB =====
+    function UpdateTab({ accounts, setAccounts, stocks, setStocks, shorts, setShorts, liabilities, setLiabilities, showToast }) {
+      const [updateMode, setUpdateMode] = useState("ocr");
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            {[["ocr","OCR 입력"],["direct","직접수정"]].map(([k,l]) => (
+              <button key={k} onClick={() => setUpdateMode(k)}
+                className={`px-4 py-2 rounded font-semibold text-sm ${updateMode===k ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}>{l}</button>
+            ))}
+          </div>
+          {updateMode === "ocr" && <OcrPanel stocks={stocks} setStocks={setStocks} shorts={shorts} setShorts={setShorts} showToast={showToast} />}
+          {updateMode === "direct" && <DirectEditPanel accounts={accounts} setAccounts={setAccounts} stocks={stocks} setStocks={setStocks} shorts={shorts} setShorts={setShorts} liabilities={liabilities} setLiabilities={setLiabilities} showToast={showToast} />}
+        </div>
+      );
+    }
+
+    function OcrPanel({ stocks, setStocks, shorts, setShorts, showToast }) {
+      const [ocrText, setOcrText] = useState("");
+      const [parsedItems, setParsedItems] = useState([]);
+
+      function handleNH() {
+        const results = parseNH(ocrText);
+        if (results.length === 0) { showToast("파싱된 항목이 없습니다. 형식을 확인해주세요."); return; }
+        setParsedItems(results.map(r => ({ ...r, _type: "stock", _apply: true })));
+        showToast(`${results.length}개 항목이 파싱되었습니다.`);
+      }
+
+      function handleKakao() {
+        const results = parseKakaoPay(ocrText);
+        if (results.length === 0) { showToast("파싱된 항목이 없습니다. 형식을 확인해주세요."); return; }
+        setParsedItems(results.map(r => ({ ...r, _type: "short", _apply: true })));
+        showToast(`${results.length}개 항목이 파싱되었습니다.`);
+      }
+
+      function handleApply() {
+        const toApply = parsedItems.filter(i => i._apply);
+        toApply.forEach(item => {
+          if (item._type === "stock") {
+            const existing = stocks.find(s => s.code === item.code || s.name === item.name);
+            if (existing) {
+              setStocks(prev => prev.map(s => s.id === existing.id ? { ...s, qty: item.qty, cur: item.cur, buy: item.buy, value: item.value, updatedAt: nowIso() } : s));
+            } else {
+              setStocks(prev => [...prev, { id: uid(), name: item.name, code: item.code||"", qty: item.qty, cur: item.cur, buy: item.buy, value: item.value, currency: "KRW", isMoagi: false, moagiAmount: 0, moagiFreq: "monthly", updatedAt: nowIso() }]);
+            }
+          } else if (item._type === "short") {
+            const existing = shorts.find(s => s.name === item.name);
+            if (existing) {
+              setShorts(prev => prev.map(s => s.id === existing.id ? { ...s, value: item.balance, updatedAt: nowIso() } : s));
+            } else {
+              setShorts(prev => [...prev, { id: uid(), name: item.name, broker: "", principal: item.balance, value: item.balance, currency: item.currency||"KRW", updatedAt: nowIso() }]);
+            }
+          }
+        });
+        showToast(`${toApply.length}개 항목이 적용되었습니다.`, "success");
+        setParsedItems([]);
+        setOcrText("");
+      }
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <h3 className="font-bold text-gray-700 mb-3">OCR 텍스트 입력</h3>
+            <textarea value={ocrText} onChange={e=>setOcrText(e.target.value)}
+              placeholder={"증권사 앱에서 복사한 텍스트를 붙여넣기...\n\n[NH 형식 예시]\n삼성전자 005930 100 75,000 80,000 8,000,000\n\n[카카오페이 형식 예시]\nCMA 금리형 1,500,000원"}
+              className="w-full border rounded-lg p-3 text-sm h-36 resize-none font-mono" />
+            <div className="flex gap-2 mt-2">
+              <button onClick={handleNH} className="flex-1 bg-green-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-green-700">NH투자증권 파싱</button>
+              <button onClick={handleKakao} className="flex-1 bg-yellow-500 text-white rounded-lg py-2 text-sm font-semibold hover:bg-yellow-600">카카오페이 파싱</button>
+            </div>
+          </div>
+
+          {parsedItems.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border p-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-gray-700">검토함 ({parsedItems.filter(i=>i._apply).length}/{parsedItems.length})</h3>
+                <button onClick={handleApply} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-blue-700">적용</button>
+              </div>
+              <div className="space-y-2">
+                {parsedItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                    <input type="checkbox" checked={item._apply} onChange={e => setParsedItems(prev => prev.map((p,i) => i===idx ? {...p,_apply:e.target.checked} : p))} />
+                    <div className="flex-1 text-sm">
+                      {item._type === "stock"
+                        ? <span>{item.name} {item.code && `(${item.code})`} · {item.qty}주 · ₩{fmt(item.value)}</span>
+                        : <span>{item.name} · ₩{fmt(item.balance)}</span>}
+                    </div>
+                    <span className="text-xs text-gray-400">{item._type === "stock" ? "주식" : "단기금융"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function DirectEditPanel({ accounts, setAccounts, stocks, setStocks, shorts, setShorts, liabilities, setLiabilities, showToast }) {
+      const [directTab, setDirectTab] = useState("accounts");
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-1 flex-wrap">
+            {[["accounts","계좌"],["stocks","주식"],["shorts","단기금융"],["liabilities","부채"]].map(([k,l]) => (
+              <button key={k} onClick={() => setDirectTab(k)}
+                className={`px-3 py-1.5 rounded font-semibold text-sm ${directTab===k ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}>{l}</button>
+            ))}
+          </div>
+          {directTab === "accounts" && <DirectAccountsEdit accounts={accounts} setAccounts={setAccounts} />}
+          {directTab === "stocks" && <DirectStocksEdit stocks={stocks} setStocks={setStocks} />}
+          {directTab === "shorts" && <DirectShortsEdit shorts={shorts} setShorts={setShorts} />}
+          {directTab === "liabilities" && <DirectLiabilitiesEdit liabilities={liabilities} setLiabilities={setLiabilities} />}
+        </div>
+      );
+    }
+
+    function DirectAccountsEdit({ accounts, setAccounts }) {
+      function handleChange(id, field, value) {
+        setAccounts(prev => prev.map(a => a.id === id ? { ...a, [field]: ["balance","moagiAmount"].includes(field) ? Number(value) : value, updatedAt: nowIso() } : a));
+      }
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="font-bold text-gray-700 mb-3">계좌 직접수정</h3>
+          {accounts.length === 0 ? <p className="text-sm text-gray-400">계좌가 없습니다.</p> : (
+            <div className="space-y-3">
+              {accounts.map(a => (
+                <div key={a.id} className="border rounded-lg p-3 space-y-2">
+                  <div className="text-sm font-semibold text-gray-700">{a.name} <span className="text-xs font-normal text-gray-400">({a.type} · {a.currency})</span></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="잔액"><input type="number" value={a.balance} onChange={e=>handleChange(a.id,"balance",e.target.value)} className={inputCls} /></Field>
+                    {a.isMoagi && <Field label="적립금액"><input type="number" value={a.moagiAmount} onChange={e=>handleChange(a.id,"moagiAmount",e.target.value)} className={inputCls} /></Field>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function DirectStocksEdit({ stocks, setStocks }) {
+      function handleChange(id, field, value) {
+        setStocks(prev => prev.map(s => {
+          if (s.id !== id) return s;
+          const nums = ["qty","cur","buy","value","moagiAmount"];
+          const updated = { ...s, [field]: nums.includes(field) ? Number(value) : value, updatedAt: nowIso() };
+          if (field === "qty" || field === "cur") updated.value = updated.qty * updated.cur;
+          return updated;
+        }));
+      }
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="font-bold text-gray-700 mb-3">주식 직접수정</h3>
+          {stocks.length === 0 ? <p className="text-sm text-gray-400">종목이 없습니다.</p> : (
+            <div className="space-y-3">
+              {stocks.map(s => (
+                <div key={s.id} className="border rounded-lg p-3 space-y-2">
+                  <div className="text-sm font-semibold text-gray-700">{s.name} {s.code && <span className="text-xs font-normal text-gray-400">({s.code})</span>}</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Field label="수량"><input type="number" value={s.qty} onChange={e=>handleChange(s.id,"qty",e.target.value)} className={inputCls} /></Field>
+                    <Field label="현재가"><input type="number" value={s.cur} onChange={e=>handleChange(s.id,"cur",e.target.value)} className={inputCls} /></Field>
+                    <Field label="평가금액"><input type="number" value={s.value} onChange={e=>handleChange(s.id,"value",e.target.value)} className={inputCls} /></Field>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function DirectShortsEdit({ shorts, setShorts }) {
+      function handleChange(id, field, value) {
+        setShorts(prev => prev.map(s => s.id === id ? { ...s, [field]: ["principal","value"].includes(field) ? Number(value) : value, updatedAt: nowIso() } : s));
+      }
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="font-bold text-gray-700 mb-3">단기금융 직접수정</h3>
+          {shorts.length === 0 ? <p className="text-sm text-gray-400">단기금융 상품이 없습니다.</p> : (
+            <div className="space-y-3">
+              {shorts.map(s => (
+                <div key={s.id} className="border rounded-lg p-3 space-y-2">
+                  <div className="text-sm font-semibold text-gray-700">{s.name} <span className="text-xs font-normal text-gray-400">({s.broker || "증권사 없음"} · {s.currency})</span></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="원금"><input type="number" value={s.principal} onChange={e=>handleChange(s.id,"principal",e.target.value)} className={inputCls} /></Field>
+                    <Field label="현재가치"><input type="number" value={s.value} onChange={e=>handleChange(s.id,"value",e.target.value)} className={inputCls} /></Field>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function DirectLiabilitiesEdit({ liabilities, setLiabilities }) {
+      function handleChange(id, field, value) {
+        setLiabilities(prev => prev.map(l => l.id === id ? { ...l, [field]: ["balance","monthly","totalMonths","paidMonths"].includes(field) ? Number(value) : value, updatedAt: nowIso() } : l));
+      }
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="font-bold text-gray-700 mb-3">부채 직접수정</h3>
+          {liabilities.length === 0 ? <p className="text-sm text-gray-400">부채가 없습니다.</p> : (
+            <div className="space-y-3">
+              {liabilities.map(l => (
+                <div key={l.id} className="border rounded-lg p-3 space-y-2">
+                  <div className="text-sm font-semibold text-gray-700">{l.name} <span className="text-xs font-normal text-gray-400">({l.type})</span></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="잔액"><input type="number" value={l.balance} onChange={e=>handleChange(l.id,"balance",e.target.value)} className={inputCls} /></Field>
+                    <Field label="월 납부액"><input type="number" value={l.monthly} onChange={e=>handleChange(l.id,"monthly",e.target.value)} className={inputCls} /></Field>
+                    {l.isInstallment && (
+                      <>
+                        <Field label="총 회차"><input type="number" value={l.totalMonths} onChange={e=>handleChange(l.id,"totalMonths",e.target.value)} className={inputCls} /></Field>
+                        <Field label="납부 회차"><input type="number" value={l.paidMonths} onChange={e=>handleChange(l.id,"paidMonths",e.target.value)} className={inputCls} /></Field>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ===== SETTINGS TAB =====
+    function SettingsTab({ exchangeRate, setExchangeRate, saveStatus, setSaveStatus, latestDataRef, accounts, setAccounts, stocks, setStocks, shorts, setShorts, liabilities, setLiabilities, snapshots, setSnapshots, cfIncome, setCfIncome, cfFixed, setCfFixed, cfVar, setCfVar, cfMonth, setCfMonth, cfInflows, setCfInflows, cfBudgets, setCfBudgets, cfActuals, setCfActuals, userCfg, setUserCfg, showToast }) {
+      const [rateInput, setRateInput] = useState(exchangeRate);
+      const importRef = useRef(null);
+
+      function handleExport() {
+        const data = buildPersistedData({ exchangeRate, userCfg, accounts, stocks, shorts, liabilities, snapshots, cfIncome, cfFixed, cfVar, cfMonth, cfInflows, cfBudgets, cfActuals });
+        exportD(data);
+        showToast("JSON 백업 파일이 다운로드됩니다.", "success");
+      }
+
+      function applyData(data) {
+        setExchangeRate(data.exchangeRate || 1350);
+        setUserCfg(data.userCfg || {});
+        setAccounts(data.accounts || []);
+        setStocks(data.stocks || []);
+        setShorts(data.shorts || []);
+        setLiabilities(data.liabilities || []);
+        setSnapshots(data.snapshots || []);
+        setCfIncome(data.cfIncome || 0);
+        setCfFixed(data.cfFixed || 0);
+        setCfVar(data.cfVar || 0);
+        setCfMonth(data.cfMonth || currentMonth());
+
+        if (data.cfInflows && data.cfInflows.length > 0) {
+          setCfInflows(data.cfInflows);
+        } else if (data.cfIncome > 0) {
+          setCfInflows([{ id: uid(), month: currentMonth(), name: "월 수입", amount: data.cfIncome, category: "salary", recurring: true, updatedAt: nowIso() }]);
+        } else {
+          setCfInflows([]);
+        }
+
+        if (data.cfBudgets && data.cfBudgets.length > 0) {
+          setCfBudgets(data.cfBudgets);
+        } else {
+          const budgets = [];
+          if (data.cfFixed > 0) budgets.push({ id: uid(), month: currentMonth(), name: "고정비", budget: data.cfFixed, type: "fixed", category: "fixed", updatedAt: nowIso() });
+          if (data.cfVar > 0) budgets.push({ id: uid(), month: currentMonth(), name: "생활비", budget: data.cfVar, type: "living", category: "living", updatedAt: nowIso() });
+          setCfBudgets(budgets);
+        }
+        setCfActuals(data.cfActuals || []);
+        setSaveStatus("saved");
+        const rebuilt = buildPersistedData({ exchangeRate: data.exchangeRate||1350, userCfg: data.userCfg||{}, accounts: data.accounts||[], stocks: data.stocks||[], shorts: data.shorts||[], liabilities: data.liabilities||[], snapshots: data.snapshots||[], cfIncome: data.cfIncome||0, cfFixed: data.cfFixed||0, cfVar: data.cfVar||0, cfMonth: data.cfMonth||currentMonth(), cfInflows: data.cfInflows||[], cfBudgets: data.cfBudgets||[], cfActuals: data.cfActuals||[] });
+        latestDataRef.current = rebuilt;
+      }
+
+      function handleImportFile(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        importD(file, (err, data) => {
+          if (err) { showToast("파일 파싱 실패: " + err.message, "error"); return; }
+          applyData(data);
+          showToast("복원 완료", "success");
+        });
+        e.target.value = "";
+      }
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <h3 className="font-bold text-gray-700 mb-3">환율 설정</h3>
+            <div className="flex gap-2 items-center">
+              <span className="text-sm text-gray-500">USD/KRW:</span>
+              <input type="number" value={rateInput} onChange={e=>setRateInput(e.target.value)} className="border rounded-lg px-3 py-2 text-sm w-32" />
+              <button onClick={() => { setExchangeRate(Number(rateInput)); showToast("환율이 적용되었습니다.", "success"); }}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">적용</button>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">현재 환율: 1 USD = ₩{fmt(exchangeRate)}</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <h3 className="font-bold text-gray-700 mb-2">저장 상태</h3>
+            <div className="text-sm">
+              {saveStatus === "saving" && <span className="text-yellow-600">⏳ 저장 중...</span>}
+              {saveStatus === "saved" && <span className="text-green-600">✓ 로컬 자동 저장됨</span>}
+              {saveStatus === "error" && <span className="text-red-600">⚠ 저장 실패 - 백업 필요</span>}
+              {saveStatus === "idle" && <span className="text-gray-400">대기 중</span>}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border p-4">
+            <h3 className="font-bold text-gray-700 mb-3">백업 / 복원</h3>
+            <div className="space-y-2">
+              <button onClick={handleExport}
+                className="w-full bg-green-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-green-700">
+                📥 JSON 백업 다운로드
+              </button>
+              <button onClick={() => importRef.current?.click()}
+                className="w-full bg-orange-500 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-orange-600">
+                📤 JSON 복원 (파일 선택)
+              </button>
+              <input ref={importRef} type="file" accept=".json" onChange={handleImportFile} className="hidden" />
+              <p className="text-xs text-gray-400 text-center pt-1">파일명: cfo_날짜_v{DATA_VERSION}.json</p>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 rounded-xl border p-4">
+            <h3 className="font-bold text-gray-600 mb-2 text-sm">데이터 현황</h3>
+            <div className="grid grid-cols-2 gap-1 text-xs text-gray-500">
+              <span>계좌: {accounts.length}개</span>
+              <span>주식: {stocks.length}개</span>
+              <span>단기금융: {shorts.length}개</span>
+              <span>부채: {liabilities.length}개</span>
+              <span>수입 항목: {cfInflows.length}개</span>
+              <span>지출 기록: {cfActuals.length}건</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ===== SHARED UI COMPONENTS =====
+    const inputCls = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300";
+
+    function Field({ label, children }) {
+      return (
+        <div>
+          <label className="text-xs text-gray-500 mb-0.5 block">{label}</label>
+          {children}
+        </div>
+      );
+    }
+
+    function Modal({ title, onClose, onSave, children }) {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 className="font-bold text-gray-800 mb-4 text-lg">{title}</h3>
+            <div className="space-y-3">{children}</div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={onClose} className="flex-1 border rounded-lg py-2.5 text-sm text-gray-600 hover:bg-gray-50">취소</button>
+              <button onClick={onSave} className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-700">저장</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ListPanel({ title, onAdd, children }) {
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-bold text-gray-700">{title}</h3>
+            <button onClick={onAdd} className="text-sm bg-blue-500 text-white px-3 py-1.5 rounded-lg hover:bg-blue-600">+ 추가</button>
+          </div>
+          <div className="space-y-2">{children}</div>
+        </div>
+      );
+    }
+
+    // ===== MOUNT =====
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>

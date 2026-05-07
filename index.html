@@ -4555,7 +4555,7 @@ const PRINT_STYLE = `
 `;
 
 /* ── 수료증 (프리미엄 A4 레이아웃) ── */
-const printCertificate = (s, c, certNo, issueDate) => {
+const getCertificateMarkup = (s, c, certNo, issueDate) => {
   const fmtDot = d => {
     if (!d) return "";
     const [y, m, day] = d.split("-");
@@ -4574,16 +4574,34 @@ const printCertificate = (s, c, certNo, issueDate) => {
   })();
   const year2 = issueYear.length === 4 ? issueYear.slice(2) : currentYear.slice(2);
   const certNoStr = certNo ? `제${year2}${String(certNo).padStart(6, "0")}호` : "";
+  return `
+<div class="doc">
+  <div class="doc-no">${certNoStr}</div>
+  <div class="title">수 료 증</div>
+  <div class="fields">
+    <div class="row"><span class="dot">·</span><span class="label">성　명</span><span class="colon">:</span><span class="val">${s.name}</span></div>
+    <div class="row"><span class="dot">·</span><span class="label">교육과정</span><span class="colon">:</span><span class="val">${c.name}</span></div>
+    <div class="row"><span class="dot">·</span><span class="label">교육기간</span><span class="colon">:</span><span class="val">${period} (${hours})</span></div>
+    <div class="row"><span class="dot">·</span><span class="label">수료일</span><span class="colon">:</span><span class="val">${completeDate}</span></div>
+  </div>
+  <div class="msg">위 사람은 경기도일자리재단에서<br/>실시한 교육과정을 수료하였으므로<br/>이 증서를 수여합니다.</div>
+  <div class="date">${issueDateText}</div>
+  <div class="sign-wrap">
+    <div class="sign-title">경기도일자리재단 대표이사</div>
+    </div>
+    <input type="file" id="cert-stamp-up" accept="image/png,image/jpeg,image/gif" style="display:none;" onchange="attachStamp(event)"/>
+  </div>
+</div>`;
+};
 
-  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
-<title>수료증 - ${s.name}</title>
-<style>
+const CERTIFICATE_PRINT_STYLE = `
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Pretendard','맑은 고딕','Malgun Gothic',sans-serif;background:#E8E8E8;
-    display:flex;flex-direction:column;align-items:center;padding:26px 16px;}
+    display:flex;flex-direction:column;align-items:center;padding:26px 16px;gap:16px;}
   .doc{width:210mm;min-height:297mm;background:#fff;padding:16mm 16mm 18mm;
-    box-shadow:0 8px 36px rgba(0,0,0,.15);position:relative;color:#2D3748;}
+    box-shadow:0 8px 36px rgba(0,0,0,.15);position:relative;color:#2D3748;page-break-after:always;}
+  .doc:last-of-type{page-break-after:auto;}
   .doc-no{font-size:13pt;font-weight:700;letter-spacing:.2px;margin-bottom:24mm;}
   .title{font-size:40pt;font-weight:900;letter-spacing:18px;text-align:center;margin-bottom:24mm;color:#4A5568;}
   .fields{padding-left:4mm;margin-bottom:20mm;}
@@ -4610,25 +4628,16 @@ const printCertificate = (s, c, certNo, issueDate) => {
     .print-btn{display:none;}
     @page{size:A4 portrait;margin:0;}
   }
-</style></head>
+`;
+
+const printCertificate = (s, c, certNo, issueDate) => {
+  const doc = getCertificateMarkup(s, c, certNo, issueDate);
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
+<title>수료증 - ${s.name}</title>
+<style>${CERTIFICATE_PRINT_STYLE}</style></head>
 <body>
-<div class="doc">
-  <div class="doc-no">${certNoStr}</div>
-  <div class="title">수 료 증</div>
-  <div class="fields">
-    <div class="row"><span class="dot">·</span><span class="label">성　명</span><span class="colon">:</span><span class="val">${s.name}</span></div>
-    <div class="row"><span class="dot">·</span><span class="label">교육과정</span><span class="colon">:</span><span class="val">${c.name}</span></div>
-    <div class="row"><span class="dot">·</span><span class="label">교육기간</span><span class="colon">:</span><span class="val">${period} (${hours})</span></div>
-    <div class="row"><span class="dot">·</span><span class="label">수료일</span><span class="colon">:</span><span class="val">${completeDate}</span></div>
-  </div>
-  <div class="msg">위 사람은 경기도일자리재단에서<br/>실시한 교육과정을 수료하였으므로<br/>이 증서를 수여합니다.</div>
-  <div class="date">${issueDateText}</div>
-  <div class="sign-wrap">
-    <div class="sign-title">경기도일자리재단 대표이사</div>
-    </div>
-    <input type="file" id="cert-stamp-up" accept="image/png,image/jpeg,image/gif" style="display:none;" onchange="attachStamp(event)"/>
-  </div>
-</div>
+${doc}
 <button class="print-btn" onclick="window.print()">🖨️ PDF 저장 / 인쇄</button>
 <script>
 function attachStamp(e){
@@ -4652,6 +4661,27 @@ function attachStamp(e){
     const w = window.open("", "_blank", "width=900,height=1100");
     w.document.write(html); w.document.close();
   }
+};
+
+const printCertificateBatch = (items, c, issueDate) => {
+  if (!items || items.length === 0) return;
+  const docs = items.map(({ student, certNo }) =>
+    getCertificateMarkup(student, c, certNo, issueDate)
+  ).join("");
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
+<title>수료증 일괄 출력</title>
+<style>${CERTIFICATE_PRINT_STYLE}</style></head>
+<body>
+${docs}
+<button class="print-btn" onclick="window.print()">🖨️ PDF 저장 / 인쇄</button>
+</body></html>`;
+  const w = window.open("", "_blank", "width=1200,height=900");
+  if (!w) {
+    alert("팝업이 차단되었습니다. 브라우저에서 팝업 허용 후 다시 시도하세요.");
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
 };
 
 /* ── 수강증명서 [별지 제83호 서식] — 직업능력개발 훈련 등 수강증명서 ── */
@@ -5212,6 +5242,7 @@ const CertMgmt = ({ students, courses }) => {
   const [docType, setDocType]       = useState("cert");   // "cert" | "attend" | "parti"
   const [issueDate, setIssueDate]   = useState("2026년　　월　　일");
   const [customDate, setCustomDate] = useState("");
+  const [batchStartNo, setBatchStartNo] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   // 수강증명서 — 증명대상기간 수동 지정
   const [certOverrideStart, setCertOverrideStart] = useState("");
@@ -5282,6 +5313,12 @@ const CertMgmt = ({ students, courses }) => {
 
   // docType별 series 반환
   const docSeries = dt => dt==="cert" ? "북부교육팀" : dt==="parti" ? "북부-참여" : "북부-수강";
+  const normalizeCertNo = (value, fallback = "001") => {
+    const num = parseInt(String(value ?? "").replace(/\D/g, ""), 10);
+    const base = parseInt(String(fallback ?? "001").replace(/\D/g, ""), 10);
+    const safe = Number.isFinite(num) && num > 0 ? num : (Number.isFinite(base) && base > 0 ? base : 1);
+    return String(safe).padStart(3, "0");
+  };
   // docType의 다음 발급번호 (표시용)
   const getNextCertNo = dt => {
     const maxNo = certHistory
@@ -5419,10 +5456,38 @@ const CertMgmt = ({ students, courses }) => {
     // 전체 발급: 번호 중복 없이 순차 부여하기 위해 이력을 로컬에서 누적
     const prevLen = certHistory.length;
     let runningHist = [...certHistory];
-    for (const s of eligible) {
-      const no = getCertNo(s, runningHist);
-      runningHist = recordIssue(s, no, runningHist);
-      await handleIssue(s, runningHist);
+    if (docType === "cert") {
+      let nextNoInt = parseInt(normalizeCertNo(batchStartNo || getNextCertNo(docType)), 10);
+      const usedNoSet = new Set(
+        runningHist
+          .filter(r => r.docType === docType)
+          .map(r => parseInt(r.certNo, 10))
+          .filter(n => Number.isFinite(n) && n > 0)
+      );
+      const batchPrintItems = [];
+      for (const s of eligible) {
+        const existing = runningHist.find(r =>
+          String(r.studentId) === String(s.id) &&
+          r.docType === docType &&
+          String(r.courseId) === String(course.id)
+        );
+        const no = existing ? existing.certNo : (() => {
+          while (usedNoSet.has(nextNoInt)) nextNoInt += 1;
+          const assigned = String(nextNoInt).padStart(3, "0");
+          usedNoSet.add(nextNoInt);
+          nextNoInt += 1;
+          return assigned;
+        })();
+        runningHist = recordIssue(s, no, runningHist);
+        batchPrintItems.push({ student: s, certNo: no });
+      }
+      printCertificateBatch(batchPrintItems, course, issueDate);
+    } else {
+      for (const s of eligible) {
+        const no = getCertNo(s, runningHist);
+        runningHist = recordIssue(s, no, runningHist);
+        await handleIssue(s, runningHist);
+      }
     }
     setCertHistory(runningHist);
     saveCertHistory(runningHist);
@@ -5432,6 +5497,38 @@ const CertMgmt = ({ students, courses }) => {
     for (const rec of newRecords) {
       await saveCertIssuanceToDB(rec);
     }
+  };
+
+  const handleBatchRenumber = async () => {
+    if (docType !== "cert") {
+      alert("일괄번호 수정은 수료증에서만 가능합니다.");
+      return;
+    }
+    const target = certHistory
+      .filter(r => r.docType === docType && String(r.courseId) === String(course.id))
+      .sort((a, b) => new Date(a.issuedAt) - new Date(b.issuedAt));
+    if (target.length === 0) {
+      alert("현재 과정의 수료증 발급이력이 없습니다.");
+      return;
+    }
+    const startNo = parseInt(normalizeCertNo(batchStartNo || getNextCertNo(docType)), 10);
+    if (!window.confirm(`현재 과정 수료증 ${target.length}건 번호를 ${String(startNo).padStart(3, "0")}부터 일괄 수정할까요?`)) return;
+    const updates = target.map((r, idx) => {
+      const no = String(startNo + idx).padStart(3, "0");
+      return { id: r.id, certNo: no, fullNo: `2026-${docSeries(docType)}-${no}호` };
+    });
+    const updateMap = {};
+    updates.forEach(u => { updateMap[u.id] = u; });
+    const nextHist = certHistory.map(r => updateMap[r.id] ? { ...r, certNo: updateMap[r.id].certNo, fullNo: updateMap[r.id].fullNo } : r);
+    setCertHistory(nextHist);
+    saveCertHistory(nextHist);
+    await Promise.all(updates.map(u =>
+      sbUpdate("cert_issuances", `id=eq.${encodeURIComponent(u.id)}`, {
+        cert_no: u.certNo,
+        full_no: u.fullNo,
+      }).catch(e => console.warn("일괄번호 DB 반영 실패:", e))
+    ));
+    alert(`✅ 수료증 번호 ${updates.length}건을 일괄 수정했습니다.`);
   };
 
   const fmtDate = raw => {
@@ -5503,12 +5600,24 @@ const CertMgmt = ({ students, courses }) => {
           style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
             fontSize:12, outline:"none", background:T.s2, cursor:"pointer" }}/>
         <div style={{ fontSize:12, color:T.mu }}>→ <b style={{color:T.p}}>{issueDate}</b></div>
+        {docType === "cert" && (
+          <div style={{ display:"flex", gap:6, alignItems:"center", marginLeft:8 }}>
+            <span style={{ fontSize:11, fontWeight:700, color:T.tx }}>🔢 일괄 시작번호</span>
+            <input
+              value={batchStartNo}
+              onChange={e => setBatchStartNo(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder={getNextCertNo(docType)}
+              style={{ width:90, padding:"6px 8px", border:`1px solid ${T.bd}`, borderRadius:8,
+                fontSize:12, outline:"none", background:"#fff", fontFamily:"monospace" }}
+            />
+          </div>
+        )}
         <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
           <Btn size="sm" variant="ghost" onClick={()=>setShowHistory(v=>!v)}>
             📋 발급이력 {issuedCountForType > 0 && `(${issuedCountForType}건)`}
           </Btn>
           <Btn size="sm" onClick={handleIssueAll}>
-            <Icon n="dl" s={13}/> 전체 {eligible.length}명 출력
+            <Icon n="dl" s={13}/> 전체 {eligible.length}명 {docType==="cert"?"일괄인쇄":"출력"}
           </Btn>
         </div>
       </Card>
@@ -5561,6 +5670,13 @@ const CertMgmt = ({ students, courses }) => {
               </span>
             </span>
             <div style={{ display:"flex", gap:8 }}>
+              {docType === "cert" && (
+                <button onClick={handleBatchRenumber} style={{ fontSize:11, padding:"4px 10px",
+                  borderRadius:6, border:`1px solid #FCD34D`, background:"#FFFBEB",
+                  color:"#92400E", cursor:"pointer", fontWeight:700 }}>
+                  🔢 일괄번호 수정
+                </button>
+              )}
               <button onClick={() => {
                 if(!window.confirm("현재 문서 종류의 발급이력을 모두 초기화하시겠습니까?")) return;
                 setCertHistory(prev => {

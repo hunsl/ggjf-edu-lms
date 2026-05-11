@@ -1,0 +1,2035 @@
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026년 경기북부 직업교육 업무 매뉴얼</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap');
+        :root {
+            --primary: #0F766E;
+            --primary-light: #0D9488;
+            --primary-bg: #ECFDF5;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --border: #E2E8F0;
+            --text: #1E293B;
+            --text-muted: #64748B;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.05);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --sidebar-w: 320px;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            background: linear-gradient(160deg, #CCFBF1 0%, #99F6E4 15%, #F0FDF4 40%, #E2E8F0 70%, #D1FAE5 100%);
+            background-attachment: fixed;
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        @media (max-width: 1023px) { body { overflow: visible; } }
+
+        /* Skip link */
+        .skip-link {
+            position: absolute;
+            top: -100px;
+            left: 1rem;
+            z-index: 100;
+            padding: 0.75rem 1.25rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius-sm);
+            font-weight: 600;
+            transition: top 0.2s;
+        }
+        .skip-link:focus { top: 1rem; outline: 2px solid var(--primary-light); outline-offset: 2px; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #F1F5F9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #94A3B8; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748B; }
+
+        .main-header {
+            background: linear-gradient(135deg, #134E4A 0%, #0F766E 25%, #0D9488 55%, #14B8A6 80%, #5EEAD4 100%);
+            color: white;
+            padding: 1rem 1.5rem 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 8px 32px rgba(15, 118, 110, 0.4), 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 30;
+            position: relative;
+        }
+        .main-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.5) 0%, rgba(94,234,212,0.6) 50%, transparent 100%);
+        }
+        .version-badge {
+            background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 1.1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 700;
+            border: 1px solid rgba(255,255,255,0.4);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+
+        .main-container { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+        @media (max-width: 1023px) { .main-container { flex-direction: column; overflow: visible; } }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-w);
+            min-width: var(--sidebar-w);
+            background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 50%, #F1F5F9 100%);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 20px rgba(15, 118, 110, 0.08);
+            z-index: 20;
+        }
+        @media (max-width: 1023px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                width: min(320px, 85vw);
+                transform: translateX(-100%);
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+                z-index: 50;
+            }
+            .sidebar.open { transform: translateX(0); box-shadow: 8px 0 24px rgba(0,0,0,0.15); }
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.4);
+                z-index: 45;
+            }
+            .sidebar-overlay.open { display: block; }
+        }
+        .nav-section-title {
+            padding: 1rem 1.25rem;
+            font-weight: 700;
+            color: var(--primary);
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+            user-select: none;
+        }
+        .nav-section-title:hover { background: #EEF2FF; }
+        .nav-section-title .arrow { transition: transform 0.2s; font-size: 0.75rem; }
+        .nav-items { list-style: none; padding: 0; margin: 0; display: none; }
+        .nav-items.active { display: block; }
+        .nav-item {
+            padding: 0.7rem 1.25rem 0.7rem 1.75rem;
+            color: #475569;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            border-bottom: 1px solid #F1F5F9;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .nav-item:hover {
+            background: var(--primary-bg);
+            color: #0F766E;
+        }
+        .nav-item.active {
+            background: linear-gradient(90deg, #ECFDF5 0%, #D1FAE5 100%);
+            color: #0F766E;
+            font-weight: 600;
+            border-left-color: var(--primary-light);
+            box-shadow: inset 2px 0 0 var(--primary-light);
+        }
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 40;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            border: none;
+            box-shadow: var(--shadow-lg);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        @media (max-width: 1023px) { .menu-toggle { display: flex; } }
+        .menu-toggle:hover { transform: scale(1.05); box-shadow: 0 12px 24px rgba(15,118,110,0.35); }
+        .menu-toggle:focus { outline: 2px solid var(--primary-light); outline-offset: 2px; }
+
+        /* Main content */
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            background: transparent;
+            position: relative;
+        }
+        @media (max-width: 640px) { .main-content { padding: 1rem; } }
+        .page-section {
+            display: none;
+            max-width: 1000px;
+            margin: 0 auto 4rem auto;
+            background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%);
+            border-radius: var(--radius);
+            box-shadow: 0 10px 40px -10px rgba(15, 118, 110, 0.12), 0 4px 12px -4px rgba(0,0,0,0.06);
+            padding: 2.5rem;
+            animation: fadeIn 0.35s ease-out;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+        .page-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+        h2 {
+            color: var(--primary);
+            font-size: 1.75rem;
+            font-weight: 800;
+            padding-bottom: 0.75rem;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            border-bottom: 3px solid var(--primary-light);
+        }
+        h3 {
+            color: #0F766E;
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        h3::before { content: '📌'; font-size: 1.1rem; }
+        .info-card {
+            background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+            border-left: 5px solid var(--primary-light);
+            padding: 1.25rem 1.5rem;
+            border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(13,148,136,0.12);
+        }
+        .warning-card {
+            background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);
+            border-left: 5px solid #EF4444;
+            padding: 1.25rem 1.5rem;
+            border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(239,68,68,0.1);
+        }
+        table.manual-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+            font-size: 0.9375rem;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        table.manual-table th, table.manual-table td {
+            border: 1px solid var(--border);
+            padding: 0.75rem 1rem;
+            text-align: left;
+            line-height: 1.6;
+            vertical-align: middle;
+        }
+        table.manual-table th {
+            background: linear-gradient(135deg, #F8FAFC 0%, #ECFDF5 50%, #CCFBF1 100%);
+            color: var(--primary);
+            font-weight: 700;
+            text-align: center;
+        }
+        table.manual-table tbody tr:hover { background: #FAFBFC; }
+        ul.custom-list { list-style: none; padding-left: 0; }
+        ul.custom-list li {
+            position: relative;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+        }
+        ul.custom-list li::before {
+            content: '▪';
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-weight: bold;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+            padding: 1rem;
+            background: var(--surface);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+        .flow-container { display: flex; flex-direction: column; gap: 0.5rem; margin: 1.5rem 0; }
+        .flow-step {
+            background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 50%, #ECFDF5 100%);
+            border: 1px solid #CBD5E1;
+            border-radius: var(--radius-sm);
+            padding: 1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+        .flow-step:hover { box-shadow: 0 4px 12px rgba(13, 148, 136, 0.2); border-color: #5EEAD4; }
+        .flow-num {
+            background: linear-gradient(145deg, #14B8A6 0%, #0D9488 50%, #0F766E 100%);
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+            font-size: 0.9375rem;
+        }
+        .flow-arrow { text-align: center; color: #94A3B8; font-size: 1.5rem; line-height: 1; }
+        .report-summary {
+            background: linear-gradient(135deg, rgba(20,184,166,0.1) 0%, rgba(13,148,136,0.08) 100%);
+            border-left: 6px solid #0D9488;
+            padding: 1.75rem 2rem;
+            border-radius: var(--radius);
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(13,148,136,0.15);
+        }
+        .criteria-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9375rem;
+            margin-bottom: 2rem;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        }
+        .criteria-table th {
+            background: linear-gradient(135deg, #0F766E 0%, #134E4A 100%);
+            color: white;
+            padding: 0.875rem 1rem;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .criteria-table td {
+            padding: 0.875rem 1rem;
+            border: 1px solid var(--border);
+            line-height: 1.6;
+            vertical-align: top;
+        }
+        .criteria-table tbody tr:nth-child(even) { background: #FAFBFC; }
+        .new-badge {
+            background: #FEE2E2;
+            color: #DC2626;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-left: 0.35rem;
+            vertical-align: middle;
+        }
+        .back-to-top {
+            position: fixed;
+            bottom: 5rem;
+            right: 1.5rem;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--surface);
+            color: var(--primary);
+            border: 2px solid var(--border);
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s, transform 0.2s;
+            z-index: 35;
+        }
+        .back-to-top.visible { opacity: 1; visibility: visible; }
+        .back-to-top:hover { transform: translateY(-2px); background: var(--primary-bg); border-color: var(--primary-light); }
+        .back-to-top:focus { outline: 2px solid var(--primary-light); outline-offset: 2px; }
+        @media (max-width: 1023px) { .back-to-top { bottom: 5.5rem; right: 1rem; } }
+
+        .sidebar-search-wrap {
+            padding: 0.75rem 1rem;
+            background: linear-gradient(180deg, #F0FDF4 0%, #ECFDF5 100%);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .sidebar-search-wrap input {
+            width: 100%;
+            padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394A3B8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E") no-repeat 0.5rem center;
+            background-size: 1.1rem;
+        }
+        .sidebar-search-wrap input:focus {
+            outline: none;
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
+        }
+        .sidebar-search-wrap input::placeholder { color: #94A3B8; }
+        .bookmarks-wrap {
+            padding: 0.75rem 1rem;
+            background: linear-gradient(180deg, #FFFBEB 0%, #FEF3C7 100%);
+            border-bottom: 1px solid #FDE68A;
+        }
+        .bookmarks-wrap .bookmarks-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #92400E;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .bookmarks-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+        .bookmark-chip {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 9999px;
+            background: #fff;
+            color: #0F766E;
+            border: 1px solid #5EEAD4;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+        .bookmark-chip:hover {
+            background: var(--primary-light);
+            color: #fff;
+            border-color: var(--primary-light);
+        }
+        .nav-section-title.search-hide, .nav-items.search-hide { display: none !important; }
+        .nav-item.search-hide { display: none !important; }
+        .nav-item.search-match { background: #FEF3C7 !important; }
+
+        /* 서식 입력 + 인쇄 전용 CSS */
+        .print-input {
+            border: none;
+            border-bottom: 1.5px dashed #94A3B8;
+            background: #F8FAFC;
+            padding: 4px 8px;
+            font-size: inherit;
+            font-family: inherit;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .print-input:focus {
+            border-bottom-color: var(--primary-light);
+            background: #ECFDF5;
+        }
+        .print-input::placeholder {
+            color: #94A3B8;
+            font-style: italic;
+        }
+        #form-editor-container {
+            margin-top: 2rem;
+        }
+        .form-card {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            border: 2px solid var(--border);
+        }
+        .form-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--primary-light);
+        }
+        #print-area {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 20mm;
+            background: #fff;
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        /* 서식 클래스 - 화면 미리보기용 */
+        #print-area .doc-header {
+            background: linear-gradient(135deg, #134E4A 0%, #0F766E 45%, #14B8A6 100%);
+            color: #ffffff;
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 14px rgba(15, 118, 110, 0.18);
+        }
+        #print-area .doc-header h1,
+        #print-area .doc-header p,
+        #print-area .doc-header div,
+        #print-area .doc-header span {
+            color: #ffffff;
+        }
+        #print-area .doc-header-org {
+            text-align: right;
+            font-size: 12px;
+            opacity: 0.85;
+            margin-bottom: 6px;
+        }
+        #print-area .doc-meta {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+        }
+        #print-area .doc-box {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+        }
+        #print-area .doc-box.soft {
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        }
+        #print-area .doc-box.spaced-top {
+            margin-top: 12px;
+        }
+        #print-area table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 14px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        #print-area th {
+            background: linear-gradient(180deg, #ECFDF5 0%, #D1FAE5 100%);
+            color: #0F766E;
+            font-weight: 700;
+            border: 1px solid #94a3b8;
+            padding: 10px 8px;
+            font-size: 11.5pt;
+            text-align: center;
+        }
+        #print-area td {
+            background: #ffffff;
+            color: #111827;
+            border: 1px solid #cbd5e1;
+            padding: 10px 8px;
+            font-size: 11.5pt;
+            vertical-align: middle;
+        }
+        #print-area .sign-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-top: 18px;
+        }
+        #print-area .sign-box {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 14px;
+            min-height: 84px;
+        }
+        #print-area .sign-label {
+            font-size: 11pt;
+            font-weight: 700;
+            color: #0F766E;
+            margin-bottom: 22px;
+        }
+        #print-area .sign-line {
+            border-bottom: 1.4px solid #0f172a;
+            height: 24px;
+        }
+        #print-area .meta-label {
+            font-weight: 700;
+            color: #0F766E;
+        }
+        #print-area .meta-value {
+            color: #111827;
+        }
+        #print-area .doc-meta.centered {
+            text-align: center;
+        }
+        #print-area .doc-meta.mt-16 {
+            margin-top: 16px;
+        }
+        #print-area .doc-meta.mt-24 {
+            margin-top: 24px;
+        }
+        #print-area .doc-org {
+            font-weight: 700;
+            color: #0F766E;
+        }
+        #print-area .doc-intro {
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        #print-area .input-w-60 {
+            width: 60%;
+        }
+        #print-area .input-w-200 {
+            width: 200px;
+        }
+        #print-area .input-w-180 {
+            width: 180px;
+        }
+        #print-area .input-w-90 {
+            width: 90%;
+        }
+        #print-area .text-center {
+            text-align: center;
+        }
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+
+        @media print {
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            body {
+                font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+                color: #0f172a !important;
+            }
+
+            .main-header,
+            .sidebar,
+            .menu-toggle,
+            .back-to-top,
+            .sidebar-overlay,
+            .sidebar-search-wrap,
+            .bookmarks-wrap,
+            .no-print,
+            .info-card,
+            .warning-card,
+            footer {
+                display: none !important;
+            }
+
+            .main-container {
+                display: block !important;
+                overflow: visible !important;
+            }
+
+            .main-content {
+                display: block !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                background: #ffffff !important;
+            }
+
+            .page-section {
+                display: none !important;
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                background: transparent !important;
+                animation: none !important;
+            }
+
+            .page-section.active {
+                display: block !important;
+            }
+
+            .page-section.active > h2 {
+                display: none !important;
+            }
+
+            #form-editor-container {
+                margin-top: 0 !important;
+                padding: 0 !important;
+            }
+
+            #print-area {
+                width: 190mm !important;
+                max-width: 190mm !important;
+                min-height: auto !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                background: #ffffff !important;
+            }
+
+            #print-area .doc-box,
+            #print-area .form-card,
+            #print-area .print-card,
+            #print-area table,
+            #print-area .sign-box,
+            #print-area .doc-meta {
+                background: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                overflow: hidden !important;
+            }
+
+            #print-area .doc-header {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                border-radius: 0 !important;
+                padding: 18px 20px !important;
+                margin-bottom: 16px !important;
+                box-shadow: none !important;
+                border: 1px solid #0F766E !important;
+            }
+
+            #print-area .doc-header h1,
+            #print-area .doc-header h2,
+            #print-area .doc-header h3,
+            #print-area .doc-header p,
+            #print-area .doc-header span,
+            #print-area .doc-header div {
+                color: #0f172a !important;
+            }
+
+            #print-area h1 {
+                font-size: 26pt !important;
+                font-weight: 800 !important;
+                line-height: 1.25 !important;
+                letter-spacing: 6px !important;
+                text-align: center !important;
+                margin: 0 0 8px 0 !important;
+                color: #0F766E !important;
+            }
+
+            #print-area h2 {
+                font-size: 16pt !important;
+                font-weight: 700 !important;
+                line-height: 1.35 !important;
+                margin: 0 0 10px 0 !important;
+                color: #134E4A !important;
+            }
+
+            #print-area h3 {
+                font-size: 13.5pt !important;
+                font-weight: 700 !important;
+                line-height: 1.4 !important;
+                margin: 0 0 8px 0 !important;
+                color: #0F766E !important;
+            }
+
+            #print-area p,
+            #print-area li,
+            #print-area td,
+            #print-area th,
+            #print-area span,
+            #print-area div {
+                color: #111827 !important;
+                font-size: 12pt !important;
+                line-height: 1.75 !important;
+            }
+
+            .print-input {
+                border: none !important;
+                border-bottom: 1.5px solid #0F766E !important;
+                background: #ffffff !important;
+                border-radius: 0 !important;
+                padding: 3px 6px !important;
+                color: #111827 !important;
+                box-shadow: none !important;
+                appearance: none !important;
+                -webkit-appearance: none !important;
+                -moz-appearance: none !important;
+            }
+
+            .print-input::placeholder {
+                color: transparent !important;
+            }
+
+            #print-area .doc-meta {
+                padding: 12px 14px !important;
+                margin-bottom: 16px !important;
+            }
+
+            #print-area .meta-label {
+                font-weight: 700 !important;
+                color: #0F766E !important;
+            }
+
+            #print-area .meta-value {
+                color: #111827 !important;
+            }
+
+            #print-area .doc-box {
+                padding: 14px 16px !important;
+                margin-bottom: 14px !important;
+            }
+
+            #print-area .doc-box.soft {
+                background: #f0faf8 !important;
+            }
+
+            #print-area table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                border-spacing: 0 !important;
+                margin-bottom: 14px !important;
+            }
+
+            #print-area th {
+                background: #f0faf8 !important;
+                color: #0F766E !important;
+                font-weight: 700 !important;
+                border: 1px solid #94a3b8 !important;
+                padding: 10px 8px !important;
+                font-size: 11.5pt !important;
+            }
+
+            #print-area td {
+                background: #ffffff !important;
+                color: #111827 !important;
+                border: 1px solid #cbd5e1 !important;
+                padding: 10px 8px !important;
+                font-size: 11.5pt !important;
+                vertical-align: middle !important;
+            }
+
+            #print-area .sign-grid {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                gap: 14px !important;
+                margin-top: 18px !important;
+            }
+
+            #print-area .sign-box {
+                padding: 14px !important;
+                min-height: 84px !important;
+            }
+
+            #print-area .sign-label {
+                font-size: 11pt !important;
+                font-weight: 700 !important;
+                color: #0F766E !important;
+                margin-bottom: 22px !important;
+            }
+
+            #print-area .sign-line {
+                border-bottom: 1.4px solid #0f172a !important;
+                height: 24px !important;
+            }
+
+            #print-area ol,
+            #print-area ul {
+                margin-top: 0 !important;
+                margin-bottom: 10px !important;
+                padding-left: 22px !important;
+            }
+
+            #print-area li {
+                margin-bottom: 6px !important;
+            }
+
+            #print-area > div,
+            #print-area .doc-header,
+            #print-area .doc-meta,
+            #print-area .doc-box,
+            #print-area .sign-grid,
+            #print-area table,
+            #print-area tr {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+            }
+
+            #print-area .doc-header,
+            #print-area .doc-box,
+            #print-area .form-card,
+            #print-area .print-card,
+            #print-area .doc-meta,
+            #print-area th {
+                background-clip: padding-box !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">본문으로 건너뛰기</a>
+    <header class="main-header">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight">📚 2026 경기북부 직업교육 매뉴얼</h1>
+            <p class="text-teal-100 text-sm mt-1">경기도일자리재단 북부사업본부 북부교육팀 | 통합 실무 가이드</p>
+        </div>
+        <div class="version-badge">버전: 2026년 4월 버전</div>
+    </header>
+
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()" aria-hidden="true"></div>
+    <div class="main-container">
+        <nav class="sidebar" id="sidebar" aria-label="매뉴얼 목차">
+            <div class="sidebar-search-wrap">
+                <input type="text" id="navSearch" placeholder="메뉴 검색 (예: 강사료, 출결, 서식…)" aria-label="목차 검색" autocomplete="off">
+            </div>
+            <div class="bookmarks-wrap">
+                <div class="bookmarks-title">🔖 책갈피 · 자주 찾는 메뉴</div>
+                <div class="bookmarks-list">
+                    <button type="button" class="bookmark-chip" onclick="showPage('home')">개편 요약</button>
+                    <button type="button" class="bookmark-chip" onclick="showPage('page-1-4')">강사료</button>
+                    <button type="button" class="bookmark-chip" onclick="showPage('page-2-4')">출결 관리</button>
+                    <button type="button" class="bookmark-chip" onclick="showPage('page-2-3')">선발·면접</button>
+                    <button type="button" class="bookmark-chip" onclick="showPage('page-2-2')">모집 홍보</button>
+                    <button type="button" class="bookmark-chip" onclick="showPage('page-forms')">서식</button>
+                </div>
+            </div>
+            <div class="nav-section-title" onclick="toggleNav('nav-home')" style="background-color: #ECFDF5; color: #0F766E; border-bottom: 2px solid #0D9488;">
+                <span>📊 개편(안) 총괄 대시보드</span><span class="arrow">▼</span>
+            </div>
+            <ul id="nav-home" class="nav-items active">
+                <li class="nav-item active font-bold" onclick="showPage('home')">2026 매뉴얼 개편 핵심 요약</li>
+            </ul>
+            <div class="nav-section-title" onclick="toggleNav('nav-1')"><span>Ⅰ. 직업훈련과정 총괄</span><span class="arrow">▼</span></div>
+            <ul id="nav-1" class="nav-items active">
+                <li class="nav-item" onclick="showPage('page-1-1')">1. 재원별 직업훈련사업 운영</li>
+                <li class="nav-item" onclick="showPage('page-1-2')">2. 직업훈련담당자 업무 프로세스</li>
+                <li class="nav-item" onclick="showPage('page-1-3')">3. 2026년 사업계획 요약 및 목표</li>
+                <li class="nav-item" onclick="showPage('page-1-4')">4. 2026년 강사료 책정 기준 <span class="new-badge">New</span></li>
+            </ul>
+            <div class="nav-section-title" onclick="toggleNav('nav-2')"><span>Ⅱ. 프로세스별 운영방안</span><span class="arrow">▼</span></div>
+            <ul id="nav-2" class="nav-items active">
+                <li class="nav-item" onclick="showPage('page-2-1')">1. 사업계획 수립 절차 (조사/개발)</li>
+                <li class="nav-item" onclick="showPage('page-2-2')">2. 시스템 개설 및 모집 홍보</li>
+                <li class="nav-item" onclick="showPage('page-2-3')">3. 교육생 선발 및 면접 <span class="new-badge">선발강화</span></li>
+                <li class="nav-item" onclick="showPage('page-2-4')">4. 학사/출결 관리 <span class="new-badge">개정</span></li>
+                <li class="nav-item" onclick="showPage('page-2-5')">5. 사후관리 및 동아리 운영</li>
+                <li class="nav-item" onclick="showPage('page-2-6')">6. 기업 협력 및 취업연계</li>
+            </ul>
+            <div class="nav-section-title" onclick="toggleNav('nav-3')"><span>Ⅲ. 국비/공모 훈련 운영</span><span class="arrow">▼</span></div>
+            <ul id="nav-3" class="nav-items">
+                <li class="nav-item" onclick="showPage('page-3-1')">1. 국비 공모사업 업무프로세스</li>
+                <li class="nav-item" onclick="showPage('page-3-2')">2. 일모아/HRD-Net/e나라도움 관리</li>
+            </ul>
+            <div class="nav-section-title" onclick="toggleNav('nav-4')"><span>Ⅳ. 체계화된 직업상담사 편</span><span class="arrow">▼</span></div>
+            <ul id="nav-4" class="nav-items">
+                <li class="nav-item" onclick="showPage('page-4-1')">1. 고용24 계정신청 및 활용</li>
+                <li class="nav-item" onclick="showPage('page-4-2')">2. 취업현황 DB 및 사후관리</li>
+            </ul>
+            <div class="nav-section-title" onclick="toggleNav('nav-forms')"><span>📝 서식 및 양식 모음</span><span class="arrow">▲</span></div>
+            <ul id="nav-forms" class="nav-items active">
+                <li class="nav-item font-bold text-teal-700" onclick="showPage('page-forms')">2026 신규 필수 서식 3종</li>
+                <li class="nav-item" onclick="showPage('page-forms-all')">전체 서식 다운로드 (예정)</li>
+            </ul>
+        </nav>
+
+        <main id="main-content" class="main-content" role="main">
+
+            <div id="home" class="page-section active" style="max-width: 1200px;">
+                <div style="text-align: center; margin-bottom: 2rem;">
+                    <h2 style="font-size: 2rem; font-weight: 800; color: #0F766E; border: none; padding:0; margin-bottom: 0.5rem;">📋 2026년 경기북부 직업교육 업무매뉴얼 개편(안) 총괄</h2>
+                    <p style="font-size: 1.1rem; color: #64748b;">◈ 행정 전문성을 확보하고, 고용노동부 표준 지침을 준용하여<br>실무 혼선 방지 및 도민의 성실 참여를 이끌어내기 위한 실무 검토 결과입니다.</p>
+                </div>
+                <div class="report-summary">
+                    <h3 style="margin-top:0; color:#0F766E;">1. 추진 배경 및 개편 방향</h3>
+                    <ul class="custom-list mt-3">
+                        <li><strong>전액 출연금 사업에 따른 책임성 강화:</strong> 기관의 운영 자율성이 확대됨에 따라 예산 집행의 투명성과 교육생의 성실 참여 유도 장치 필요</li>
+                        <li><strong>직업훈련 표준 규정(HRD-Net) 도입을 통한 행정 고도화:</strong> 기존의 모호하거나 주관적인 자체 지침을 국가 표준 규정에 맞게 개편하여 실무진의 행정 혼선 방지</li>
+                    </ul>
+                </div>
+                <h3 style="color:#0F766E;">2. 실무 검토 회의 결과 (핵심 5대 방향)</h3>
+                <table class="criteria-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">구분</th>
+                            <th style="width: 25%;">2025년 현행 (As-Is)</th>
+                            <th style="width: 25%;">관련 지침 및 법적 근거</th>
+                            <th style="width: 40%; background: linear-gradient(135deg, #0D9488 0%, #0F766E 100%);">2026년 최종 확정안 (To-Be)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="text-align: center; font-weight: bold; background: #ECFDF5; color: #0F766E;">① 선발 체계</td>
+                            <td> 주관적 배제 조항 혼재<br><span style="color:#ef4444; font-size:0.9em;">(3개월 내 취업불가 등)</span></td>
+                            <td><strong>[고용노동부 고시]</strong><br>「국민내일배움카드 운영규정」 제4조<br><span style="font-size: 0.85em; color: #64748b;">※ 배제 조건 외 원칙적 허용</span></td>
+                            <td style="background: #F8FAFC;"><strong style="color: #0F766E; font-size: 1.05em;">[개편] 네거티브 선발 도입</strong><br>- 주관적 배제 조항 전면 폐지<br>- 취업의지 최우선 선발</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: center; font-weight: bold; background: #F3E8FF; color: #7E22CE;">② 출결 관리</td>
+                            <td>지각/조퇴 3회 누적 시<br>결석 1회 처리</td>
+                            <td><strong>[고용노동부 규정]</strong><br>「직업능력개발훈련 출결관리 기준」<br><span style="font-size: 0.85em; color: #64748b;">※ 1일 훈련시간의 50% 미만 수강 시 결석</span></td>
+                            <td style="background: #F8FAFC;"><strong style="color: #7E22CE; font-size: 1.05em;">[개편] 일일 50% 기준 명문화</strong><br>- 하루 50% 미만 수강 시 무조건 결석 <span style="color:#ef4444; font-weight:bold;">(지각환산 폐지)</span><br>- 총 교육시간 80% 이상 출석 시 수료</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: center; font-weight: bold; background: #FEE2E2; color: #DC2626;">③ 책임성</td>
+                            <td>중도탈락/제적자에 대한<br>명확한 후속 제재 없음</td>
+                            <td><strong>[고용노동부 고시]</strong><br>「국민내일배움카드 운영규정」 제18조<br><span style="font-size: 0.85em; color: #64748b;">※ 국가 지원금 제재 기준 차용</span></td>
+                            <td style="background: #F8FAFC;"><strong style="color: #DC2626; font-size: 1.05em;">[신설] 재참여 1년 엄격 제한</strong><br>- 제적 및 무단탈락자 대상 페널티 강력 부여</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: center; font-weight: bold; background: #FEF3C7; color: #D97706;">④ 강사료</td>
+                            <td>장기 실습 위주 평단가<br>(시간당 6.5~15만원)</td>
+                            <td><strong>[경기도 인재개발원 기준 검토]</strong><br><span style="font-size: 0.85em; color: #64748b;">※ 단기 특강 위주인 도 기준 대신, 실습 위주 본 사업 특성 반영
+</span></td>
+                            <td style="background: #F8FAFC;"><strong style="color: #D97706; font-size: 1.05em;">[현행 유지] 평단가 구조 유지</strong><br>- 장기 실습 교육의 예산 통제/안정성 최우선 고려</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: center; font-weight: bold; background: #DCFCE7; color: #059669;">⑤ 동아리</td>
+                            <td>최소 7명 구성 /<br>실비 정액 지원</td>
+                            <td><strong>[내부 검토 결과]</strong><br>북부 직업교육 개편 TF 실무회의<br><span style="font-size: 0.85em; color: #64748b;">※ 예산 안정성 및 기존 활성화 추이 반영</span></td>
+                            <td style="background: #F8FAFC;"><strong style="color: #059669; font-size: 1.05em;">[현행 유지] 최소 7명, 기존 방식 유지</strong><br>- 예산 증빙 필수 <br>- 단, 영수증 외 실적 증빙(포트폴리오 등) 폭넓게 허용 </td> 
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="page-1-1" class="page-section">
+                <h2>Ⅰ-1. 재원별 직업훈련사업의 운영</h2>
+                <div class="info-card">
+                    <p class="font-bold text-teal-800 text-lg mb-2">2026년 재원 안내</p>
+                    <p>2026년도 직업교육 사업은 <strong>100% 출연금 단일 재원</strong>으로 운영되어 행정 자율성이 확대되었습니다. 아래는 기존 재원별 업무 프로세스 비교표입니다.</p>
+                </div>
+                <table class="manual-table">
+                    <thead>
+                        <tr>
+                            <th width="15%">구분</th>
+                            <th width="65%">업무 프로세스 (계획/운영/결과)</th>
+                            <th width="20%">필수 시스템</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="text-center font-bold text-teal-700">출연금<br>(26년 메인)</td>
+                            <td>
+                                <ul class="custom-list">
+                                    <li><strong>계획:</strong> 사업계획안 수립 (대표결재)</li>
+                                    <li><strong>운영:</strong> 사업 운영 및 직업훈련 과정 관리</li>
+                                    <li><strong>결과:</strong> 운영 결과 및 정산보고 (3년 단위 道 정기 감사)</li>
+                                </ul>
+                            </td>
+                            <td class="text-center bg-gray-50">일모아<br>(과정등록)</td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">道 대행사업<br>(참고)</td>
+                            <td>
+                                <ul class="custom-list">
+                                    <li><strong>계획:</strong> 위수탁계약 체결 → 세부사업계획 승인 및 보조금 교부신청</li>
+                                    <li><strong>운영:</strong> 월별 운영실적 제출 (계획 변경시 사전 공문 승인 必)</li>
+                                    <li><strong>결과:</strong> 사업 결과/정산보고, 집행 잔액 반납, 도 현장점검</li>
+                                </ul>
+                            </td>
+                            <td class="text-center bg-gray-50">일모아</td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">국비 공모<br>(고선패 등)</td>
+                            <td>
+                                <ul class="custom-list">
+                                    <li><strong>계획:</strong> 사업 확정통보 및 교부 신청 → 사업 통장/카드 개설</li>
+                                    <li><strong>운영:</strong> 고용노동부 지침 준수, 현장 지도점검 수검(11월)</li>
+                                    <li><strong>결과:</strong> 12.31 이내 예산결산, 결과/정산보고 제출</li>
+                                </ul>
+                            </td>
+                            <td class="text-center bg-gray-50">일모아<br>HRD-Net<br>e나라도움</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="page-1-2" class="page-section">
+                <h2>Ⅰ-2. 직업훈련담당자 업무 프로세스 및 비중</h2>
+                <p class="mb-6 text-gray-600">직업훈련 교육의 기획부터 사후관리까지, 연간 진행되는 업무 프로세스의 소요 비중을 시각화하였습니다.</p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div>
+                        <h3>연간 업무 흐름도</h3>
+                        <div class="flow-container">
+                            <div class="flow-step"><div class="flow-num">1</div><div><strong>사업계획 수립 (12~1월)</strong><br><span class="text-sm text-gray-500">과정 발굴, 강사 섭외, 매뉴얼 작성</span></div></div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="flow-step"><div class="flow-num">2</div><div><strong>홍보 및 모집 (2~7월)</strong><br><span class="text-sm text-gray-500">홍보물 제작/배포, 잡아바 과정 개설</span></div></div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="flow-step"><div class="flow-num">3</div><div><strong>선발 및 면접 (3~8월)</strong><br><span class="text-sm text-gray-500">서류확인, 면접 진행, 수당 지급, 합격발표</span></div></div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="flow-step"><div class="flow-num">4</div><div><strong>학사 관리 (수시)</strong><br><span class="text-sm text-gray-500">출결/환불 관리, 수당지급, 만족도 조사</span></div></div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="flow-step"><div class="flow-num">5</div><div><strong>사후관리/정산 (연중/12월)</strong><br><span class="text-sm text-gray-500">동아리 운영, 취업처 발굴, 실적/정산보고</span></div></div>
+                        </div>
+                    </div>
+                    <div>
+                        <h3>업무 소요 비중 분석 (Data)</h3>
+                        <p class="text-sm text-gray-500 mb-4">2025년 기준 담당자 업무 소요 시간 분석</p>
+                        <div class="chart-container" style="height:320px;">
+                            <canvas id="workloadChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-1-3" class="page-section">
+                <h2>Ⅰ-3. 2026년 경기북부 직업교육 사업계획(요약) 및 목표</h2>
+                <h3>1. 사업 개요</h3>
+                <div class="bg-white border border-gray-200 rounded-lg p-6 mb-8 shadow-sm">
+                    <ul class="custom-list">
+                        <li><strong>사업기간:</strong> 2026년 1월 ~ 12월</li>
+                        <li><strong>사업대상:</strong> (전계층) 만 18세 이상 미취업 경기도민</li>
+                        <li><strong>사 업 량:</strong> 13개 과정 / 240명</li>
+                        <li><strong>사업목표:</strong> <strong>수료율 90%, 취업률 65%, 만족도 총 평균 90점 이상</strong><br><span class="text-sm text-gray-500 ml-4">※ 만족도는 공공기관 고객만족도(PCSI)를 의미함</span></li>
+                        <li><strong>사업예산:</strong> 278,500천원 (출연금 100%)</li>
+                        <li><strong>사업내용:</strong> 경기북부 산업 및 구인구직 수요를 반영한 맞춤형 직업교육 과정 운영</li>
+                    </ul>
+                </div>
+                <h3>2. 2026년 과정별 사업목표 (상세)</h3>
+                <table class="manual-table text-sm text-center">
+                    <thead>
+                        <tr class="bg-teal-50">
+                            <th rowspan="2" width="20%" class="align-middle">분야</th>
+                            <th rowspan="2" width="28%" class="align-middle">과정명</th>
+                            <th rowspan="2" width="12%" class="align-middle">교육일정</th>
+                            <th rowspan="2" width="10%" class="align-middle">방식</th>
+                            <th rowspan="2" width="10%" class="align-middle">시수</th>
+                            <th colspan="3" width="20%">사업목표 (단위: 명)</th>
+                        </tr>
+                        <tr class="bg-teal-50">
+                            <th>교육</th>
+                            <th>수료</th>
+                            <th>취업</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="bg-slate-100 font-bold text-teal-900 border-b-2 border-gray-300">
+                            <td colspan="5" class="text-center">합계 (소계)</td>
+                            <td>240</td>
+                            <td>218</td>
+                            <td>144</td>
+                        </tr>
+                        <tr>
+                            <td rowspan="3" class="font-bold text-teal-700 align-middle">늘봄 강사<br>양성형 (3)</td>
+                            <td class="text-left">초등 피지컬 코딩강사 양성</td>
+                            <td>6~7월</td>
+                            <td>블렌디드</td>
+                            <td>92</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td class="text-left">AI 딥러닝 전문강사 양성</td>
+                            <td>6~8월</td>
+                            <td>블렌디드</td>
+                            <td>104</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td class="text-left">늘봄학교 창의융합교육강사 양성</td>
+                            <td>4~6월</td>
+                            <td>대면</td>
+                            <td>140</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td rowspan="4" class="font-bold text-green-700 align-middle">지역연계·<br>기여형 (4)</td>
+                            <td class="text-left">ERP·지게차 물류관리 실무자 양성</td>
+                            <td>3~5월</td>
+                            <td>대면</td>
+                            <td>182</td>
+                            <td>15</td>
+                            <td>14</td>
+                            <td>9</td>
+                        </tr>
+                        <tr>
+                            <td class="text-left">승강기 전문가 양성</td>
+                            <td>5~6월</td>
+                            <td>대면</td>
+                            <td>80</td>
+                            <td>15</td>
+                            <td>14</td>
+                            <td>9</td>
+                        </tr>
+                        <tr>
+                            <td class="text-left">중장년 기회강사 양성</td>
+                            <td>5~7월</td>
+                            <td>블렌디드</td>
+                            <td>83</td>
+                            <td>15</td>
+                            <td>14</td>
+                            <td>9</td>
+                        </tr>
+                        <tr>
+                            <td class="text-left text-gray-500">미지정 공모과정</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td rowspan="2" class="font-bold text-purple-700 align-middle">사무분야 (2)</td>
+                            <td class="text-left">행정회계 사무 OA (1기)</td>
+                            <td>3~5월</td>
+                            <td>대면</td>
+                            <td>200</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td class="text-left">행정회계 사무 OA (2기)</td>
+                            <td>7~9월</td>
+                            <td>대면</td>
+                            <td>200</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td class="font-bold text-red-700 align-middle">식품분야 (1)</td>
+                            <td class="text-left">HACCP 전문인력 양성</td>
+                            <td>4~5월</td>
+                            <td>대면</td>
+                            <td>112</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td rowspan="3" class="font-bold text-teal-700 align-middle">IT 신직무형 (3)</td>
+                            <td class="text-left">AI 시대의 캐릭터 크리에이터 양성</td>
+                            <td>8~9월</td>
+                            <td>비대면</td>
+                            <td>108</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td class="text-left text-gray-500">미지정 공모과정</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>20</td>
+                            <td>18</td>
+                            <td>12</td>
+                        </tr>
+                        <tr>
+                            <td class="text-left text-gray-500">미지정 공모과정</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>15</td>
+                            <td>14</td>
+                            <td>9</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="text-sm text-gray-500 text-right">※ 교육 과정은 상황에 따라 변경될 수 있음.<br>※ 본 표의 목표 수료/취업인원은 각 과정별 교육 및 수료 인원 기준으로 계산하여 산출한 수치임.</p>
+                <h3 class="mt-8">2026년 과정별 사업목표 시각화</h3>
+                <div class="chart-container mb-8 max-w-full">
+                    <canvas id="targetChart"></canvas>
+                </div>
+            </div>
+
+            <div id="page-1-4" class="page-section">
+                <h2>Ⅰ-4. 2026년 강사료 책정 기준 <span class="bg-teal-100 text-teal-700 px-2 py-1 rounded text-sm ml-2">신설/통합</span></h2>
+                <div class="info-card">
+                    <p>장기 실습이 주를 이루는 본 사업의 특성과 예산 운영의 안정성을 고려하여, 경기도 인재개발원의 단기 특강용(최초 1시간 가산제) 기준이 아닌 <strong>직무별·과정별 평단가 체계</strong>를 유지 및 적용합니다.</p>
+                </div>
+                <table class="manual-table">
+                    <thead>
+                        <tr>
+                            <th width="20%">구분 (분야)</th>
+                            <th width="20%">강사료 (원/1시간)</th>
+                            <th width="60%">해당 교육 과정 / 비고</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td rowspan="2" class="text-center font-bold align-middle">직무 교육<br>(일반 / 강사양성)</td>
+                            <td class="text-center font-bold text-emerald-700 text-lg">65,000</td>
+                            <td>지게차 물류관리, ERP, 직무 일반강의</td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold text-emerald-700 text-lg">65,000</td>
+                            <td>창의융합교육 강사양성 </td>
+                        </tr>
+                        <tr>
+                            <td rowspan="4" class="text-center font-bold align-middle">IT 신직무</td>
+                            <td class="text-center font-bold text-emerald-700 text-lg">75,000</td>
+                            <td>초등 피지컬 코딩강사 양성 </td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold text-emerald-700 text-lg">150,000</td>
+                            <td>AI 딥러닝 전문강사 양성 </td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold text-emerald-700 text-lg">80,000</td>
+                            <td>AI 시대의 캐릭터 크리에이터 양성</td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold text-emerald-700 text-lg">50,000</td>
+                            <td>AI 딥러닝 실습보조 </td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold align-middle">지역연계</td>
+                            <td class="text-center font-bold text-emerald-700 text-lg">120,000</td>
+                            <td>중장년 기회강사 등 </td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold align-middle">사무분야</td>
+                            <td class="text-center font-bold text-emerald-700 text-lg">80,000</td>
+                            <td>행정회계 사무과정 OA </td>
+                        </tr>
+                        <tr>
+                            <td rowspan="2" class="text-center font-bold align-middle">식품분야<br>(HACCP)</td>
+                            <td class="text-center font-bold text-emerald-700 text-lg">120,000</td>
+                            <td>HACCP 이론교육, 팀장교육, 실습교육, 취업대비 </td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold text-emerald-700 text-lg">50,000</td>
+                            <td>HACCP 실습보조 </td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold align-middle">특강</td>
+                            <td class="text-center font-bold text-red-700 text-lg">100,000</td>
+                            <td>직업소양역량강화, 저작권생성형, 취·창업 대비 특강</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="page-2-1" class="page-section">
+                <h2>Ⅱ-1. 사업계획 수립 및 과정 개발</h2>
+                <p class="text-gray-600 mb-6">성공적인 직업훈련을 위해 객관적인 데이터를 기반으로 신규 과정을 개발하고 세부 계획을 수립합니다.</p>
+                <h3>직업훈련과정 5단계 개발 절차</h3>
+                <table class="manual-table">
+                    <tbody>
+                        <tr><th width="20%">Step 1. 사전조사</th><td>시장조사, 산업특성 분석, 구인구직 수요조사, 유망직종 분석</td></tr>
+                        <tr><th>Step 2. 과정개발</th><td>교육과정 기획, 전문가 자문회의, 관련기업 자문, <strong>직종설명회 개최</strong></td></tr>
+                        <tr><th>Step 3. 과정준비</th><td>전문강사 섭외, 기업·협회와의 취업연계 MOU 체결, 자격증 및 실습 커리큘럼 설계</td></tr>
+                        <tr><th>Step 4. 과정운영</th><td>교육생 모집 및 홍보, 학사운영, 기업체 간담회, 현장 실전 면접</td></tr>
+                        <tr><th>Step 5. 사후평가</th><td>교육만족도 조사, 사후관리 특강, 취업동아리 지원, 강사간담회 피드백</td></tr>
+                    </tbody>
+                </table>
+                <h3>신규 과정 개발을 위한 문헌 및 데이터 조사 기준</h3>
+                <ul class="custom-list">
+                    <li><strong>산업특성 분석:</strong> 경기연구원 전략산업 성과평가 보고서, 지역인적자원개발위원회 훈련 수급조사</li>
+                    <li><strong>유망직종 분석:</strong> 한국고용정보원 '미래유망 신직업 발굴 보고서', 공공데이터포털 지역별 기업체 현황</li>
+                    <li><strong>실수요 파악:</strong> 경기도 사업체 구인수요조사 결과 (일자리연구센터 의뢰 데이터 활용)</li>
+                </ul>
+            </div>
+
+            <div id="page-2-2" class="page-section">
+                <h2>Ⅱ-2. 접수시스템 개설 및 교육생 모집</h2>
+                <h3>통합접수시스템(잡아바 어플라이) 강좌 개설</h3>
+                <p class="mb-4 text-sm text-teal-600 font-semibold">※ 접속 URL: https://apply.jobaba.net/</p>
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
+                    <ul class="custom-list">
+                        <li><strong>신청 절차:</strong> 부서 기안 → 일자리플랫폼팀 신청서 공문 제출 → 관리자 계정 발급 → 테스트서버 사전 확인 → 정식 접수 시작</li>
+                        <li><strong>필수 세팅 사항:</strong> '신청자격 자가진단' 문항 세팅 (모든 항목 "예" 응답 시에만 접수 가능토록 설정), 개인정보 제공동의서 필수 체크</li>
+                        <li><strong>관리자 기능 활용:</strong> 접수자 엑셀 일괄 다운로드 후 적격 심사 진행, 면접 후 시스템상 '선정/미선정' 상태 대량 변경, 서류 미비자 대상 코멘트(보완요청) 기능 활용</li>
+                    </ul>
+                </div>
+                <h3>강의장 배정을 위한 두레이(Dooray) 자원 예약 규칙</h3>
+                <div class="warning-card">
+                    <p class="font-bold mb-1">사전 예약 필수</p>
+                    <p class="text-sm">재단 내 모든 공용자원(강의실, 스튜디오 등)은 사전 협의나 승인 없는 임의 사용이 절대 불가하며, <strong>두레이 캘린더를 통한 자원 예약</strong>이 필수입니다.</p>
+                </div>
+                <table class="manual-table">
+                    <tr><th width="15%">1층</th><td>드림스튜디오(1/2인실), 어울림홀(25인), 차오름홀(50인), IT교육장 2실(205/206호)</td></tr>
+                    <tr><th>2층</th><td>IT교육장 3실(209/210호 등), 일반교육장 4실, 집단상담실</td></tr>
+                    <tr><th>3층</th><td>일반교육장 3실(301/305/306호), 분임토의실</td></tr>
+                </table>
+                <h3>다채널 교육생 모집 및 홍보 전략</h3>
+                <ul class="custom-list">
+                    <li><strong>내부 채널:</strong> 잡아바 메인 배너, 워크넷/꿈날개 타겟 문자 발송(상담사 연계)</li>
+                    <li><strong>SNS 및 외부:</strong> 카카오톡 플러스친구('경기도일자리재단 의정부' 채널) 메시지 발송, 페이스북/인스타(홍보팀 협조), 지하철/시내 현수막</li>
+                </ul>
+            </div>
+
+            <div id="page-2-3" class="page-section">
+                <h2 style="display:flex;align-items:center;justify-content:space-between;">Ⅱ-3. 교육생 선발 및 면접 기준 <span class="bg-red-100 text-red-700 px-3 py-1 rounded text-sm ml-2 font-bold">2026 개정</span></h2>
+
+                <div class="info-card">
+                    <h4 class="text-teal-800 text-lg font-bold mb-2">💡 미취업자 우선 선발 (네거티브 선발 원칙)</h4>
+                    <p><strong>누구나 지원이 가능</strong>하되, <strong>명백한 법적 배제 대상만 제외</strong>합니다. <strong>고용보험 미가입 상태인 순수 미취업자를 최우선으로 선발</strong>하며, 면접 시 <strong>'취업 의지'</strong>를 가장 중요하게 평가합니다. 기존의 실무자 주관이 개입되는 모호한 배제 조항(예: 3개월 내 취업불가자 배제 등)은 전면 폐지되었습니다.</p>
+                </div>
+
+                <h3>1. 사업 참여 배제 대상 (명확화)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                        <strong class="text-red-700 block mb-2">🚫 배제 대상 (서류/DB 탈락)</strong>
+                        <ul class="custom-list text-sm text-gray-800">
+                            <li>1️⃣ 현재 취업상태인 자 (고용보험 가입자 등)</li>
+                            <li>2️⃣ 국비 지원 교육 등 타 훈련과정 참여자</li>
+                            <li>3️⃣ 전년도 동일 과정에 참여한 자</li>
+                            <li>4️⃣ 당해 연도 북부본부 직업교육 기 수강자</li>
+                            <li>5️⃣ 주간 대학·대학원 재학생</li>
+                        </ul>
+                    </div>
+                    <div class="bg-teal-50 border-l-4 border-teal-500 p-4 rounded-r-lg">
+                        <strong class="text-teal-800 block mb-2">✅ 예외 허용 조항 (네거티브 원칙)</strong>
+                        <ul class="custom-list text-sm text-gray-800">
+                            <li><strong>자영업자:</strong> 연간 매출액 1억 5천만 원 미만 증빙 시 허용</li>
+                            <li><strong>대학생:</strong> 졸업예정자(4학년 2학기) 및 사이버대/방통대 병행 가능자 허용</li>
+                            <li><strong>대학원생:</strong> 야간대학원, 특수대학원생 허용</li>
+                            <li><strong>외국인:</strong> F4 비자 소유 (경기도 거주사실 증빙) 시 허용 단, 후순위로 선발</li>
+                            <li><strong>단기근로:</strong> 주 15시간 미만 단기 근로자는 상담 후 허용</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>2. 사업 참여 예외 허용 및 증빙 기준 (엄격 적용)</h3>
+                <table class="manual-table">
+                    <thead>
+                        <tr>
+                            <th width="20%">대상</th>
+                            <th width="35%">허용 조건</th>
+                            <th width="45%">필수 증빙서류</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="text-center font-bold">자영업자</td>
+                            <td>연 매출 1억 5천만 원 미만 허용</td>
+                            <td>부가가치세 과세표준증명</td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">단시간 근로자</td>
+                            <td>주 15시간 미만 허용</td>
+                            <td>근로계약서 + 고용보험 확인 자료</td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">졸업예정 대학생</td>
+                            <td>4학년 2학기, 사이버대/방통대 허용</td>
+                            <td>재학증명서 또는 졸업예정증명서</td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">외국인</td>
+                            <td>F4 비자 소유, 경기도 거주 증빙 시</td>
+                            <td>외국인등록증 + 주민등록 사실증명</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>3. 강사양성과정 특화: 전력 조회 사전 고지</h3>
+                <div class="warning-card">
+                    <h4 class="text-red-800 text-lg font-bold mb-2">⚠️ 결격사유 사전 고지 의무</h4>
+                    <p>재단은 지원자의 범죄경력을 <strong>직접 조회할 권한이 없습니다.</strong> 따라서 <strong>모집공고 및 접수 단계</strong>에서 관련 결격사유(아동·청소년 관련 범죄 등)를 <strong>강하게 사전 고지</strong>하여, 해당 사유가 있는 지원자가 스스로 접수를 자제하도록 유도합니다.</p>
+                </div>
+
+                <h3>4. 전력 조회 사전 고지 대상 과정 및 적용 방법</h3>
+                <ul class="custom-list">
+                    <li><strong>대상 과정:</strong> 늘봄강사 양성, 초등 피지컬 코딩강사 양성, AI 딥러닝 전문강사 양성 등 강사양성 과정 전체</li>
+                    <li><strong>적용 방법:</strong> 잡아바(통합접수시스템) 자가진단에 <strong>필수 체크 문항</strong>을 추가하여, 결격사유 해당 여부를 지원자가 직접 확인·선언하도록 구성</li>
+                    <li><strong>고지 문구 예시:</strong> "본 과정은 아동·청소년 대상 교육 과정으로, 관련 법률에 따른 결격사유 해당자는 수료 후 활동이 제한될 수 있습니다."</li>
+                </ul>
+
+                <h3>5. 면접 및 개강 체크리스트</h3>
+                <table class="manual-table mt-2">
+                    <thead>
+                        <tr><th width="33%">① 면접 전</th><th width="33%">② 면접일</th><th width="34%">③ 개강일 및 이후</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>- 면접관 구성(강사,팀장(사업담당자),상담사)<br>- 대기실, 면접실 자원예약<br>- 교육생 지원서, 다면평가표 출력<br>- 면접대상자 안내 문자 발송</td>
+                            <td>- 실시간 면접시간 조율<br>- 면접장/대기실 세팅 (명패 등)<br>- <strong>취업 의지 중심 심층 면접</strong><br>- 외부위원 수당 서류 확인</td>
+                            <td>- <strong>OT (개인정보동의서/서약서 징구)</strong><br>- 실업급여 수급자 수강증명서 발급<br>- 출결 기준(50%) 및 페널티 규정 안내<br>- 교육포기자 발생 시 차순위 충원</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="page-2-4" class="page-section">
+                <h2>Ⅱ-4. 학사 및 출결 관리 기준 <span class="bg-red-100 text-red-700 px-2 py-1 rounded text-sm ml-2">2026 개정</span></h2>
+                <div class="warning-card">
+                    <h4 class="text-red-800 text-lg font-bold mb-2">⚠️ 책임성 강화: 재참여 1년 엄격 제한 신설</h4>
+                    <p>전액 무료 교육에 따른 예산 낭비 및 타 도민의 학습권 침해를 방지하기 위해, <strong>제적(5일 연속 무단결석)</strong> 및 정당한 사유 없는 단순 연락두절로 인한 <strong>무단 탈락자</strong>는 <strong>향후 1년간 경기북부 직업교육 전 과정 참여가 엄격히 제한</strong>됩니다. (※ 예외: 진단 상병, 가족 사망, 군입대, 취업 등 불가항력적 사유)</p>
+                </div>
+                <h3>1. HRD 표준 출결 및 수료 기준</h3>
+                <table class="manual-table">
+                    <tbody>
+                        <tr>
+                            <th width="25%">일일 출석 인정<br><span class="text-red-500 text-sm">지각 환산제 폐지</span></th>
+                            <td>기존 '지각/조퇴 3회 누적 시 결석 1회 처리' 규정을 전면 폐지합니다. <br>일일 총 훈련시간의 <strong>50% 이상 참여 시 '출석', 50% 미만 참여 시 무조건 '결석'</strong>으로 직관적으로 처리합니다.</td>
+                        </tr>
+                        <tr><th>수료 기준</th><td>전체 소정 훈련시간의 <strong>80% 이상 출석 시</strong> 수료 처리됩니다.</td></tr>
+                        <tr><th>공결 / 병가</th><td>진단서, 면접확인서 등 증빙 제출 시 총 교육시간의 <strong>최대 20% 이내</strong>에서만 인정됩니다. (20% 초과 시 미수료가 원칙이나, 중대 상병은 내부 심의위원회 구제 가능)</td></tr>
+                        <tr><th>훈련수당 지급</th><td>훈련일수 20일 단위(60시간 이상) 기준 출석률 80% 이상 달성 시 교통비 명목으로 월 5만 원을 지급합니다. (비대면 교육은 지급 제외)</td></tr>
+                        <tr><th>조기 취업자 특례</th><td>교육 20% 미만 수강 후 취업 시 '등록 포기' 처리하며, <strong>20% 이상 수강 후 취업 시 '조기 수료'로 인정</strong>하여 취업 실적에 반영합니다.</td></tr>
+                        <tr><th>훈련시간 운영</th><td> <strong>기본 원칙:</strong> 매 시간당 <strong class="text-blue-700">50분 강의 / 10분 휴식</strong> 원칙<br>
+                                <strong>시범 운영:</strong> 필요 시 <strong class="text-indigo-700">45분 강의 / 15분 휴식</strong> 과정을 시범 운영하며, 이후 만족도 조사를 실시하여 확대 여부 결정</td></tr>
+
+                    </tbody>
+                </table>
+                <h3>2. O.T(오리엔테이션) 교육생 행동 지침 안내사항</h3>
+                <ul class="custom-list">
+                    <li><strong>시간 준수:</strong> 수업 시간 50% 기준 초과 도착 시 지각 인정 불가(결석), 50% 진행 이전 귀가 시 조퇴 인정 불가(결석) 사전 고지 철저</li>
+                    <li><strong>보안 및 예절:</strong> 강의내용은 강사 고유 저작물이므로 사진/동영상 무단 배포 금지</li>
+                    <li><strong>자치회 운영:</strong> 자율적 운영 원칙. 과도한 금품 걷기, 거액의 선물 제공, 교육생 간 불화 조장 엄격 금지</li>
+                    <li><strong>비대면 교육(ZOOM):</strong> 고정된 장소 수강 원칙, 화면 얼굴 노출 필수, 접속 링크 외부 유출 절대 금지</li>
+                </ul>
+            </div>
+
+            <div id="page-2-5" class="page-section">
+                <h2>Ⅱ-5. 사후관리 및 학습동아리 운영</h2>
+                <div class="info-card">
+                    <p>예산 운영의 안정성을 위해 현행 <strong>최소 7명 구성 방식은 유지</strong>하되, 실무진과 교육생의 행정 부담을 덜기 위해 <strong>정산 증빙을 강화</strong>했습니다.</p>
+                </div>
+                <ul class="custom-list mb-6">
+                    <li><strong>구성 요건:</strong> 교육시간 20% 이상 수강자 및 수료생 <strong>최소 7명 이상</strong> 자발적 구성</li>
+                    <li><strong>지원 내용:</strong> 동아리당 최대 50~70만 원 실비 지원 (강사비, 재료비, 공모전/박람회 참가비 등)</li>
+                    <li><strong>운영 규칙:</strong> 월 1회 이상 모임 필수 (미진행 시 해산), 개인적 수익 창출 목적 사용 절대 금지 (적발 시 전액 환수)</li>
+                    <li><strong>정산 강화 (New):</strong> <strong>예산 증빙 필수</strong>, 영수증 외에도 <strong>결과물(취업 포트폴리오, 면접확인서, 자격증 사본)</strong>을 실적 증빙으로 인정</li>
+                </ul>
+                <h3>2. 사후관리 특강 및 현장 견학</h3>
+                <table class="manual-table">
+                    <tr><th width="20%">자격증 취득 지원</th><td>과정 수료 후 희망자 대상으로 실무 자격증(예: 독서지도사, 방과후지도사 등) 취득을 위한 별도 심화 특강 운영</td></tr>
+                    <tr><th>현장 탐방 (견학)</th><td>동종 업계 우수 기업 생산공장(예: HACCP 과정 식품공장) 탐방을 통한 직무 이해도 제고 및 현직자 멘토링 진행</td></tr>
+                </table>
+            </div>
+
+            <div id="page-2-6" class="page-section">
+                <h2>Ⅱ-6. 기업 협력 및 취업 연계</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div class="bg-white border border-gray-200 p-5 rounded-xl shadow-sm">
+                        <div class="text-3xl mb-3">🤝</div>
+                        <h4 class="font-bold text-lg text-teal-900 mb-2">취업처 발굴 및 MOU 체결</h4>
+                        <p class="text-sm text-gray-600 line-height-relaxed">교육과정 설계 단계부터 유관기관 및 채용 수요 기업과 사전 미팅을 진행합니다. 훈련 수료생의 인턴십 및 우선 채용을 약정하는 <strong>업무협약(MOU)</strong>을 체결하여 안정적인 취업 파이프라인을 구축합니다.</p>
+                    </div>
+                    <div class="bg-white border border-gray-200 p-5 rounded-xl shadow-sm">
+                        <div class="text-3xl mb-3">🗣️</div>
+                        <h4 class="font-bold text-lg text-teal-900 mb-2">일자리 협력망(기업체 간담회)</h4>
+                        <p class="text-sm text-gray-600 line-height-relaxed">과정 중 또는 수료 직후 유관기관, 담당강사, 기업체 인사담당자가 참여하는 회의를 개최합니다. 현장의 구인 수요와 교육 커리큘럼의 갭을 분석하고 차년도 과정 개선안을 도출합니다.</p>
+                    </div>
+                    <div class="bg-white border border-gray-200 p-5 rounded-xl shadow-sm md:col-span-2 flex items-center gap-6">
+                        <div class="text-4xl pl-4">🎤</div>
+                        <div>
+                            <h4 class="font-bold text-lg text-teal-900 mb-1">직종설명회 개최 (매년 11~12월)</h4>
+                            <p class="text-sm text-gray-600">지역 도민을 대상으로 차년도 운영 예정인 신규 유망 직종에 대한 상세 설명회 및 현직 전문가 특강을 진행하여 잠재적 교육 수요를 파악하고 모집 홍보 효과를 극대화합니다.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-3-1" class="page-section">
+                <h2>Ⅲ. 국비(고용노동부) 공모 직업훈련 운영</h2>
+                <div class="info-card">
+                    <p>고용노동부 '고용안정 선제대응 패키지' 등 국비 공모사업은 일반 출연금 사업과 달리 <strong>일모아, HRD-Net, e나라도움</strong> 3가지 범정부 시스템을 동시에 엄격하게 교차 활용해야 합니다.</p>
+                </div>
+                <h3>1. 국비 시스템별 핵심 담당 업무</h3>
+                <div class="flex flex-col gap-4 mt-4">
+                    <div class="border-l-4 border-teal-500 bg-white p-4 shadow-sm">
+                        <strong class="text-lg text-teal-800">✅ HRD-Net (학사/출결 관리)</strong>
+                        <ul class="custom-list mt-2 text-sm">
+                            <li>사업 실시신고 및 훈련생 확정 등록</li>
+                            <li><strong>전자 출결 관리:</strong> 훈련생은 HRD-Net 앱(QR코드/비콘)을 통해 직접 출결 체크 필수</li>
+                            <li>수기 출결 병행 관리 및 중도탈락/수료 처리 전산 보고</li>
+                        </ul>
+                    </div>
+                    <div class="border-l-4 border-green-500 bg-white p-4 shadow-sm">
+                        <strong class="text-lg text-green-800">✅ 일모아 (참여자 관리)</strong>
+                        <ul class="custom-list mt-2 text-sm">
+                            <li>참여자 기본 정보 등록 및 <strong>재정지원 중복참여 여부 조회 (중복 절대 불가)</strong></li>
+                            <li>취업 여부 및 사후관리 이력 등록</li>
+                        </ul>
+                    </div>
+                    <div class="border-l-4 border-purple-500 bg-white p-4 shadow-sm">
+                        <strong class="text-lg text-purple-800">✅ e-나라도움 (예산 및 정산 관리)</strong>
+                        <ul class="custom-list mt-2 text-sm">
+                            <li>사업 등록 및 국고보조금 교부 신청</li>
+                            <li>월별 예산 집행 내역 등록 및 증빙 첨부</li>
+                            <li>연말 회계법인 검증을 위한 집행 마감 및 최종 정산보고서 제출</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-3-2" class="page-section">
+                <h2>Ⅲ-2. 일모아 / HRD-Net / e나라도움 관리</h2>
+                <div class="info-card">
+                    <p>국비 공모사업 운영 시 위 3개 시스템의 역할을 구분하여 동시에 관리해야 합니다. 상세 내용은 <button type="button" onclick="showPage('page-3-1')" class="text-teal-600 font-semibold underline hover:no-underline">국비 공모 직업훈련 운영</button>을 참고하세요.</p>
+                </div>
+                <h3>시스템별 핵심 담당 업무 요약</h3>
+                <table class="manual-table">
+                    <thead>
+                        <tr><th>시스템</th><th>주요 업무</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="font-bold text-teal-700">HRD-Net</td><td>학사/출결 관리, 훈련생 확정 등록, 전자 출결(QR·비콘), 수료·탈락 처리</td></tr>
+                        <tr><td class="font-bold text-green-700">일모아</td><td>참여자 등록, 재정지원 중복참여 조회, 취업·사후관리 이력</td></tr>
+                        <tr><td class="font-bold text-purple-700">e-나라도움</td><td>사업 등록, 교부 신청, 월별 집행 등록·증빙, 연말 정산보고</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="page-4-1" class="page-section">
+                <h2>Ⅳ. 체계화된 직업상담 - 상담사 편</h2>
+                <h3>1. 고용24 (구 워크넷) 시스템 활용</h3>
+                <ul class="custom-list">
+</li>
+                    <li><strong>계정 발급:</strong> 지자체 취업알선 기관 소속으로 계정 신청 → 개인정보 보안교육 이수 → 기관 관리자 승인 → OTP 발급</li>
+                    <li><strong>타겟 홍보(문자 발송):</strong> 교육생 모집 시 고용24 구직자 DB를 활용해 연령, 거주지, 희망직종 조건을 필터링하여 타겟 안내 문자를 대량 발송합니다.</li>
+                    <li><strong>구직 상태 확인:</strong> 면접 전 신청자의 구직등록 유효성 및 타 취업지원제도(국취제 등) 참여 여부를 조회합니다.</li>
+                </ul>
+                <h3>2. 1:1 심층 상담 및 취업현황 DB 관리</h3>
+                <div class="bg-gray-50 p-5 border border-gray-200 rounded-lg mt-4">
+                    <strong class="block mb-2 text-teal-900">상담 프로세스</strong>
+                    <p class="text-sm text-gray-700 mb-4">면접 시 파악된 정보와 구직신청서를 바탕으로 교육 중 최소 1회 이상 1:1 대면 심층 상담을 진행하여 맞춤형 취업 계획을 수립합니다. (입사지원서 클리닉, 채용정보 매칭 등)</p>
+                    <strong class="block mb-2 text-teal-900">취업 증빙 DB (두레이 관리)</strong>
+                    <p class="text-sm text-gray-700">취업자 명단, 취업일, 사업장명, 고용형태(정규직/계약직), 4대보험 여부를 추적 관리하며, 근로계약서 및 재직증명서(프리랜서의 경우 위촉계약서나 플랫폼 상품등록 캡처본)를 징구하여 실적에 반영합니다.</p>
+                </div>
+            </div>
+
+            <div id="page-4-2" class="page-section">
+                <h2>Ⅳ-2. 취업현황 DB 및 사후관리</h2>
+                <div class="info-card">
+                    <p>상담사는 수료생의 취업 현황을 체계적으로 DB화하고, 증빙을 징구하여 실적에 반영합니다.</p>
+                </div>
+                <h3>취업 증빙 DB (두레이 관리)</h3>
+                <div class="bg-gray-50 p-5 border border-gray-200 rounded-lg">
+                    <p class="text-sm text-gray-700">취업자 명단, 취업일, 사업장명, 고용형태(정규직/계약직), 4대보험 여부를 추적 관리하며, 근로계약서 및 재직증명서(프리랜서의 경우 위촉계약서나 플랫폼 상품등록 캡처본)를 징구하여 실적에 반영합니다.</p>
+                </div>
+            </div>
+
+            <div id="page-forms" class="page-section">
+                <h2>📝 2026년 개편 신규 필수 서식 (웹 작성 지원)</h2>
+                <div class="info-card">
+                    <p><strong>별도 파일 다운로드 없이</strong> 아래 서식을 웹에서 바로 입력한 후 <strong>인쇄(Ctrl+P)</strong> 또는 <strong>PDF 저장</strong>이 가능합니다. 카드를 클릭하면 서식 편집기가 열립니다.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 no-print">
+                    <div class="form-card rounded-xl overflow-hidden text-center" onclick="openForm('pledge')" style="background: linear-gradient(180deg, #ffffff 0%, #f0fdfa 100%); border: 2px solid #99f6e4;">
+                        <div style="background: linear-gradient(135deg, #134E4A 0%, #0F766E 50%, #14B8A6 100%); padding: 1.25rem 1rem; margin-bottom: 0;">
+                            <div style="width:52px;height:52px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 0.5rem;font-size:1.75rem;">📋</div>
+                            <h4 style="font-weight:800;font-size:1.05rem;color:#ffffff;margin:0 0 0.25rem;">교육서약서</h4>
+                            <p style="font-size:0.78rem;color:rgba(255,255,255,0.85);margin:0;">교육생 입과 시 징구하는 서약서</p>
+                        </div>
+                        <div style="padding: 0.9rem 1rem;">
+                            <span style="display:inline-block;background:linear-gradient(135deg,#0F766E,#14B8A6);color:#fff;padding:0.35rem 1.1rem;border-radius:9999px;font-size:0.78rem;font-weight:700;letter-spacing:0.5px;">✏️ 클릭하여 작성</span>
+                        </div>
+                    </div>
+                    <div class="form-card rounded-xl overflow-hidden text-center" onclick="openForm('sign')" style="background: linear-gradient(180deg, #ffffff 0%, #eef2ff 100%); border: 2px solid #a5b4fc;">
+                        <div style="background: linear-gradient(135deg, #312e81 0%, #4338ca 50%, #6366f1 100%); padding: 1.25rem 1rem; margin-bottom: 0;">
+                            <div style="width:52px;height:52px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 0.5rem;font-size:1.75rem;">✍️</div>
+                            <h4 style="font-weight:800;font-size:1.05rem;color:#ffffff;margin:0 0 0.25rem;">심사위원 서명부</h4>
+                            <p style="font-size:0.78rem;color:rgba(255,255,255,0.85);margin:0;">면접 심사위원 참석 확인 서명부</p>
+                        </div>
+                        <div style="padding: 0.9rem 1rem;">
+                            <span style="display:inline-block;background:linear-gradient(135deg,#4338ca,#6366f1);color:#fff;padding:0.35rem 1.1rem;border-radius:9999px;font-size:0.78rem;font-weight:700;letter-spacing:0.5px;">✏️ 클릭하여 작성</span>
+                        </div>
+                    </div>
+                    <div class="form-card rounded-xl overflow-hidden text-center" onclick="openForm('security')" style="background: linear-gradient(180deg, #ffffff 0%, #fff1f2 100%); border: 2px solid #fda4af;">
+                        <div style="background: linear-gradient(135deg, #881337 0%, #be123c 50%, #f43f5e 100%); padding: 1.25rem 1rem; margin-bottom: 0;">
+                            <div style="width:52px;height:52px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 0.5rem;font-size:1.75rem;">🔒</div>
+                            <h4 style="font-weight:800;font-size:1.05rem;color:#ffffff;margin:0 0 0.25rem;">보안서약서</h4>
+                            <p style="font-size:0.78rem;color:rgba(255,255,255,0.85);margin:0;">면접위원 개인정보 보안 서약서</p>
+                        </div>
+                        <div style="padding: 0.9rem 1rem;">
+                            <span style="display:inline-block;background:linear-gradient(135deg,#be123c,#f43f5e);color:#fff;padding:0.35rem 1.1rem;border-radius:9999px;font-size:0.78rem;font-weight:700;letter-spacing:0.5px;">✏️ 클릭하여 작성</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="form-editor-container" style="display:none;">
+                    <div class="no-print flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                        <h3 id="form-editor-title" style="margin:0; font-size:1.1rem;"></h3>
+                        <button type="button" onclick="window.print()" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-5 rounded-lg transition-colors text-sm flex items-center gap-2">
+                            🖨️ 인쇄 / PDF 저장
+                        </button>
+                    </div>
+                    <div id="print-area"></div>
+                </div>
+            </div>
+
+            <div id="page-forms-all" class="page-section">
+                <h2>📝 전체 서식 다운로드 (예정)</h2>
+                <div style="background: #F8FAFC; padding: 2rem; border-radius: 12px; text-align: center; border: 2px dashed #CBD5E1; margin: 1rem 0 2rem 0;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🚧</div>
+                    <h3 style="margin-top: 0; color: #334155; font-size: 1.2rem; border:none; justify-content:center;">서식 파일(HWP/Excel) 업데이트 예정입니다.</h3>
+                    <p style="color: #64748b; font-size: 0.95rem;">총 25종의 2026년 개편 서식 원본 파일이 이곳에 일괄 업로드될 예정입니다.<br>(현재 연동 작업 진행 중)</p>
+                </div>
+                <h3>📌 관리 대상 서식 목록 (총 25종)</h3>
+                <table class="manual-table text-sm">
+                    <thead>
+                        <tr><th width="15%">구분</th><th width="65%">서식 내용 및 포함 항목</th><th width="20%">상태</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="text-center font-bold">서식 1~16</td>
+                            <td>강사 윤리서약서, 출석부, 교육일지, 훈련지원금 지급기준, 수강/수료확인서, 환불신청서, 주차신청서 등</td>
+                            <td class="text-center"><span class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">업데이트 예정</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">서식 17~21</td>
+                            <td>취·창업 학습동아리 개설 신청서, 활동계획서, 활동일지, 결과보고서, 지원금 지급 신청서 등</td>
+                            <td class="text-center"><span class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">업데이트 예정</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">서식 22</td>
+                            <td>기업 및 기관 취업연계 업무협약(MOU) 체결 양식 (재단용 / 기업용)</td>
+                            <td class="text-center"><span class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">업데이트 예정</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">서식 23</td>
+                            <td>직업교육훈련생 사전 고지 서약서, 비대면(ZOOM) 교육 규정 동의서</td>
+                            <td class="text-center"><span class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">업데이트 예정</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-center font-bold">서식 24~25</td>
+                            <td>취업확인서, 재직증명서 대체 양식, 프리랜서 강의활동 확인서</td>
+                            <td class="text-center"><span class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">업데이트 예정</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </main>
+    </div>
+
+    <button type="button" class="back-to-top" id="backToTop" onclick="document.getElementById('main-content').scrollTop=0" aria-label="맨 위로">↑</button>
+    <button type="button" class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="목차 열기">☰</button>
+
+    <footer class="mt-8 text-center text-slate-500 text-sm border-t border-slate-200 pt-8 pb-12 bg-gradient-to-b from-slate-50 to-teal-50/30">
+        <div class="max-w-5xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="text-left">
+                <p class="font-bold text-teal-900 mb-1 text-base">🛠️ 2026년 직업교육 개편 TF (만든이)</p>
+                <p class="text-slate-600 font-medium">북부교육팀장 <span class="text-slate-800">구도영</span>, <span class="text-slate-800">이상훈</span> 과장, <span class="text-slate-800">신동원</span> 주임, 직업상담사 <span class="text-slate-800">최경선</span>, 직업상담사 <span class="text-slate-800">윤혜원</span></p>
+            </div>
+            <div class="text-right">
+                <p class="text-xs mt-1">© 2026 Gyeonggido Job Foundation. All rights reserved.</p>
+                <p class="font-bold text-slate-700 text-base mt-2">경기도일자리재단 북부사업본부 북부교육팀</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const wrapLabel = (label) => {
+            if (label.length <= 16) return label;
+            const words = label.split(' ');
+            let currentLine = words[0];
+            const lines = [];
+            for (let i = 1; i < words.length; i++) {
+                if (currentLine.length + words[i].length + 1 > 16) {
+                    lines.push(currentLine);
+                    currentLine = words[i];
+                } else currentLine += ' ' + words[i];
+            }
+            lines.push(currentLine);
+            return lines;
+        };
+        const tooltipConfig = {
+            callbacks: {
+                title: function(tooltipItems) {
+                    const item = tooltipItems[0];
+                    let label = item.chart.data.labels[item.dataIndex];
+                    return Array.isArray(label) ? label.join(' ') : label;
+                }
+            }
+        };
+        const initWorkloadChart = () => {
+            const ctx = document.getElementById('workloadChart');
+            if (!ctx) return;
+            new Chart(ctx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['계획 수립', '홍보/모집', '선발/상담', '학사 관리', '취업/사후관리', '정산/보고'],
+                    datasets: [{ data: [10, 7, 19, 26, 25, 13], backgroundColor: ['#0D9488', '#14B8A6', '#F59E0B', '#0F766E', '#10B981', '#94A3B8'], borderWidth: 0 }]
+                },
+                options: { maintainAspectRatio: false, plugins: { tooltip: tooltipConfig, legend: { position: 'right' } }, cutout: '60%' }
+            });
+        };
+        const initTargetChart = () => {
+            const ctx = document.getElementById('targetChart');
+            if (!ctx) return;
+            const rawLabels = ['늘봄 강사 (3개)', '지역연계 (4개)', '사무/OA (2개)', '식품/HACCP (1개)', 'IT 신직무 (3개)'];
+            new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: rawLabels.map(wrapLabel),
+                    datasets: [
+                        { label: '모집 목표 (명)', data: [60, 65, 40, 20, 55], backgroundColor: '#CBD5E1' },
+                        { label: '수료 목표 (90%)', data: [54, 60, 36, 18, 50], backgroundColor: '#0D9488' },
+                        { label: '취업 목표 (65%)', data: [36, 39, 24, 12, 33], backgroundColor: '#F59E0B' }
+                    ]
+                },
+                options: { maintainAspectRatio: false, plugins: { tooltip: tooltipConfig, legend: { position: 'top' } }, scales: { y: { beginAtZero: true, title: { display: true, text: '인원 수 (명)' } } } }
+            });
+        };
+        function toggleNav(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (!section) return;
+            const title = section.previousElementSibling;
+            const arrow = title ? title.querySelector('.arrow') : null;
+            section.classList.toggle('active');
+            if (arrow) arrow.textContent = section.classList.contains('active') ? '▲' : '▼';
+        }
+        let chartsInitialized = false;
+        function showPage(pageId) {
+            document.querySelectorAll('.page-section').forEach(p => p.classList.remove('active'));
+            const target = document.getElementById(pageId);
+            if (target) { target.classList.add('active'); document.getElementById('main-content').scrollTop = 0; }
+            document.querySelectorAll('.nav-item').forEach(l => l.classList.remove('active'));
+            const activeLink = document.querySelector(".nav-item[onclick*=\"showPage('" + pageId + "')\"]");
+            if (activeLink) {
+                activeLink.classList.add('active');
+                const parentUl = activeLink.closest('ul');
+                if (parentUl && !parentUl.classList.contains('active')) toggleNav(parentUl.id);
+            }
+            if (window.location.hash !== '#' + pageId) window.location.hash = pageId;
+            closeSidebar();
+            if (!chartsInitialized) { initWorkloadChart(); initTargetChart(); chartsInitialized = true; }
+        }
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-overlay').classList.toggle('open');
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebar-overlay').classList.remove('open');
+        }
+        const mc = document.getElementById('main-content');
+        if (mc) mc.addEventListener('scroll', function() {
+            document.getElementById('backToTop').classList.toggle('visible', mc.scrollTop > 300);
+        });
+        window.addEventListener('load', function() {
+            initWorkloadChart();
+            initTargetChart();
+            chartsInitialized = true;
+            const hash = (window.location.hash || '#home').replace('#', '');
+            if (hash && document.getElementById(hash)) showPage(hash);
+        });
+        window.addEventListener('hashchange', function() {
+            const hash = (window.location.hash || '#home').replace('#', '');
+            if (hash && document.getElementById(hash)) showPage(hash);
+        });
+
+        (function() {
+            var searchEl = document.getElementById('navSearch');
+            if (!searchEl) return;
+            var sectionTitles = document.querySelectorAll('.sidebar .nav-section-title');
+            var navItems = document.querySelectorAll('.sidebar .nav-item');
+            function getItemText(el) {
+                var clone = el.cloneNode(true);
+                clone.querySelectorAll('.new-badge').forEach(function(n){ n.remove(); });
+                return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+            }
+            function getPageId(el) {
+                var on = el.getAttribute('onclick') || '';
+                var m = on.match(/showPage\s*\(\s*['"]([^'"]+)['"]\s*\)/);
+                return m ? m[1] : '';
+            }
+            searchEl.addEventListener('input', function() {
+                var q = (this.value || '').trim().toLowerCase();
+                if (q.length === 0) {
+                    sectionTitles.forEach(function(t){ t.classList.remove('search-hide'); });
+                    navItems.forEach(function(n){ n.classList.remove('search-hide','search-match'); });
+                    document.querySelectorAll('.sidebar .nav-items').forEach(function(ul){
+                        ul.classList.remove('search-hide');
+                    });
+                    return;
+                }
+                var anyVisible = {};
+                navItems.forEach(function(item) {
+                    var text = getItemText(item).toLowerCase();
+                    var match = text.indexOf(q) !== -1;
+                    item.classList.toggle('search-hide', !match);
+                    item.classList.toggle('search-match', match);
+                    if (match) {
+                        var ul = item.closest('ul');
+                        if (ul && ul.id) anyVisible[ul.id] = true;
+                        var title = ul && ul.previousElementSibling;
+                        if (title && title.classList.contains('nav-section-title')) anyVisible[title.id || title.textContent] = true;
+                    }
+                });
+                document.querySelectorAll('.sidebar .nav-items').forEach(function(ul) {
+                    var id = ul.id;
+                    var hasVisible = ul.querySelectorAll('.nav-item:not(.search-hide)').length > 0;
+                    ul.classList.toggle('search-hide', !hasVisible);
+                    if (hasVisible) ul.classList.add('active');
+                    var title = ul.previousElementSibling;
+                    if (title && title.classList.contains('nav-section-title')) {
+                        title.classList.toggle('search-hide', !hasVisible);
+                        if (title.querySelector('.arrow')) title.querySelector('.arrow').textContent = hasVisible ? '▲' : '▼';
+                    }
+                });
+                sectionTitles.forEach(function(t) {
+                    var next = t.nextElementSibling;
+                    if (next && next.classList.contains('nav-items') && next.classList.contains('search-hide')) t.classList.add('search-hide');
+                });
+            });
+        })();
+
+        function openForm(formType) {
+            var container = document.getElementById('form-editor-container');
+            var titleEl = document.getElementById('form-editor-title');
+            var printArea = document.getElementById('print-area');
+            if (!container || !titleEl || !printArea) return;
+
+            var today = new Date();
+            var yyyy = today.getFullYear();
+            var mm = String(today.getMonth() + 1).padStart(2, '0');
+            var dd = String(today.getDate()).padStart(2, '0');
+            var dateStr = yyyy + '년 ' + mm + '월 ' + dd + '일';
+
+            var html = '';
+
+            if (formType === 'pledge') {
+                titleEl.textContent = '📋 교육서약서 편집 중';
+                html = '<div>' +
+                    '<div class="doc-header">' +
+                    '<div style="text-align:center; font-size:14pt; font-weight:600; margin-bottom:8px;">경기도일자리재단 북부사업본부</div>' +
+                    '<div style="width:82%; margin:0 auto 12px auto; border-top:2px solid #0F766E;"></div>' +
+                    '<h1 style="text-align:center; font-size:30pt; font-weight:800; letter-spacing:6px; margin:0;">교 육 서 약 서</h1>' +
+                    '<div style="width:82%; margin:12px auto 8px auto; border-top:2px solid #0F766E;"></div>' +
+                    '<p style="text-align:center; margin:0; font-size:10.5pt;">2026년 경기북부 직업교육훈련 과정</p>' +
+                    '</div>' +
+                    '<table>' +
+                    '<tr><th style="width:25%; text-align:center; background:#f0faf8;">과정명</th><td style="width:75%; text-align:left;"><input type="text" class="print-input input-w-90" placeholder="과정명을 입력하세요"></td></tr>' +
+                    '<tr><th style="width:25%; text-align:center; background:#f0faf8;">일자</th><td style="width:75%; text-align:left;"><input type="text" class="print-input input-w-200" value="' + dateStr + '"></td></tr>' +
+                    '</table>' +
+                    '<div class="doc-box">' +
+                    '<p class="doc-intro">본인은 경기도일자리재단 북부사업본부에서 시행하는 직업교육훈련에 참여함에 있어 아래 사항을 성실히 이행할 것을 서약합니다.</p>' +
+                    '<ol>' +
+                    '<li>□ 교육 기간 중 성실하게 출석하고, 교육에 적극적으로 참여하겠습니다.</li>' +
+                    '<li>□ 교육 일수의 80% 이상 출석하여 수료 요건을 충족하겠습니다.</li>' +
+                    '<li>□ 정당한 사유 없이 교육을 중도 포기하지 않겠습니다.</li>' +
+                    '<li>□ 교육장 내 질서를 준수하고, 타 교육생의 학습권을 침해하지 않겠습니다.</li>' +
+                    '<li>□ 교육 중 취득한 개인정보 및 강의자료를 외부에 유출하지 않겠습니다.</li>' +
+                    '<li>□ 무단 탈락 또는 제적 시 향후 1년간 재참여 제한에 동의합니다.</li>' +
+                    '</ol>' +
+                    '</div>' +
+                    '<div class="doc-box soft spaced-top">' +
+                    '<p>위와 같이 서약합니다.</p>' +
+                    '<p>' + dateStr + '</p>' +
+                    '</div>' +
+                    '<table>' +
+                    '<tr><th style="width:50%; text-align:center; background:#f0faf8;">서약자 성명</th><th style="width:50%; text-align:center; background:#f0faf8;">서명</th></tr>' +
+                    '<tr><td style="text-align:center; background:#ffffff;"><input type="text" class="print-input input-w-90" placeholder="홍길동" style="background:transparent;"></td><td style="text-align:center; background:#ffffff; min-height:44px;">(서명)</td></tr>' +
+                    '</table>' +
+                    '<div style="text-align:center; margin-top:22px;">' +
+                    '<p class="doc-org">경기도일자리재단 북부사업본부장 귀하</p>' +
+                    '</div>' +
+                    '</div>';
+            } else if (formType === 'sign') {
+                titleEl.textContent = '✍️ 심사위원 서명부 편집 중';
+                var rows = '';
+                for (var i = 1; i <= 5; i++) {
+                    rows += '<tr style="height:40px;">' +
+                        '<td style="text-align:center;">' + i + '</td>' +
+                        '<td><input type="text" class="print-input input-w-90" placeholder="소속/직위"></td>' +
+                        '<td><input type="text" class="print-input input-w-90" placeholder="성명"></td>' +
+                        '<td style="text-align:center;"><span class="meta-value">(서명)</span></td>' +
+                        '</tr>';
+                }
+                html = '<div>' +
+                    '<div class="doc-header">' +
+                    '<div style="text-align:center; font-size:14pt; font-weight:600; margin-bottom:8px;">경기도일자리재단 북부사업본부</div>' +
+                    '<div style="width:82%; margin:0 auto 12px auto; border-top:2px solid #0F766E;"></div>' +
+                    '<h1 style="text-align:center; font-size:30pt; font-weight:800; letter-spacing:6px; margin:0;">심사위원 서명부</h1>' +
+                    '<div style="width:82%; margin:12px auto 8px auto; border-top:2px solid #0F766E;"></div>' +
+                    '<p style="text-align:center; margin:0; font-size:10.5pt;">2026년 경기북부 직업교육훈련 과정</p>' +
+                    '</div>' +
+                    '<table>' +
+                    '<tr><th style="width:25%; text-align:center; background:#f0faf8;">과정명</th><td style="width:75%; text-align:left;"><input type="text" class="print-input input-w-90" placeholder="과정명을 입력하세요"></td></tr>' +
+                    '<tr><th style="width:25%; text-align:center; background:#f0faf8;">일자</th><td style="width:75%; text-align:left;"><input type="text" class="print-input input-w-200" value="' + dateStr + '"></td></tr>' +
+                    '</table>' +
+                    '<table>' +
+                    '<colgroup><col style="width:10%;"><col style="width:40%;"><col style="width:25%;"><col style="width:25%;"></colgroup>' +
+                    '<thead><tr>' +
+                    '<th style="text-align:center; background:#f0faf8;">번호</th>' +
+                    '<th style="text-align:center; background:#f0faf8;">소속 / 직위</th>' +
+                    '<th style="text-align:center; background:#f0faf8;">성명</th>' +
+                    '<th style="text-align:center; background:#f0faf8;">서명</th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + rows + '</tbody>' +
+                    '</table>' +
+                    '<table>' +
+                    '<tr><th style="width:50%; text-align:center; background:#f0faf8;">서약자 성명</th><th style="width:50%; text-align:center; background:#f0faf8;">서명</th></tr>' +
+                    '<tr><td style="text-align:center; background:#ffffff;"><input type="text" class="print-input input-w-90" placeholder="홍길동" style="background:transparent;"></td><td style="text-align:center; background:#ffffff; min-height:44px;">(서명)</td></tr>' +
+                    '</table>' +
+                    '<div style="text-align:center; margin-top:22px;">' +
+                    '<p class="doc-org">경기도일자리재단 북부사업본부장 귀하</p>' +
+                    '</div>' +
+                    '</div>';
+            } else if (formType === 'security') {
+                titleEl.textContent = '🔒 보안서약서 편집 중';
+                html = '<div>' +
+                    '<div class="doc-header">' +
+                    '<div style="text-align:center; font-size:14pt; font-weight:600; margin-bottom:8px;">경기도일자리재단 북부사업본부</div>' +
+                    '<div style="width:82%; margin:0 auto 12px auto; border-top:2px solid #0F766E;"></div>' +
+                    '<h1 style="text-align:center; font-size:30pt; font-weight:800; letter-spacing:6px; margin:0;">보 안 서 약 서</h1>' +
+                    '<div style="width:82%; margin:12px auto 8px auto; border-top:2px solid #0F766E;"></div>' +
+                    '<p style="text-align:center; margin:0; font-size:10.5pt;">면접위원 개인정보 보호 서약</p>' +
+                    '</div>' +
+                    '<table>' +
+                    '<tr><th style="width:25%; text-align:center; background:#f0faf8;">일자</th><td style="width:75%; text-align:left;"><input type="text" class="print-input input-w-200" value="' + dateStr + '"></td></tr>' +
+                    '<tr><th style="width:25%; text-align:center; background:#f0faf8;">과정명</th><td style="width:75%; text-align:left;"><input type="text" class="print-input input-w-90" placeholder="과정명을 입력하세요"></td></tr>' +
+                    '</table>' +
+                    '<div class="doc-box">' +
+                    '<p class="doc-intro">본인은 경기도일자리재단 북부사업본부의 직업교육훈련 면접 심사에 참여함에 있어, 아래의 보안 사항을 준수할 것을 서약합니다.</p>' +
+                    '<ol>' +
+                    '<li>면접 과정에서 취득한 지원자의 개인정보(성명, 연락처, 경력사항 등)를 외부에 유출하거나 목적 외로 사용하지 않겠습니다.</li>' +
+                    '<li>면접 평가 내용 및 결과를 제3자에게 공개하지 않겠습니다.</li>' +
+                    '<li>면접 관련 서류(지원서, 평가표 등)를 무단으로 복제·촬영·반출하지 않겠습니다.</li>' +
+                    '<li>면접 종료 후 제공받은 모든 자료를 즉시 반납하겠습니다.</li>' +
+                    '</ol>' +
+                    '<div style="margin-top:10px; padding:10px 12px; border-left:3px solid #ef4444; background:#fef2f2;">상기 사항을 위반할 경우 발생하는 모든 법적 책임은 본인에게 있음을 확인합니다.</div>' +
+                    '</div>' +
+                    '<div class="doc-box soft spaced-top">' +
+                    '<p>위와 같이 서약합니다.</p>' +
+                    '<p>' + dateStr + '</p>' +
+                    '</div>' +
+                    '<table>' +
+                    '<tr><th style="width:50%; text-align:center; background:#f0faf8;">서약자 성명</th><th style="width:50%; text-align:center; background:#f0faf8;">서명</th></tr>' +
+                    '<tr><td style="text-align:center; background:#ffffff;"><input type="text" class="print-input input-w-90" placeholder="홍길동" style="background:transparent;"></td><td style="text-align:center; background:#ffffff; min-height:44px;">(서명)</td></tr>' +
+                    '</table>' +
+                    '<div style="text-align:center; margin-top:22px;">' +
+                    '<p class="doc-org">경기도일자리재단 북부사업본부장 귀하</p>' +
+                    '</div>' +
+                    '</div>';
+            }
+
+            printArea.innerHTML = html;
+            container.style.display = 'block';
+            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    </script>
+</body>
+</html>

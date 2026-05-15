@@ -3279,6 +3279,7 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                 const isEarlyEmp = s.enrollmentStatus === '조기취업';
                 const isRestricted = isDropout || isEarlyEmp;
                 const cutoffDate = s.statusChangeDate;
+                const cutoffLabel = (typeof cutoffDate === "string" && cutoffDate.length >= 10) ? cutoffDate.slice(5) : "";
                 const isAfterCutoff = isRestricted && cutoffDate && date > cutoffDate;
                 const setRow = (patch) => setManualAtt(p => ({
                   ...p, [s.id]: { ...(p[s.id]||{}), ...patch, saved: false }
@@ -3331,7 +3332,7 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                       {s.name}
                       {s.rate<80 && <span style={{ marginLeft:6, fontSize:10, color:T.danger }}>⚠</span>}
                       {isDropout && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEE2E2", color:"#DC2626", fontWeight:700 }}>중도탈락</span>}
-                      {isEarlyEmp && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#F3E8FF", color:"#7E22CE", fontWeight:700 }}>조기취업 {cutoffDate ? cutoffDate.slice(5) : ""}</span>}
+                      {isEarlyEmp && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#F3E8FF", color:"#7E22CE", fontWeight:700 }}>조기취업 {cutoffLabel}</span>}
                       {isAfterCutoff && <span style={{ marginLeft:4, fontSize:9, color:T.mu }}>(입력불가)</span>}
                     </td>
                     <td style={{ padding:"10px 12px", textAlign:"center" }}>
@@ -4487,6 +4488,7 @@ const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null) => {
 // 과정 총 교육시간 산출
 const getTotalCourseHours = (course) => {
   if (!course) return 0;
+  const DEFAULT_DAILY_HOURS = 4;
 
   const ovs = (window._overridesRef?.current || []).filter(o => o.courseId === course.id);
 
@@ -4504,7 +4506,7 @@ const getTotalCourseHours = (course) => {
   const defaultDaily = (() => {
     const fromMin = parseTimeToMinutes(course.schedTimeFrom);
     const toMin   = parseTimeToMinutes(course.schedTimeTo);
-    return (fromMin !== null && toMin !== null && toMin > fromMin) ? (toMin - fromMin) / 60 : 4;
+    return (fromMin !== null && toMin !== null && toMin > fromMin) ? (toMin - fromMin) / 60 : DEFAULT_DAILY_HOURS;
   })();
 
   let total = 0;

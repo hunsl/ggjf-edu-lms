@@ -311,6 +311,27 @@ const fromBooking = b => ({
   color: b.color||"#EA580C",
 });
 
+const toOverride = r => r ? ({
+  id: r.id,
+  courseId: Number(r.course_id),
+  date: r.date,
+  type: r.type,
+  timeFrom: r.time_from || null,
+  timeTo: r.time_to || null,
+  hours: parseFloat(r.hours) || 0,
+  reason: r.reason || '',
+}) : null;
+
+const fromOverride = o => ({
+  course_id: o.courseId,
+  date: o.date,
+  type: o.type,
+  time_from: o.timeFrom || null,
+  time_to: o.timeTo || null,
+  hours: o.hours || 0,
+  reason: o.reason || '',
+});
+
 /* ===========================================================
    GLOBAL STYLES
 =========================================================== */
@@ -536,6 +557,12 @@ const loadHolidays = async () => {
 
 const isHoliday = (dateStr) => _holidaySet.has(dateStr);
 
+const isCancelledOverride = (courseId, dateStr) => {
+  const ovs = window._overridesRef?.current || [];
+  if (!courseId || !dateStr) return false;
+  return ovs.some(o => o.courseId === Number(courseId) && o.date === dateStr && o.type === 'cancelled');
+};
+
 const getHolidaysInRange = (from, to) => {
   const result = [];
   if (!from || !to) return result;
@@ -681,7 +708,7 @@ const buildCourseDates = (course) => {
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     if (allowedDows.has(d.getDay())) {
       const ds = getLocalStr(d);
-      if (!isHoliday(ds)) out.push(ds);
+      if (!isHoliday(ds) && !isCancelledOverride(course?.id, ds)) out.push(ds);
     }
   }
 
@@ -2426,7 +2453,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 /* ===========================================================
    QR ATTENDANCE  ★ QR 출석 체크
 =========================================================== */
-const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
+const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRatesUpdated }) => {
   const initCourse = courses[3] || courses[0];
   const initDates  = buildCourseDates(initCourse);
   const [course, setCourse]   = useState(initCourse);
@@ -3028,6 +3055,26 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
         </div>
         </div>
       </Card>
+
+      {/* ── 일정 예외 관리 ── */}
+      <ScheduleOverridePanel
+        course={course}
+        overrides={overrides.filter(o => o.courseId === course.id)}
+        onAdd={async (ov) => {
+          const { data, error } = await sbInsert("course_schedule_overrides", fromOverride(ov));
+          if (error) { alert("저장 오류: " + (error.message || JSON.stringify(error))); return; }
+          if (data && setOverrides) setOverrides(prev => [...prev, toOverride(data)]);
+          const cs = students.filter(s => s.cid === course.id);
+          for (const s of cs) { recalculateHoursAndRate(s.id, course.id).catch(console.warn); }
+        }}
+        onDelete={async (id) => {
+          const { error } = await sbDelete("course_schedule_overrides", `id=eq.${id}`);
+          if (error) { alert("삭제 오류"); return; }
+          if (setOverrides) setOverrides(prev => prev.filter(o => o.id !== id));
+          const cs = students.filter(s => s.cid === course.id);
+          for (const s of cs) { recalculateHoursAndRate(s.id, course.id).catch(console.warn); }
+        }}
+      />
       </>)}
 
       {mode === "qr" ? (
@@ -3170,7 +3217,11 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                       {inRec ? att.label[0] : "?"}
                     </div>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:T.tx }}>
+                        {s.name}
+                        {s.enrollmentStatus === '중도탈락' && <span style={{ marginLeft:5, fontSize:9, color:"#DC2626" }}>중도탈락</span>}
+                        {s.enrollmentStatus === '조기취업' && <span style={{ marginLeft:5, fontSize:9, color:"#7E22CE" }}>조기취업</span>}
+                      </div>
                       <div style={{ fontSize:10, color:T.mu, marginTop:1, display:"flex", gap:8 }}>
                         {inRec  && <span style={{color:"#2563EB"}}>📥 입실 {inRec.time}</span>}
                         {outRec && <span style={{color:T.p}}>📤 퇴실 {outRec.time}</span>}
@@ -3223,12 +3274,17 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 const curOut = row.outTime || "";
                 const curReason = row.reason || "";
                 const curAbsType = row.absenceType || "personal";
-                const dirty  = row.saved === false; // 저장 전 수정됨
                 const saved  = row.saved === true;
+                const isDropout = s.enrollmentStatus === '중도탈락';
+                const isEarlyEmp = s.enrollmentStatus === '조기취업';
+                const isRestricted = isDropout || isEarlyEmp;
+                const cutoffDate = s.statusChangeDate;
+                const isAfterCutoff = isRestricted && cutoffDate && date > cutoffDate;
                 const setRow = (patch) => setManualAtt(p => ({
                   ...p, [s.id]: { ...(p[s.id]||{}), ...patch, saved: false }
                 }));
                 const saveRow = async () => {
+                  if (isAfterCutoff) return;
                   try {
                     const now = new Date();
                     const defaultTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -3268,10 +3324,15 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                 return (
                   <tr key={s.id} className="row-hover"
                     style={{ borderBottom:`1px solid ${T.bd}`,
-                       background: saved ? "#F0FDF4" : "transparent" }}>
+                      background: saved ? "#F0FDF4" : isDropout ? "#FEF2F2" : isEarlyEmp ? "#F3E8FF" : "transparent",
+                      opacity: isAfterCutoff ? 0.5 : 1,
+                      textDecoration: isDropout ? "line-through" : "none" }}>
                     <td style={{ padding:"10px 12px", fontSize:13, fontWeight:700, color:T.tx }}>
                       {s.name}
                       {s.rate<80 && <span style={{ marginLeft:6, fontSize:10, color:T.danger }}>⚠</span>}
+                      {isDropout && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEE2E2", color:"#DC2626", fontWeight:700 }}>중도탈락</span>}
+                      {isEarlyEmp && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#F3E8FF", color:"#7E22CE", fontWeight:700 }}>조기취업 {cutoffDate ? cutoffDate.slice(5) : ""}</span>}
+                      {isAfterCutoff && <span style={{ marginLeft:4, fontSize:9, color:T.mu }}>(입력불가)</span>}
                     </td>
                     <td style={{ padding:"10px 12px", textAlign:"center" }}>
                       <div style={{ fontSize:13, fontWeight:800, color:rateColor(s.rate) }}>{s.rate}%</div>
@@ -3281,15 +3342,21 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     <td style={{ padding:"10px 8px", textAlign:"center" }}>
                       <input type="time" value={curIn}
                         onChange={e=>setRow({inTime:e.target.value})}
+                        disabled={isAfterCutoff}
                         style={{ width:90, padding:"5px 6px", borderRadius:6, fontSize:12,
-                          border:`1px solid ${curIn?T.ok:T.bd}`, outline:"none" }}/>
+                          border:`1px solid ${curIn?T.ok:T.bd}`, outline:"none",
+                          cursor: isAfterCutoff ? "not-allowed" : "text",
+                          background: isAfterCutoff ? "#F1F5F9" : "#fff" }}/>
                     </td>
                     {/* 퇴실 시간 */}
                     <td style={{ padding:"10px 8px", textAlign:"center" }}>
                       <input type="time" value={curOut}
                         onChange={e=>setRow({outTime:e.target.value})}
+                        disabled={isAfterCutoff}
                         style={{ width:90, padding:"5px 6px", borderRadius:6, fontSize:12,
-                          border:`1px solid ${curOut?T.p:T.bd}`, outline:"none" }}/>
+                          border:`1px solid ${curOut?T.p:T.bd}`, outline:"none",
+                          cursor: isAfterCutoff ? "not-allowed" : "text",
+                          background: isAfterCutoff ? "#F1F5F9" : "#fff" }}/>
                     </td>
                     {/* 일별 시간 */}
                     <td style={{ padding:"10px 8px", textAlign:"center" }}>
@@ -3298,6 +3365,15 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                         const daily = calculateDailyHours({ check_in: curIn, check_out: curOut, status: curStatus || 'O' });
                         return <span style={{ fontSize:12, fontWeight:700, color:T.ok }}>{daily.toFixed(1)}h</span>;
                       })()}
+                      {(() => {
+                        const ov = overrides.find(o => o.courseId === course.id && o.date === date);
+                        if (ov) return (
+                          <div style={{ fontSize:8, color: ov.type==='cancelled'?'#DC2626':ov.type==='extended'?'#1D4ED8':'#D97706', fontWeight:700, marginTop:2 }}>
+                            {ov.type==='cancelled'?'🚫휴강':ov.type==='extended'?`🔄${ov.hours}h`:`⏱️${ov.hours}h`}
+                          </div>
+                        );
+                        return null;
+                      })()}
                     </td>
                     {/* 출결 상태 */}
                     <td style={{ padding:"10px 8px" }}>
@@ -3305,10 +3381,12 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                         {Object.entries(ATT_MAP).map(([k,v])=>(
                           <button key={k}
                             onClick={()=>setRow({status:k})}
+                            disabled={isAfterCutoff}
                             style={{ width:40, height:26, border:"none", borderRadius:5,
-                              cursor:"pointer", fontSize:11, fontWeight:700, transition:"all .15s",
+                              cursor:isAfterCutoff ? "not-allowed" : "pointer", fontSize:11, fontWeight:700, transition:"all .15s",
                               background: curStatus===k ? v.color : T.s2,
-                              color: curStatus===k ? "#fff" : T.mu }}>
+                              color: curStatus===k ? "#fff" : T.mu,
+                              opacity: isAfterCutoff ? 0.7 : 1 }}>
                             {v.label}
                           </button>
                         ))}
@@ -3320,6 +3398,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                         <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                           <select value={curAbsType}
                             onChange={e=>setRow({absenceType:e.target.value})}
+                            disabled={isAfterCutoff}
                             style={{ width:"100%", padding:"3px 6px", borderRadius:5, fontSize:11,
                               border:`1px solid ${T.bd}`, outline:"none", background:T.s2, color:T.tx }}>
                             <option value="excused">부득이한 사유 (㉠)</option>
@@ -3327,6 +3406,7 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                           </select>
                           <input type="text" value={curReason}
                             onChange={e=>setRow({reason:e.target.value})}
+                            disabled={isAfterCutoff}
                             placeholder="사유 입력..."
                             style={{ width:"100%", padding:"3px 6px", borderRadius:5, fontSize:11,
                               border:`1px solid ${T.bd}`, outline:"none", color:T.tx, background:T.s2 }}/>
@@ -3338,9 +3418,11 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
                     {/* 개별 저장 버튼 */}
                     <td style={{ padding:"10px 8px", textAlign:"center" }}>
                       <button onClick={saveRow}
+                        disabled={isAfterCutoff}
                         style={{ padding:"6px 12px", borderRadius:6, border:"none",
                           background: saved ? T.ok : T.p, color:"#fff",
-                          fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                          fontSize:11, fontWeight:700, cursor:isAfterCutoff ? "not-allowed" : "pointer",
+                          whiteSpace:"nowrap", opacity: isAfterCutoff ? 0.65 : 1 }}>
                         {saved ? "✓ 저장됨" : "저장"}
                       </button>
                     </td>
@@ -3424,6 +3506,123 @@ const AttendanceMgmt = ({ students, courses, onRatesUpdated }) => {
   );
 };
 
+const ScheduleOverridePanel = ({ course, overrides, onAdd, onDelete }) => {
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ date:'', type:'cancelled', timeFrom:'', timeTo:'', hours:0, reason:'' });
+  const set = (k,v) => setForm(p => ({...p, [k]:v}));
+
+  const typeLabels = { extended:'🔄 보강', cancelled:'🚫 휴강', shortened:'⏱️ 단축' };
+  const typeBg = { extended:'#DBEAFE', cancelled:'#FEE2E2', shortened:'#FEF3C7' };
+  const typeColor = { extended:'#1D4ED8', cancelled:'#DC2626', shortened:'#D97706' };
+
+  const handleSave = () => {
+    if (!form.date) { alert("날짜를 선택하세요."); return; }
+    if (form.type !== 'cancelled' && (!form.timeFrom || !form.timeTo)) { alert("시간을 입력하세요."); return; }
+    const hours = form.type === 'cancelled' ? 0 : (() => {
+      const from = parseTimeToMinutes(form.timeFrom);
+      const to = parseTimeToMinutes(form.timeTo);
+      return from !== null && to !== null && to > from ? Math.round((to - from) / 60 * 10) / 10 : 0;
+    })();
+    onAdd({
+      courseId: course.id,
+      date: form.date,
+      type: form.type,
+      timeFrom: form.type === 'cancelled' ? null : form.timeFrom,
+      timeTo: form.type === 'cancelled' ? null : form.timeTo,
+      hours,
+      reason: form.reason,
+    });
+    setShowModal(false);
+    setForm({ date:'', type:'cancelled', timeFrom:'', timeTo:'', hours:0, reason:'' });
+  };
+
+  if (!course) return null;
+
+  if (overrides.length === 0 && !showModal) {
+    return (
+      <div style={{ marginBottom:14, display:"flex", justifyContent:"flex-end" }}>
+        <button onClick={()=>setShowModal(true)} style={{
+          padding:"6px 12px", borderRadius:8, border:`1px solid ${T.bd}`,
+          background:T.s2, color:T.mu, cursor:"pointer", fontSize:11, fontWeight:600
+        }}>📅 일정 예외 추가</button>
+      </div>
+    );
+  }
+
+  const inp = { padding:"6px 8px", border:`1px solid ${T.bd}`, borderRadius:7, fontSize:12, outline:"none", background:T.s2 };
+
+  return (
+    <Card style={{ padding:"14px 18px", marginBottom:14 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:T.tx }}>📅 일정 예외 관리</div>
+        <button onClick={()=>setShowModal(true)} style={{
+          padding:"5px 10px", borderRadius:7, border:"none",
+          background:T.p, color:"#fff", cursor:"pointer", fontSize:11, fontWeight:700
+        }}>+ 추가</button>
+      </div>
+
+      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        {[...overrides].sort((a,b) => a.date.localeCompare(b.date)).map(ov => (
+          <div key={ov.id} style={{ display:"flex", alignItems:"center", gap:8,
+            padding:"8px 12px", borderRadius:8, background:typeBg[ov.type], border:`1px solid ${typeColor[ov.type]}30` }}>
+            <span style={{ fontSize:11, fontWeight:700, color:T.tx, minWidth:70 }}>{ov.date.slice(5)}</span>
+            <span style={{ fontSize:11, fontWeight:700, color:typeColor[ov.type] }}>{typeLabels[ov.type]}</span>
+            <span style={{ fontSize:11, color:T.mu }}>
+              {ov.type === 'cancelled' ? '—' : `${ov.timeFrom?.slice(0,5)}~${ov.timeTo?.slice(0,5)}`}
+            </span>
+            <span style={{ fontSize:11, fontWeight:700, color:T.tx }}>{ov.hours}h</span>
+            <span style={{ fontSize:10, color:T.mu, flex:1 }}>{ov.reason}</span>
+            <button onClick={()=>{ if(window.confirm("삭제하시겠습니까?")) onDelete(ov.id); }}
+              style={{ width:22, height:22, borderRadius:5, border:"none", background:"#FEF2F2",
+                color:T.danger, cursor:"pointer", fontSize:11, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+          </div>
+        ))}
+      </div>
+
+      {showModal && (
+        <div style={{ marginTop:12, padding:"14px 16px", borderRadius:10, background:T.s2, border:`1px solid ${T.bd}` }}>
+          <div style={{ fontSize:12, fontWeight:700, color:T.tx, marginBottom:10 }}>📅 일정 예외 추가</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+            <div>
+              <label style={{ fontSize:10, color:T.mu, display:"block", marginBottom:4 }}>날짜</label>
+              <input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={{...inp, width:"100%"}}/>
+            </div>
+            <div>
+              <label style={{ fontSize:10, color:T.mu, display:"block", marginBottom:4 }}>유형</label>
+              <select value={form.type} onChange={e=>set("type",e.target.value)} style={{...inp, width:"100%", cursor:"pointer"}}>
+                <option value="cancelled">🚫 자체 휴강</option>
+                <option value="extended">🔄 보강 (시간연장)</option>
+                <option value="shortened">⏱️ 단축 수업</option>
+              </select>
+            </div>
+          </div>
+          {form.type !== 'cancelled' && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+              <div>
+                <label style={{ fontSize:10, color:T.mu, display:"block", marginBottom:4 }}>시작 시간</label>
+                <input type="time" value={form.timeFrom} onChange={e=>set("timeFrom",e.target.value)} style={{...inp, width:"100%"}}/>
+              </div>
+              <div>
+                <label style={{ fontSize:10, color:T.mu, display:"block", marginBottom:4 }}>종료 시간</label>
+                <input type="time" value={form.timeTo} onChange={e=>set("timeTo",e.target.value)} style={{...inp, width:"100%"}}/>
+              </div>
+            </div>
+          )}
+          <div style={{ marginBottom:10 }}>
+            <label style={{ fontSize:10, color:T.mu, display:"block", marginBottom:4 }}>사유</label>
+            <input value={form.reason} onChange={e=>set("reason",e.target.value)}
+              placeholder="예: 어린이날 대체휴무" style={{...inp, width:"100%"}}/>
+          </div>
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            <button onClick={()=>setShowModal(false)} style={{ padding:"6px 14px", borderRadius:7, border:`1px solid ${T.bd}`, background:T.s2, color:T.mu, cursor:"pointer", fontSize:11 }}>취소</button>
+            <button onClick={handleSave} style={{ padding:"6px 14px", borderRadius:7, border:"none", background:T.p, color:"#fff", cursor:"pointer", fontSize:11, fontWeight:700 }}>저장</button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+};
+
 /* ===========================================================
    ATTENDANCE SHEET  과정별 출석부 (문서형)
 =========================================================== */
@@ -3458,7 +3657,7 @@ const buildCourseDatesAll = (course) => {
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     if (allowedDows.has(d.getDay())) {
       const ds = getLocalStr(d);
-      if (!isHoliday(ds)) out.push(ds);
+      if (!isHoliday(ds) && !isCancelledOverride(course?.id, ds)) out.push(ds);
     }
   }
   return out;
@@ -3548,12 +3747,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
   const tables = chunks.map((chunk, i) => {
     const pageNum = i + 1;
     const isLast = pageNum === totalPages;
-    const signHtml = isLast ? `
-  <div class="sign-area">
-    <div class="sign-box"><div class="lbl2">담당 강사</div><div class="line"></div></div>
-    <div class="sign-box"><div class="lbl2">담 당 자</div><div class="line"></div></div>
-    <div class="sign-box"><div class="lbl2">센 터 장</div><div class="line"></div></div>
-  </div>` : '';
+    const signHtml = '';
     return buildTable(chunk, pageNum) + signHtml + (i < totalPages-1 ? '<div style="page-break-before:always;margin-top:6px;"></div>' : '');
   }).join('');
 
@@ -4293,13 +4487,36 @@ const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null) => {
 // 과정 총 교육시간 산출
 const getTotalCourseHours = (course) => {
   if (!course) return 0;
-  if (course.hours && course.hours > 0) return course.hours;
-  const fromMin = parseTimeToMinutes(course.schedTimeFrom);
-  const toMin   = parseTimeToMinutes(course.schedTimeTo);
-  if (fromMin === null || toMin === null || toMin <= fromMin) return 0;
-  const dailyHours = (toMin - fromMin) / 60;
-  const trainingDays = buildCourseDatesAll(course).length;
-  return dailyHours * trainingDays;
+
+  const ovs = (window._overridesRef?.current || []).filter(o => o.courseId === course.id);
+
+  if (ovs.length === 0) {
+    if (course.hours && course.hours > 0) return course.hours;
+    const fromMin = parseTimeToMinutes(course.schedTimeFrom);
+    const toMin   = parseTimeToMinutes(course.schedTimeTo);
+    if (fromMin === null || toMin === null || toMin <= fromMin) return 0;
+    const dailyHours = (toMin - fromMin) / 60;
+    const trainingDays = buildCourseDatesAll(course).length;
+    return dailyHours * trainingDays;
+  }
+
+  const allDates = buildCourseDatesAll(course);
+  const defaultDaily = (() => {
+    const fromMin = parseTimeToMinutes(course.schedTimeFrom);
+    const toMin   = parseTimeToMinutes(course.schedTimeTo);
+    return (fromMin !== null && toMin !== null && toMin > fromMin) ? (toMin - fromMin) / 60 : 4;
+  })();
+
+  let total = 0;
+  for (const date of allDates) {
+    const ov = ovs.find(o => o.date === date);
+    if (ov) {
+      total += ov.hours;
+    } else {
+      total += defaultDaily;
+    }
+  }
+  return total;
 };
 
 // 조기취업자 비례 과정시간 산출
@@ -10082,6 +10299,7 @@ function App() {
   const [mobileSidebar,  setMobileSidebar]  = useState(false);
   const [students,   setStudents]   = useState([]);
   const [courses,    setCourses]    = useState(COURSES); // 로딩 전 시드로 표시
+  const [overrides,  setOverrides]  = useState([]);
   const [editTarget, setEditTarget] = useState(null);
   const [showNew,    setShowNew]    = useState(false);
   const [showDataMgr,setShowDataMgr]= useState(false);
@@ -10118,13 +10336,16 @@ function App() {
   const [dbError,    setDbError]    = useState("");     // DB 연결 오류
   const loadDataRef  = useRef(null);                    // 재시도용 함수 ref
   // 최신 courses/students 참조 (stale closure 방지)
-  const coursesRef  = useRef(courses);
+  const coursesRef = useRef(courses);
   const studentsRef = useRef(students);
-  useEffect(() => { coursesRef.current  = courses;  }, [courses]);
+  const overridesRef = useRef(overrides);
+  useEffect(() => { coursesRef.current = courses; }, [courses]);
   useEffect(() => { studentsRef.current = students; }, [students]);
+  useEffect(() => { overridesRef.current = overrides; }, [overrides]);
   // 시간 계산 모듈에서 접근할 수 있도록 window에 노출
   useEffect(() => { window._coursesRef  = coursesRef;  }, []);
   useEffect(() => { window._studentsRef = studentsRef; }, []);
+  useEffect(() => { window._overridesRef = overridesRef; }, []);
   useEffect(() => { window._setStudents = setStudents; }, [setStudents]);
 
   // ── 계정 로드 (앱 시작 시 1회) ──
@@ -10166,20 +10387,27 @@ function App() {
       setLoading(true);
       setDbError("");
       try {
-        const [cRes, sRes] = await Promise.all([
+        const [cRes, sRes, ovRes] = await Promise.all([
           sbGet("courses", "select=*&order=id"),
           sbGet("students", "select=*&order=id"),
+          sbGet("course_schedule_overrides", "select=*&order=date"),
         ]);
         if (cRes.error) throw cRes.error;
         if (sRes.error) throw sRes.error;
-        if (cRes.data && cRes.data.length > 0) setCourses(cRes.data.map(toCourse));
+        const loadedCourses = (cRes.data || []).map(toCourse);
+        if (loadedCourses.length > 0) setCourses(loadedCourses);
         const loadedStudents = (sRes.data || []).map(toStudent);
         setStudents(loadedStudents);
+        if (ovRes?.error) {
+          console.warn("오버라이드 로드 실패:", ovRes.error);
+          setOverrides([]);
+        } else {
+          setOverrides((ovRes?.data || []).map(toOverride).filter(Boolean));
+        }
         setLoading(false);
         // 공휴일 로드 (실패해도 앱 동작에 영향 없음)
         loadHolidays().catch(console.warn);
         // 누적시간 일괄 재계산 (백그라운드 — 값이 달라진 학생만 DB/state 업데이트)
-        const loadedCourses = (cRes.data || []).map(toCourse);
         batchRecalculateAllHours(loadedStudents, loadedCourses).catch(console.warn);
       } catch (e) {
         setDbError(diagErr(e));
@@ -10519,7 +10747,7 @@ function App() {
       case "students":    return <StudentMgmt students={students} courses={courses} onAdd={addStudents} onEdit={setEditTarget} onUpdate={updateStudent} onDelete={deleteStudent} onNew={()=>setShowNew(true)} currentUser={currentUser}/>;
       case "instructors": return <InstructorMgmt courses={courses} onUpdateCourse={updateCourse}/>;
       case "rooms":       return <RoomMgmt courses={courses}/>;
-      case "attendance":  return <AttendanceMgmt students={students} courses={courses} onRatesUpdated={recalculateAttendanceRate}/>;
+      case "attendance":  return <AttendanceMgmt students={students} courses={courses} overrides={overrides} setOverrides={setOverrides} onRatesUpdated={recalculateAttendanceRate}/>;
       case "completion":  return <CompletionMgmt students={students} courses={courses}/>;
       case "cert":        return <CertMgmt students={students} courses={courses}/>;
       default:            return null;

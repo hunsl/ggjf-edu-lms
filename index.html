@@ -3062,14 +3062,14 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
         overrides={overrides.filter(o => o.courseId === course.id)}
         onAdd={async (ov) => {
           const { data, error } = await sbInsert("course_schedule_overrides", fromOverride(ov));
-          if (error) { alert("저장 오류: " + (error.message || JSON.stringify(error))); return; }
+          if (error) { alert("일정 예외를 저장하는 중 오류가 발생했습니다. 다시 시도해주세요."); return; }
           if (data && setOverrides) setOverrides(prev => [...prev, toOverride(data)]);
           const cs = students.filter(s => s.cid === course.id);
           for (const s of cs) { recalculateHoursAndRate(s.id, course.id).catch(console.warn); }
         }}
         onDelete={async (id) => {
           const { error } = await sbDelete("course_schedule_overrides", `id=eq.${id}`);
-          if (error) { alert("삭제 오류"); return; }
+          if (error) { alert("일정 예외를 삭제하는 중 오류가 발생했습니다."); return; }
           if (setOverrides) setOverrides(prev => prev.filter(o => o.id !== id));
           const cs = students.filter(s => s.cid === course.id);
           for (const s of cs) { recalculateHoursAndRate(s.id, course.id).catch(console.warn); }
@@ -3276,11 +3276,11 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                 const curAbsType = row.absenceType || "personal";
                 const saved  = row.saved === true;
                 const isDropout = s.enrollmentStatus === '중도탈락';
-                const isEarlyEmp = s.enrollmentStatus === '조기취업';
-                const isRestricted = isDropout || isEarlyEmp;
+                const isEarlyEmployment = s.enrollmentStatus === '조기취업';
+                const isStatusRestricted = isDropout || isEarlyEmployment;
                 const cutoffDate = s.statusChangeDate;
                 const cutoffLabel = (typeof cutoffDate === "string" && cutoffDate.length >= 10) ? cutoffDate.slice(5) : "";
-                const isAfterCutoff = isRestricted && cutoffDate && date > cutoffDate;
+                const isAfterCutoff = isStatusRestricted && cutoffDate && date > cutoffDate;
                 const setRow = (patch) => setManualAtt(p => ({
                   ...p, [s.id]: { ...(p[s.id]||{}), ...patch, saved: false }
                 }));
@@ -3325,14 +3325,14 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                 return (
                   <tr key={s.id} className="row-hover"
                     style={{ borderBottom:`1px solid ${T.bd}`,
-                      background: saved ? "#F0FDF4" : isDropout ? "#FEF2F2" : isEarlyEmp ? "#F3E8FF" : "transparent",
+                      background: saved ? "#F0FDF4" : isDropout ? "#FEF2F2" : isEarlyEmployment ? "#F3E8FF" : "transparent",
                       opacity: isAfterCutoff ? 0.5 : 1,
                       textDecoration: isDropout ? "line-through" : "none" }}>
                     <td style={{ padding:"10px 12px", fontSize:13, fontWeight:700, color:T.tx }}>
                       {s.name}
                       {s.rate<80 && <span style={{ marginLeft:6, fontSize:10, color:T.danger }}>⚠</span>}
-                      {isDropout && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEE2E2", color:"#DC2626", fontWeight:700 }}>중도탈락</span>}
-                      {isEarlyEmp && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#F3E8FF", color:"#7E22CE", fontWeight:700 }}>조기취업 {cutoffLabel}</span>}
+                      {isDropout && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEE2E2", color:"#DC2626", fontWeight:700 }}>중도탈락 {cutoffLabel}</span>}
+                      {isEarlyEmployment && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#F3E8FF", color:"#7E22CE", fontWeight:700 }}>조기취업 {cutoffLabel}</span>}
                       {isAfterCutoff && <span style={{ marginLeft:4, fontSize:9, color:T.mu }}>(입력불가)</span>}
                     </td>
                     <td style={{ padding:"10px 12px", textAlign:"center" }}>
@@ -3517,8 +3517,8 @@ const ScheduleOverridePanel = ({ course, overrides, onAdd, onDelete }) => {
   const typeColor = { extended:'#1D4ED8', cancelled:'#DC2626', shortened:'#D97706' };
 
   const handleSave = () => {
-    if (!form.date) { alert("날짜를 선택하세요."); return; }
-    if (form.type !== 'cancelled' && (!form.timeFrom || !form.timeTo)) { alert("시간을 입력하세요."); return; }
+    if (!form.date) { alert("일정 예외를 추가하려면 날짜를 선택하세요."); return; }
+    if (form.type !== 'cancelled' && (!form.timeFrom || !form.timeTo)) { alert("보강/단축 수업은 시작 시간과 종료 시간을 입력해야 합니다."); return; }
     const hours = form.type === 'cancelled' ? 0 : (() => {
       const from = parseTimeToMinutes(form.timeFrom);
       const to = parseTimeToMinutes(form.timeTo);
@@ -4488,7 +4488,7 @@ const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null) => {
 // 과정 총 교육시간 산출
 const getTotalCourseHours = (course) => {
   if (!course) return 0;
-  const DEFAULT_DAILY_HOURS = 4;
+  const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
 
   const ovs = (window._overridesRef?.current || []).filter(o => o.courseId === course.id);
 

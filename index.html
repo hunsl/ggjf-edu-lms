@@ -2808,6 +2808,7 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
   const absentCnt      = Object.values(records).filter(r=>r.status==="A").length;
   const courseStudents = students.filter(s=>s.cid===course.id);
   const unconfirmedCnt = courseStudents.filter(s=>!records[s.id] || records[s.id].status==="U").length;
+  const selectedDateOverride = overrides.find(o => o.courseId === course.id && o.date === date) || null;
 
   // ── 시뮬레이션 ──
   const startSim = () => {
@@ -3279,7 +3280,7 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                 const isEarlyEmployment = s.enrollmentStatus === '조기취업';
                 const isStatusRestricted = isDropout || isEarlyEmployment;
                 const cutoffDate = s.statusChangeDate;
-                const cutoffLabel = (typeof cutoffDate === "string" && cutoffDate.length >= 10) ? cutoffDate.slice(5) : "";
+                const cutoffLabel = (typeof cutoffDate === "string" && cutoffDate.length >= 10) ? cutoffDate.slice(5) : ""; // YYYY-MM-DD 기준
                 const isAfterCutoff = isStatusRestricted && cutoffDate && date > cutoffDate;
                 const setRow = (patch) => setManualAtt(p => ({
                   ...p, [s.id]: { ...(p[s.id]||{}), ...patch, saved: false }
@@ -3367,10 +3368,9 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                         return <span style={{ fontSize:12, fontWeight:700, color:T.ok }}>{daily.toFixed(1)}h</span>;
                       })()}
                       {(() => {
-                        const ov = overrides.find(o => o.courseId === course.id && o.date === date);
-                        if (ov) return (
-                          <div style={{ fontSize:8, color: ov.type==='cancelled'?'#DC2626':ov.type==='extended'?'#1D4ED8':'#D97706', fontWeight:700, marginTop:2 }}>
-                            {ov.type==='cancelled'?'🚫휴강':ov.type==='extended'?`🔄${ov.hours}h`:`⏱️${ov.hours}h`}
+                        if (selectedDateOverride) return (
+                          <div style={{ fontSize:8, color: selectedDateOverride.type==='cancelled'?'#DC2626':selectedDateOverride.type==='extended'?'#1D4ED8':'#D97706', fontWeight:700, marginTop:2 }}>
+                            {selectedDateOverride.type==='cancelled'?'🚫휴강':selectedDateOverride.type==='extended'?`🔄${selectedDateOverride.hours}h`:`⏱️${selectedDateOverride.hours}h`}
                           </div>
                         );
                         return null;
@@ -4443,6 +4443,7 @@ const generateCertQRDataUrl = (certNumber) => {
 /* ===========================================================
    ⏱️ HOURS CALCULATOR — 시간 기반 출석률 계산
 =========================================================== */
+const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
 
 // HH:MM → 분(minutes) 변환
 const parseTimeToMinutes = (timeStr) => {
@@ -4488,7 +4489,6 @@ const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null) => {
 // 과정 총 교육시간 산출
 const getTotalCourseHours = (course) => {
   if (!course) return 0;
-  const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
 
   const ovs = (window._overridesRef?.current || []).filter(o => o.courseId === course.id);
 

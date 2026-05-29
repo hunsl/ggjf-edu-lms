@@ -1439,7 +1439,13 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
             {[{label:"총 시수",key:"hours",ph:"200"},{label:"쉬는시간(분)",key:"breakMinutes",ph:"60"},{label:"교육목표",key:"tgt",ph:"20"},{label:"수료목표",key:"cGoal",ph:"18"},{label:"취업목표",key:"eGoal",ph:"12"}].map(({label,key,ph})=>(
               <div key={key}>
                 <label style={{ fontSize:11,fontWeight:600,color:T.mu,display:"block",marginBottom:5 }}>{label}</label>
-                <input type="number" value={form[key] ?? ""} onChange={e=>set(key,e.target.value === "" ? "" : +e.target.value)} placeholder={ph} style={inp}/>
+                <input
+                  type="number"
+                  value={key === "breakMinutes" ? (form[key] ?? "") : (form[key] || "")}
+                  onChange={e=>set(key, e.target.value === "" ? (key === "breakMinutes" ? "" : 0) : +e.target.value)}
+                  placeholder={ph}
+                  style={inp}
+                />
               </div>
             ))}
           </div>

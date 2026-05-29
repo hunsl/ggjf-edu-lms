@@ -3379,7 +3379,7 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                     <td style={{ padding:"10px 8px", textAlign:"center" }}>
                       {(() => {
                         if (!curIn || !curOut) return <span style={{ fontSize:11, color:T.mu }}>—</span>;
-                        const daily = calculateDailyHours({ check_in: curIn, check_out: curOut, status: curStatus || 'O' }, getCourseBreakMinutes(course));
+                        const daily = calculateDailyHours({ check_in: curIn, check_out: curOut, status: curStatus || 'O' }, getCourseBreakMinutes(course), getCourseScheduleMinutes(course));
                         return <span style={{ fontSize:12, fontWeight:700, color:T.ok }}>{daily.toFixed(1)}h</span>;
                       })()}
                       {(() => {
@@ -3937,6 +3937,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
   // 화면용: 현재 표시할 날짜 (최대 20개씩 페이징)
   const PAGE_SIZE = 20;
   const [datePage, setDatePage] = useState(0);
+  const [showTimes, setShowTimes] = useState(false);
   const totalDatePages = Math.ceil(allDates.length / PAGE_SIZE);
   const visibleDates = allDates.slice(datePage * PAGE_SIZE, (datePage + 1) * PAGE_SIZE);
   const visibleDateEnd = visibleDates[visibleDates.length - 1] || "";
@@ -3976,6 +3977,13 @@ const AttendanceSheet = ({ course, courses, students }) => {
           </div>
           {instructorName && <Chip label={`강사: ${instructorName}`} bg={T.pbg} color={T.p}/>}
           <div style={{ marginLeft:"auto", display:"flex", gap:6 }}>
+            <button type="button" onClick={() => setShowTimes(p => !p)}
+              style={{ padding:"5px 10px", borderRadius:7, fontSize:11, fontWeight:600, cursor:"pointer",
+                border:`1.5px solid ${showTimes ? T.p : T.bd}`,
+                background: showTimes ? T.pbg : T.s2,
+                color: showTimes ? T.p : T.mu }}>
+              ⏱ 시간 {showTimes ? "숨기기" : "보기"}
+            </button>
             <Btn size="sm" onClick={() => {
               printAttendanceSheet(sheetCourse, courseStudents, allDates, attData, instructorName);
             }}>
@@ -4020,14 +4028,14 @@ const AttendanceSheet = ({ course, courses, students }) => {
             </div>
           )}
           <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", minWidth: 120 + visibleDates.length * 36 }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", minWidth: 120 + visibleDates.length * (showTimes ? 48 : 28) }}>
             <thead>
               <tr style={{ background:T.s2 }}>
                 <th style={{ padding:"8px 6px", fontSize:10, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}`, position:"sticky", left:0, background:T.s2, zIndex:2, minWidth:36, textAlign:"center" }}>번호</th>
                 <th style={{ padding:"8px 6px", fontSize:10, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}`, position:"sticky", left:36, background:T.s2, zIndex:2, minWidth:70, textAlign:"left" }}>성명</th>
                 {visibleDates.map(d => (
                   <th key={d} style={{ padding:"4px 2px", fontSize:9, color: d > today ? T.mu : T.tx, fontWeight:600,
-                    borderBottom:`1px solid ${T.bd}`, textAlign:"center", minWidth:30, whiteSpace:"nowrap",
+                    borderBottom:`1px solid ${T.bd}`, textAlign:"center", minWidth: showTimes ? 44 : 26, whiteSpace:"nowrap",
                     background: d === today ? '#FFFBEB' : T.s2 }}>
                     <div>{fmtDateShort(d)}</div>
                     <div style={{ fontSize:8, color:T.mu, fontWeight:400 }}>{getDow(d)}</div>
@@ -4039,16 +4047,23 @@ const AttendanceSheet = ({ course, courses, students }) => {
             <tbody>
               {pageStudents.map((s, idx) => {
                 const presentDays = allDates.filter(d => attData[`${s.id}_${d}`]?.status === "O").length;
+                const absentDays  = allDates.filter(d => !( d > today) && attData[`${s.id}_${d}`]?.status === "A").length;
                 const cutoffDate = s.statusChangeDate || "";
                 const cutoffLabel = cutoffDate && cutoffDate.length >= 10 ? cutoffDate.slice(5) : "";
+                const rowBg = absentDays >= 3 ? "#FFF8F8" : undefined;
                 return (
-                  <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
-                    <td style={{ padding:"6px 4px", fontSize:11, color:T.mu, textAlign:"center", position:"sticky", left:0, background:T.s, zIndex:1 }}>{idx+1}</td>
-                    <td style={{ padding:"6px 6px", fontSize:12, fontWeight:700, color:T.tx, whiteSpace:"nowrap", position:"sticky", left:36, background:T.s, zIndex:1 }}>
+                  <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}`, background: rowBg }}>
+                    <td style={{ padding:"6px 4px", fontSize:11, color:T.mu, textAlign:"center", position:"sticky", left:0, background: rowBg || T.s, zIndex:1 }}>{idx+1}</td>
+                    <td style={{ padding:"6px 6px", fontSize:12, fontWeight:700, color:T.tx, whiteSpace:"nowrap", position:"sticky", left:36, background: rowBg || T.s, zIndex:1 }}>
                       {s.name}
                       {s.enrollmentStatus === "중도탈락" && (
                         <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEE2E2", color:"#DC2626", fontWeight:700 }}>
                           중도탈락 {cutoffLabel}
+                        </span>
+                      )}
+                      {absentDays >= 3 && (
+                        <span style={{ marginLeft:4, fontSize:9, padding:"1px 4px", borderRadius:4, background:"#FEF3C7", color:"#92400E", fontWeight:600 }}>
+                          결석 {absentDays}일
                         </span>
                       )}
                     </td>
@@ -4064,20 +4079,23 @@ const AttendanceSheet = ({ course, courses, students }) => {
                       if (!isFuture) {
                         if (!isDropoutBefore) {
                           if (status === "O") { display = "O"; color = T.ok; }
-                          else if (status === "A") { display = "X"; color = T.danger; }
+                          else if (status === "A") { display = "✕"; color = T.danger; }
                           else if (status === "L") { display = "△"; color = "#D97706"; }
+                          else if (!status) { display = "?"; color = "#CBD5E1"; }
                           const inTxt = rec.checkIn ? String(rec.checkIn).slice(0,5) : "";
                           const outTxt = rec.checkOut ? String(rec.checkOut).slice(0,5) : "";
                           if (inTxt || outTxt) timeText = `${inTxt || "—"}~${outTxt || "—"}`;
                         }
                       }
+                      const isException = display === "✕" || display === "△";
                       return (
-                        <td key={d} style={{ padding:"4px 2px", textAlign:"center", fontSize:12,
-                          fontWeight: display ? 700 : 400, color,
-                          background: d === today ? '#FFFBEB' : (isFuture ? T.s2 : 'transparent'),
-                          borderBottom:`1px solid ${T.bd}` }}>
+                        <td key={d} title={timeText || undefined}
+                          style={{ padding:"4px 2px", textAlign:"center", fontSize: isException ? 13 : 11,
+                            fontWeight: isException ? 800 : (display === "O" ? 500 : 400), color,
+                            background: d === today ? '#FFFBEB' : (isFuture ? T.s2 : (isException ? (display==="✕"?"#FFF0F0":"#FFFBEB") : 'transparent')),
+                            borderBottom:`1px solid ${T.bd}` }}>
                           {display}
-                          {timeText && <div style={{ fontSize:9, lineHeight:1.15, fontWeight:500, color:T.mu, whiteSpace:"nowrap" }}>{timeText}</div>}
+                          {showTimes && timeText && <div style={{ fontSize:8, lineHeight:1.2, fontWeight:500, color:T.mu, whiteSpace:"nowrap" }}>{timeText}</div>}
                         </td>
                       );
                     })}
@@ -4126,6 +4144,21 @@ const CompletionMgmt = ({ students, courses }) => {
   };
   const completed = list.filter(s => get(s) === '수료' || get(s) === '조기취업 수료').length;
   const rate = list.length ? Math.round(completed/list.length*100) : 0;
+
+  // 학생별 총 예정시간 계산 (조기취업은 비례 시간)
+  const getStudentTotalHours = s => {
+    if (s.enrollmentStatus === '조기취업' && s.statusChangeDate) {
+      return getProportionalCourseHours(course, s.statusChangeDate);
+    }
+    return getTotalCourseHours(course);
+  };
+
+  // 판정 근거 요약 통계
+  const courseTotalHours = getTotalCourseHours(course);
+  const atOrAbove = list.filter(s => s.rate >= threshold).length;
+  const nearMiss  = list.filter(s => s.rate >= threshold - 10 && s.rate < threshold).length;
+  const atRisk    = list.filter(s => s.rate < threshold - 10).length;
+  const earlyEmp  = list.filter(s => s.enrollmentStatus === '조기취업').length;
 
   const isComplete = s => get(s) === '수료' || get(s) === '조기취업 수료';
 
@@ -4213,11 +4246,42 @@ const CompletionMgmt = ({ students, courses }) => {
         </Card>
       </div>
 
+      {/* 판정 근거 요약 카드 */}
+      <Card style={{ padding:"12px 18px", marginBottom:14, background:"#F8FAFF", border:`1px solid ${T.bd}` }}>
+        <div style={{ fontSize:10, color:T.mu, fontWeight:700, marginBottom:8 }}>
+          📊 판정 근거 요약 — {course.name} · 총 {courseTotalHours}시간 · 기준 {threshold}%
+        </div>
+        <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ display:"inline-block", width:10, height:10, borderRadius:"50%", background:T.ok }}/>
+            <span style={{ fontSize:12, fontWeight:700, color:T.ok }}>{atOrAbove}명</span>
+            <span style={{ fontSize:11, color:T.mu }}>기준 이상</span>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ display:"inline-block", width:10, height:10, borderRadius:"50%", background:"#D97706" }}/>
+            <span style={{ fontSize:12, fontWeight:700, color:"#D97706" }}>{nearMiss}명</span>
+            <span style={{ fontSize:11, color:T.mu }}>경계({threshold-10}~{threshold}% 미만)</span>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ display:"inline-block", width:10, height:10, borderRadius:"50%", background:T.danger }}/>
+            <span style={{ fontSize:12, fontWeight:700, color:T.danger }}>{atRisk}명</span>
+            <span style={{ fontSize:11, color:T.mu }}>{threshold-10}% 미만</span>
+          </div>
+          {earlyEmp > 0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ display:"inline-block", width:10, height:10, borderRadius:"50%", background:"#7E22CE" }}/>
+              <span style={{ fontSize:12, fontWeight:700, color:"#7E22CE" }}>{earlyEmp}명</span>
+              <span style={{ fontSize:11, color:T.mu }}>조기취업(비례 기준)</span>
+            </div>
+          )}
+        </div>
+      </Card>
+
       <Card style={{ overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
             <tr style={{ background:T.s2 }}>
-              {["이름","출석률","자동판정","최종결과","비고"].map(h=>(
+              {["이름","누적시간","출석률","자동판정","최종결과","비고"].map(h=>(
                 <th key={h} style={{ padding:"10px 16px",
                   textAlign:h==="이름"?"left":"center",
                   fontSize:11, color:T.mu, fontWeight:700,
@@ -4230,8 +4294,8 @@ const CompletionMgmt = ({ students, courses }) => {
               const autoBase = s.enrollmentStatus === '조기취업' && s.rate >= threshold ? '조기취업 수료' : s.rate>=threshold?"수료":"미수료";
               const final = get(s);
               const changed = overrides[s.id]!==undefined && overrides[s.id]!==autoBase;
-              const finalBg = final==='수료'?T.pbg : final==='조기취업 수료'?"#F3E8FF" : "#FEF2F2";
-              const finalC  = final==='수료'?T.p   : final==='조기취업 수료'?"#7E22CE"  : T.danger;
+              const sTotal = getStudentTotalHours(s);
+              const isEarlyEmp = s.enrollmentStatus === '조기취업' && !!s.statusChangeDate;
               return (
                 <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
                   <td style={{ padding:"12px 16px", fontSize:13, fontWeight:700, color:T.tx }}>
@@ -4243,6 +4307,15 @@ const CompletionMgmt = ({ students, courses }) => {
                         size={10}
                         style={{ marginLeft:6 }}/>
                     )}
+                  </td>
+                  <td style={{ padding:"12px 16px", textAlign:"center" }}>
+                    <span style={{ fontSize:14, fontWeight:800, color:rateColor(s.rate) }}>
+                      {(s.accumulatedHours || 0).toFixed(1)}h
+                    </span>
+                    <div style={{ fontSize:10, color:T.mu, marginTop:1 }}>
+                      / {sTotal.toFixed(1)}h
+                      {isEarlyEmp && <span style={{ marginLeft:3, color:"#7E22CE" }}>비례</span>}
+                    </div>
                   </td>
                   <td style={{ padding:"12px 16px", textAlign:"center" }}>
                     <span style={{ fontSize:15, fontWeight:800, color:rateColor(s.rate) }}>{s.rate}%</span>
@@ -4525,6 +4598,14 @@ const getCourseBreakMinutes = (course) => {
   return normalizeBreakMinutes(course?.breakMinutes ?? course?.break_minutes);
 };
 
+// 과정 수업 시작/종료 시각을 분(minute) 단위로 반환 (시간 범위 클리핑용)
+const getCourseScheduleMinutes = (course) => {
+  const schedStart = parseTimeToMinutes(course?.schedTimeFrom);
+  const schedEnd   = parseTimeToMinutes(course?.schedTimeTo);
+  if (schedStart === null || schedEnd === null || schedEnd <= schedStart) return null;
+  return { schedStart, schedEnd };
+};
+
 const getScheduledDailyHours = (course) => {
   const fromMin = parseTimeToMinutes(course?.schedTimeFrom);
   const toMin   = parseTimeToMinutes(course?.schedTimeTo);
@@ -4534,12 +4615,20 @@ const getScheduledDailyHours = (course) => {
 };
 
 // 일별 출석시간 계산 (시간 단위, 소수점 2자리)
-const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES) => {
+// scheduleMinutes: { schedStart, schedEnd } (분 단위) — 수업시간 범위 내로 입/퇴실 클리핑
+const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null) => {
   if (record.status === 'A') return 0;
-  const checkInMin  = parseTimeToMinutes(record.check_in);
-  const checkOutMin = parseTimeToMinutes(record.check_out);
+  let checkInMin  = parseTimeToMinutes(record.check_in);
+  let checkOutMin = parseTimeToMinutes(record.check_out);
   if (checkInMin === null || checkOutMin === null) return 0;
   if (checkOutMin <= checkInMin) return 0;
+  // 수업시간 범위 내로 클리핑 (조기 입실·지연 퇴실 시간은 인정 제외)
+  if (scheduleMinutes) {
+    const { schedStart, schedEnd } = scheduleMinutes;
+    checkInMin  = Math.max(checkInMin,  schedStart);
+    checkOutMin = Math.min(checkOutMin, schedEnd);
+    if (checkOutMin <= checkInMin) return 0;
+  }
   const safeBreak = normalizeBreakMinutes(breakMinutes);
   const stayMinutes = checkOutMin - checkInMin;
   // 휴식시간은 점심 포함 장시간 수업을 전제로 하므로, 5시간 이상 체류한 경우에만 차감
@@ -4549,12 +4638,12 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES) => {
 };
 
 // 누적 훈련시간 계산
-const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES) => {
+const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null) => {
   const invalidRecords = [];
   let totalHours = 0;
   for (const record of attendanceRecords) {
     if (cutoffDate && record.date > cutoffDate) continue;
-    const dailyHours = calculateDailyHours(record, breakMinutes);
+    const dailyHours = calculateDailyHours(record, breakMinutes, scheduleMinutes);
     if (dailyHours === 0 && record.status !== 'A') {
       if (!record.check_in || !record.check_out) {
         invalidRecords.push({ ...record, reason: 'incomplete' });
@@ -4631,7 +4720,8 @@ const recalculateHoursAndRate = async (studentId, courseId) => {
       : null;
 
     const breakMinutes = getCourseBreakMinutes(course);
-    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate, breakMinutes);
+    const scheduleMinutes = getCourseScheduleMinutes(course);
+    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate, breakMinutes, scheduleMinutes);
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {
@@ -4678,7 +4768,8 @@ const batchRecalculateAllHours = async (students, courses) => {
       : null;
 
     const breakMinutes = getCourseBreakMinutes(course);
-    const { accumulatedHours } = calculateAccumulatedHours(records, cutoffDate, breakMinutes);
+    const scheduleMinutes = getCourseScheduleMinutes(course);
+    const { accumulatedHours } = calculateAccumulatedHours(records, cutoffDate, breakMinutes, scheduleMinutes);
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {

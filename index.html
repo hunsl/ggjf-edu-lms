@@ -159,6 +159,8 @@ const sbStorageUpload = async (bucket, path, file) => {
 };
 
 /* ── DB 컬럼(snake_case) ↔ 앱(camelCase) 변환 ── */
+const toNum = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+
 const toStudent = r => r ? ({
   id: Number(r.id), cid: Number(r.cid), name: r.name, gender: r.gender||"",
   birth: r.birth||"", idBack: r.id_back||"", phone: r.phone||"",
@@ -188,7 +190,6 @@ const excelDateToISO = v => {
 };
 
 const fromStudent = s => {
-  const toNum = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
   return {
     cid: s.cid ? Number(s.cid) : null,
     name: s.name, gender: s.gender||"",

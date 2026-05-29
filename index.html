@@ -3673,9 +3673,8 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
   const fmtDate = d => { const [,m,dd] = d.split("-"); return `${+m}/${+dd}`; };
   const getDow  = d => { const dw = ["일","월","화","수","목","금","토"]; return dw[new Date(d).getDay()]; };
 
-  // A4 가로 한 페이지에 최적화: 고정 열(번호28 + 성명58 + 출석수44) = 130px
-  // 남은 공간 ≈ 1060px → 날짜 열 30px 기준 최대 35개 수용
-  const MAX_COLS = 35;
+  // 시간(입/퇴실)까지 표시하도록 날짜 열 수를 줄여 가독성 확보
+  const MAX_COLS = 20;
   const chunks = [];
   for (let i = 0; i < dates.length; i += MAX_COLS) chunks.push(dates.slice(i, i + MAX_COLS));
   const totalPages = chunks.length;
@@ -3685,7 +3684,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
   courseStudents.forEach(s => {
     let cnt = 0;
     dates.forEach(d => {
-      if (d <= todayStr && attMap[`${s.id}_${d}`] === "O") cnt++;
+      if (d <= todayStr && attMap[`${s.id}_${d}`]?.status === "O") cnt++;
     });
     totalAttMap[s.id] = cnt;
   });
@@ -3694,6 +3693,12 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
     const n = datePart.length;
     const colW = Math.max(24, Math.min(36, Math.floor(1060 / Math.max(n, 1))));
     const isLast = pageNum === totalPages;
+    const datePartEnd = datePart[datePart.length - 1] || "";
+    const pageStudents = courseStudents.filter(s => {
+      if (s.enrollmentStatus !== "중도탈락") return true;
+      if (!s.statusChangeDate) return true;
+      return datePartEnd >= s.statusChangeDate;
+    });
     const miniHeader = totalPages > 1
       ? `<div class="page-mini-header"><span class="page-course-name">${course.name}</span><span class="page-info">출석부 (${pageNum}/${totalPages})</span></div>`
       : '';
@@ -3726,14 +3731,20 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
         </tr>
       </thead>
       <tbody>
-        ${courseStudents.map((s, idx) => {
+        ${pageStudents.map((s, idx) => {
           let cnt = 0;
           const cells = datePart.map(d => {
-            const status = attMap[`${s.id}_${d}`];
+            const rec = attMap[`${s.id}_${d}`] || {};
+            const status = rec.status;
+            const isDropoutBefore = s.enrollmentStatus === "중도탈락" && s.statusChangeDate && d < s.statusChangeDate;
+            const checkIn = rec.checkIn ? String(rec.checkIn).slice(0,5) : "";
+            const checkOut = rec.checkOut ? String(rec.checkOut).slice(0,5) : "";
+            const timeHtml = (checkIn || checkOut) ? `<div class="cell-time">${checkIn || "—"}~${checkOut || "—"}</div>` : "";
             if (d > todayStr) return `<td class="cell"></td>`;
-            if (status === "O") { cnt++; return `<td class="cell cell-o">O</td>`; }  // 출석
-            if (status === "A") return `<td class="cell cell-x">X</td>`;             // 결석
-            if (status === "L") return `<td class="cell cell-tri">△</td>`;          // 지각/조퇴
+            if (isDropoutBefore) return `<td class="cell"></td>`;
+            if (status === "O") { cnt++; return `<td class="cell cell-o">O${timeHtml}</td>`; }  // 출석
+            if (status === "A") return `<td class="cell cell-x">X${timeHtml}</td>`;             // 결석
+            if (status === "L") return `<td class="cell cell-tri">△${timeHtml}</td>`;          // 지각/조퇴
             return `<td class="cell"></td>`;
           }).join('');
           const cntCell = isLast && totalPages > 1
@@ -3778,6 +3789,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
   .cell-o{color:#15803D;font-weight:900;font-size:12pt;}
   .cell-x{color:#DC2626;font-weight:900;font-size:12pt;}
   .cell-tri{color:#D97706;font-weight:900;font-size:12pt;}
+  .cell-time{font-size:5.6pt;line-height:1.1;font-weight:500;color:#334155;letter-spacing:-0.1px;white-space:nowrap;}
   .cell-cnt{font-weight:700;background:#EFF6FF;color:#1D4ED8;vertical-align:middle;}
   .row-even td{background:#F8FAFC !important;}
   .sign-area{margin-top:14px;display:flex;justify-content:flex-end;gap:24px;}
@@ -3841,7 +3853,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
 
 const AttendanceSheet = ({ course, courses, students }) => {
   const [sheetCourse, setSheetCourse] = useState(course);
-  const [attData, setAttData] = useState({});      // { "studentId_date": status }
+  const [attData, setAttData] = useState({});      // { "studentId_date": { status, checkIn, checkOut } }
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [instructors, setInstructors] = useState([]);
 
@@ -3875,11 +3887,17 @@ const AttendanceSheet = ({ course, courses, students }) => {
         if (courseStudentIds.length === 0) { setAttData({}); setLoadingSheet(false); return; }
         const { data, error } = await sbGet(
           "attendance",
-          `select=student_id,date,status&course_id=eq.${sheetCourse.id}&student_id=in.(${courseStudentIds.join(",")})`
+          `select=student_id,date,status,check_in,check_out&course_id=eq.${sheetCourse.id}&student_id=in.(${courseStudentIds.join(",")})`
         );
         if (error) throw error;
         const map = {};
-        (data || []).forEach(att => { map[`${att.student_id}_${att.date}`] = att.status || "U"; });
+        (data || []).forEach(att => {
+          map[`${att.student_id}_${att.date}`] = {
+            status: att.status || "U",
+            checkIn: att.check_in || "",
+            checkOut: att.check_out || "",
+          };
+        });
         setAttData(map);
       } catch (err) {
         console.error("출석부 데이터 로드 오류:", err);
@@ -3906,6 +3924,12 @@ const AttendanceSheet = ({ course, courses, students }) => {
   const [datePage, setDatePage] = useState(0);
   const totalDatePages = Math.ceil(allDates.length / PAGE_SIZE);
   const visibleDates = allDates.slice(datePage * PAGE_SIZE, (datePage + 1) * PAGE_SIZE);
+  const visibleDateEnd = visibleDates[visibleDates.length - 1] || "";
+  const pageStudents = courseStudents.filter(s => {
+    if (s.enrollmentStatus !== "중도탈락") return true;
+    if (!s.statusChangeDate) return true;
+    return visibleDateEnd >= s.statusChangeDate;
+  });
 
   return (
     <div>
@@ -3976,7 +4000,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
                   background:datePage>=totalDatePages-1?T.s3:"#fff", color:datePage>=totalDatePages-1?T.mu:T.tx,
                   cursor:datePage>=totalDatePages-1?"default":"pointer", fontSize:11, fontWeight:600 }}>다음 ▶</button>
               <span style={{ marginLeft:"auto", fontSize:11, color:T.mu }}>
-                전체 수업일: {allDates.length}일 · 훈련생: {courseStudents.length}명
+              전체 수업일: {allDates.length}일 · 훈련생: {pageStudents.length}명
               </span>
             </div>
           )}
@@ -3998,21 +4022,39 @@ const AttendanceSheet = ({ course, courses, students }) => {
               </tr>
             </thead>
             <tbody>
-              {courseStudents.map((s, idx) => {
-                const presentDays = allDates.filter(d => attData[`${s.id}_${d}`] === "O").length;
+              {pageStudents.map((s, idx) => {
+                const presentDays = allDates.filter(d => attData[`${s.id}_${d}`]?.status === "O").length;
+                const cutoffDate = s.statusChangeDate || "";
+                const cutoffLabel = cutoffDate && cutoffDate.length >= 10 ? cutoffDate.slice(5) : "";
                 return (
                   <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
                     <td style={{ padding:"6px 4px", fontSize:11, color:T.mu, textAlign:"center", position:"sticky", left:0, background:T.s, zIndex:1 }}>{idx+1}</td>
-                    <td style={{ padding:"6px 6px", fontSize:12, fontWeight:700, color:T.tx, whiteSpace:"nowrap", position:"sticky", left:36, background:T.s, zIndex:1 }}>{s.name}</td>
+                    <td style={{ padding:"6px 6px", fontSize:12, fontWeight:700, color:T.tx, whiteSpace:"nowrap", position:"sticky", left:36, background:T.s, zIndex:1 }}>
+                      {s.name}
+                      {s.enrollmentStatus === "중도탈락" && (
+                        <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEE2E2", color:"#DC2626", fontWeight:700 }}>
+                          중도탈락 {cutoffLabel}
+                        </span>
+                      )}
+                    </td>
                     {visibleDates.map(d => {
                       const key = `${s.id}_${d}`;
-                      const status = attData[key];
+                      const rec = attData[key] || {};
+                      const status = rec.status;
                       const isFuture = d > today;
+                      const isDropoutBefore = s.enrollmentStatus === "중도탈락" && cutoffDate && d < cutoffDate;
                       let display = "";
                       let color = T.mu;
+                      let timeText = "";
                       if (!isFuture) {
-                        if (status === "O") { display = "O"; color = T.ok; }
-                        else if (status === "A") { display = "X"; color = T.danger; }
+                        if (!isDropoutBefore) {
+                          if (status === "O") { display = "O"; color = T.ok; }
+                          else if (status === "A") { display = "X"; color = T.danger; }
+                          else if (status === "L") { display = "△"; color = "#D97706"; }
+                          const inTxt = rec.checkIn ? String(rec.checkIn).slice(0,5) : "";
+                          const outTxt = rec.checkOut ? String(rec.checkOut).slice(0,5) : "";
+                          if (inTxt || outTxt) timeText = `${inTxt || "—"}~${outTxt || "—"}`;
+                        }
                       }
                       return (
                         <td key={d} style={{ padding:"4px 2px", textAlign:"center", fontSize:12,
@@ -4020,6 +4062,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
                           background: d === today ? '#FFFBEB' : (isFuture ? T.s2 : 'transparent'),
                           borderBottom:`1px solid ${T.bd}` }}>
                           {display}
+                          {timeText && <div style={{ fontSize:9, lineHeight:1.15, fontWeight:500, color:T.mu, whiteSpace:"nowrap" }}>{timeText}</div>}
                         </td>
                       );
                     })}

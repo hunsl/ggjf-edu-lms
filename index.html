@@ -4081,18 +4081,23 @@ const AttendanceSheet = ({ course, courses, students }) => {
                           if (status === "O") { display = "O"; color = T.ok; }
                           else if (status === "A") { display = "✕"; color = T.danger; }
                           else if (status === "L") { display = "△"; color = "#D97706"; }
-                          else if (!status) { display = "?"; color = "#CBD5E1"; }
+                          else if (!status) { display = "?"; color = T.bd; }
                           const inTxt = rec.checkIn ? String(rec.checkIn).slice(0,5) : "";
                           const outTxt = rec.checkOut ? String(rec.checkOut).slice(0,5) : "";
                           if (inTxt || outTxt) timeText = `${inTxt || "—"}~${outTxt || "—"}`;
                         }
                       }
                       const isException = display === "✕" || display === "△";
+                      const cellBg = d === today ? '#FFFBEB'
+                        : isFuture ? T.s2
+                        : display === "✕" ? "#FFF0F0"
+                        : display === "△" ? "#FFFBEB"
+                        : 'transparent';
                       return (
                         <td key={d} title={timeText || undefined}
                           style={{ padding:"4px 2px", textAlign:"center", fontSize: isException ? 13 : 11,
                             fontWeight: isException ? 800 : (display === "O" ? 500 : 400), color,
-                            background: d === today ? '#FFFBEB' : (isFuture ? T.s2 : (isException ? (display==="✕"?"#FFF0F0":"#FFFBEB") : 'transparent')),
+                            background: cellBg,
                             borderBottom:`1px solid ${T.bd}` }}>
                           {display}
                           {showTimes && timeText && <div style={{ fontSize:8, lineHeight:1.2, fontWeight:500, color:T.mu, whiteSpace:"nowrap" }}>{timeText}</div>}

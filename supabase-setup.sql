@@ -44,3 +44,7 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS employer_name TEXT;
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '경기도 강사';
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS hourly_rate INTEGER DEFAULT 0;
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS custom_dates JSONB DEFAULT '{}';
+
+-- ── 과정 테이블 신규 컬럼 추가 (기존 DB 마이그레이션) ────────────
+-- break_minutes: 일별 휴식시간(분)
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS break_minutes INTEGER DEFAULT 60;

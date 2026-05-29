@@ -215,6 +215,7 @@ const toCourse = r => r ? ({
   schedDays: r.sched_days||"",
   schedTimeFrom: r.sched_time_from||"09:00",
   schedTimeTo: r.sched_time_to||"13:00",
+  breakMinutes: toNum(r.break_minutes) ?? 60,
   notes: r.notes||"", pdfName: r.pdf_name||"", pdfData: r.pdf_data||"",
   links: r.links||[],
 }) : null;
@@ -227,6 +228,7 @@ const fromCourse = c => ({
   sched_days: c.schedDays||"",
   sched_time_from: c.schedTimeFrom||null,
   sched_time_to: c.schedTimeTo||null,
+  break_minutes: toNum(c.breakMinutes) ?? 60,
   notes: c.notes||"", pdf_name: c.pdfName||"", pdf_data: c.pdfData||"",
   links: c.links||[],
 });
@@ -1298,7 +1300,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
     cat:"늘봄강사양성", cc:"#EA580C", name:"", code:"",
     dateFrom:"", dateTo:"", period:"",
     method:"대면", hours:0, tgt:20, cGoal:18, eGoal:12,
-    schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00",
+    schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00", breakMinutes:60,
     links:[], notes:"", pdfName:"", pdfData:""
   };
   const [form, setForm] = useState(course ? {
@@ -1306,7 +1308,8 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
     dateFrom: course.dateFrom||"", dateTo: course.dateTo||"",
     links: course.links||[], notes: course.notes||"",
     pdfName: course.pdfName||"", pdfData: course.pdfData||"",
-    schedDays: course.schedDays||"", schedTimeFrom: course.schedTimeFrom||"09:00", schedTimeTo: course.schedTimeTo||"13:00"
+    schedDays: course.schedDays||"", schedTimeFrom: course.schedTimeFrom||"09:00", schedTimeTo: course.schedTimeTo||"13:00",
+    breakMinutes: toNum(course.breakMinutes) ?? 60
   } : empty);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
@@ -1432,11 +1435,11 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
               </select>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
-            {[{label:"총 시수",key:"hours",ph:"200"},{label:"교육목표",key:"tgt",ph:"20"},{label:"수료목표",key:"cGoal",ph:"18"},{label:"취업목표",key:"eGoal",ph:"12"}].map(({label,key,ph})=>(
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))", gap:10 }}>
+            {[{label:"총 시수",key:"hours",ph:"200"},{label:"쉬는시간(분)",key:"breakMinutes",ph:"60"},{label:"교육목표",key:"tgt",ph:"20"},{label:"수료목표",key:"cGoal",ph:"18"},{label:"취업목표",key:"eGoal",ph:"12"}].map(({label,key,ph})=>(
               <div key={key}>
                 <label style={{ fontSize:11,fontWeight:600,color:T.mu,display:"block",marginBottom:5 }}>{label}</label>
-                <input type="number" value={form[key]||""} onChange={e=>set(key,+e.target.value)} placeholder={ph} style={inp}/>
+                <input type="number" value={form[key] ?? ""} onChange={e=>set(key,e.target.value === "" ? 0 : +e.target.value)} placeholder={ph} style={inp}/>
               </div>
             ))}
           </div>
@@ -1496,6 +1499,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
                 }
                 {form.schedDays ? ` / 매주 ${form.schedDays}` : ""}
                 {(form.schedTimeFrom && form.schedTimeTo) ? ` ${form.schedTimeFrom} ∼ ${form.schedTimeTo}` : ""}
+                {` / 휴식 ${form.breakMinutes ?? 60}분`}
               </div>
             )}
           </div>
@@ -1566,7 +1570,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
           <div style={{ padding:"12px 14px", borderRadius:10, background:T.s2, border:`1px solid ${T.bd}`, borderLeft:`4px solid ${form.cc||T.p}` }}>
             <div style={{ fontSize:11, color:T.mu, marginBottom:4 }}>미리보기</div>
             <div style={{ fontSize:13, fontWeight:700, color:T.tx }}>{form.name||"(과정명 없음)"}</div>
-            <div style={{ fontSize:11, color:T.mu, marginTop:2 }}>{form.code} · {formatCoursePeriod(form)} · {form.method} · {form.hours||0}시간</div>
+            <div style={{ fontSize:11, color:T.mu, marginTop:2 }}>{form.code} · {formatCoursePeriod(form)} · {form.method} · {form.hours||0}시간 · 휴식 {form.breakMinutes ?? 60}분</div>
           </div>
         </div>
 
@@ -1653,7 +1657,7 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
               <Chip label={c.method||"-"} bg={T.s3} color={T.mu}/>
             </div>
             <div style={{ fontSize:13, fontWeight:700, color:T.tx, lineHeight:1.45, marginBottom:3, paddingRight:60 }}>{c.name}</div>
-            <div style={{ fontSize:11, color:T.mu, marginBottom:10 }}>{c.code} · {formatCoursePeriod(c)} · {c.hours>0?`${c.hours}시간`:"미정"}
+            <div style={{ fontSize:11, color:T.mu, marginBottom:10 }}>{c.code} · {formatCoursePeriod(c)} · {c.hours>0?`${c.hours}시간`:"미정"} · 휴식 {toNum(c.breakMinutes) ?? 60}분
               {c.schedDays && <span style={{ color:T.p, marginLeft:6 }}>📅 {c.schedDays}</span>}
               {(c.schedTimeFrom&&c.schedTimeTo) && <span style={{ color:T.mu, marginLeft:4 }}>{c.schedTimeFrom}∼{c.schedTimeTo}</span>}
             </div>
@@ -3364,7 +3368,7 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                     <td style={{ padding:"10px 8px", textAlign:"center" }}>
                       {(() => {
                         if (!curIn || !curOut) return <span style={{ fontSize:11, color:T.mu }}>—</span>;
-                        const daily = calculateDailyHours({ check_in: curIn, check_out: curOut, status: curStatus || 'O' });
+                        const daily = calculateDailyHours({ check_in: curIn, check_out: curOut, status: curStatus || 'O' }, getCourseBreakMinutes(course));
                         return <span style={{ fontSize:12, fontWeight:700, color:T.ok }}>{daily.toFixed(1)}h</span>;
                       })()}
                       {(() => {
@@ -4487,6 +4491,7 @@ const generateCertQRDataUrl = (certNumber) => {
    ⏱️ HOURS CALCULATOR — 시간 기반 출석률 계산
 =========================================================== */
 const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
+const DEFAULT_BREAK_MINUTES = 60;
 
 // HH:MM → 분(minutes) 변환
 const parseTimeToMinutes = (timeStr) => {
@@ -4499,24 +4504,39 @@ const parseTimeToMinutes = (timeStr) => {
   return h * 60 + m;
 };
 
+const getCourseBreakMinutes = (course) => {
+  const raw = course?.breakMinutes ?? course?.break_minutes;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_BREAK_MINUTES;
+};
+
+const getScheduledDailyHours = (course) => {
+  const fromMin = parseTimeToMinutes(course?.schedTimeFrom);
+  const toMin   = parseTimeToMinutes(course?.schedTimeTo);
+  if (fromMin === null || toMin === null || toMin <= fromMin) return 0;
+  const breakMinutes = getCourseBreakMinutes(course);
+  return Math.max(0, (toMin - fromMin - breakMinutes) / 60);
+};
+
 // 일별 출석시간 계산 (시간 단위, 소수점 2자리)
-const calculateDailyHours = (record) => {
+const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES) => {
   if (record.status === 'A') return 0;
   const checkInMin  = parseTimeToMinutes(record.check_in);
   const checkOutMin = parseTimeToMinutes(record.check_out);
   if (checkInMin === null || checkOutMin === null) return 0;
   if (checkOutMin <= checkInMin) return 0;
-  const diffMinutes = checkOutMin - checkInMin;
+  const safeBreak = Number.isFinite(Number(breakMinutes)) && Number(breakMinutes) >= 0 ? Number(breakMinutes) : DEFAULT_BREAK_MINUTES;
+  const diffMinutes = Math.max(0, checkOutMin - checkInMin - safeBreak);
   return Math.round((diffMinutes / 60) * 100) / 100;
 };
 
 // 누적 훈련시간 계산
-const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null) => {
+const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES) => {
   const invalidRecords = [];
   let totalHours = 0;
   for (const record of attendanceRecords) {
     if (cutoffDate && record.date > cutoffDate) continue;
-    const dailyHours = calculateDailyHours(record);
+    const dailyHours = calculateDailyHours(record, breakMinutes);
     if (dailyHours === 0 && record.status !== 'A') {
       if (!record.check_in || !record.check_out) {
         invalidRecords.push({ ...record, reason: 'incomplete' });
@@ -4537,20 +4557,14 @@ const getTotalCourseHours = (course) => {
 
   if (ovs.length === 0) {
     if (course.hours && course.hours > 0) return course.hours;
-    const fromMin = parseTimeToMinutes(course.schedTimeFrom);
-    const toMin   = parseTimeToMinutes(course.schedTimeTo);
-    if (fromMin === null || toMin === null || toMin <= fromMin) return 0;
-    const dailyHours = (toMin - fromMin) / 60;
+    const dailyHours = getScheduledDailyHours(course);
+    if (dailyHours <= 0) return 0;
     const trainingDays = buildCourseDatesAll(course).length;
     return dailyHours * trainingDays;
   }
 
   const allDates = buildCourseDatesAll(course);
-  const defaultDaily = (() => {
-    const fromMin = parseTimeToMinutes(course.schedTimeFrom);
-    const toMin   = parseTimeToMinutes(course.schedTimeTo);
-    return (fromMin !== null && toMin !== null && toMin > fromMin) ? (toMin - fromMin) / 60 : DEFAULT_DAILY_HOURS;
-  })();
+  const defaultDaily = getScheduledDailyHours(course) || DEFAULT_DAILY_HOURS;
 
   let total = 0;
   for (const date of allDates) {
@@ -4597,7 +4611,8 @@ const recalculateHoursAndRate = async (studentId, courseId) => {
       ? student.statusChangeDate
       : null;
 
-    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate);
+    const breakMinutes = getCourseBreakMinutes(course);
+    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate, breakMinutes);
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {
@@ -4643,7 +4658,8 @@ const batchRecalculateAllHours = async (students, courses) => {
       ? student.statusChangeDate
       : null;
 
-    const { accumulatedHours } = calculateAccumulatedHours(records, cutoffDate);
+    const breakMinutes = getCourseBreakMinutes(course);
+    const { accumulatedHours } = calculateAccumulatedHours(records, cutoffDate, breakMinutes);
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {
@@ -6877,13 +6893,7 @@ const InstructorMgmt = ({ courses, onUpdateCourse }) => {
         ? rawCustom.filter(d => allCourseDates.includes(d)).sort()
         : allCourseDates;
 
-      const hoursPerDay = c.schedTimeFrom && c.schedTimeTo
-        ? (() => {
-            const [sh, sm] = c.schedTimeFrom.split(":").map(Number);
-            const [eh, em] = c.schedTimeTo.split(":").map(Number);
-            return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
-          })()
-        : 4;
+      const hoursPerDay = getScheduledDailyHours(c) || 4;
 
       const estHours = Math.round(dates.length * hoursPerDay);
       totalDays += dates.length;

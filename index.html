@@ -4492,6 +4492,7 @@ const generateCertQRDataUrl = (certNumber) => {
 =========================================================== */
 const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
 const DEFAULT_BREAK_MINUTES = 60;
+const BREAK_DEDUCTION_MIN_SPAN = 5 * 60; // 짧은 참여 시간에는 휴식시간을 일괄 차감하지 않음
 
 // HH:MM → 분(minutes) 변환
 const parseTimeToMinutes = (timeStr) => {
@@ -4526,7 +4527,9 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES) => {
   if (checkInMin === null || checkOutMin === null) return 0;
   if (checkOutMin <= checkInMin) return 0;
   const safeBreak = Number.isFinite(Number(breakMinutes)) && Number(breakMinutes) >= 0 ? Number(breakMinutes) : DEFAULT_BREAK_MINUTES;
-  const diffMinutes = Math.max(0, checkOutMin - checkInMin - safeBreak);
+  const stayMinutes = checkOutMin - checkInMin;
+  const appliedBreak = stayMinutes > BREAK_DEDUCTION_MIN_SPAN ? safeBreak : 0;
+  const diffMinutes = Math.max(0, stayMinutes - appliedBreak);
   return Math.round((diffMinutes / 60) * 100) / 100;
 };
 
@@ -4564,7 +4567,8 @@ const getTotalCourseHours = (course) => {
   }
 
   const allDates = buildCourseDatesAll(course);
-  const defaultDaily = getScheduledDailyHours(course) || DEFAULT_DAILY_HOURS;
+  const scheduledDaily = getScheduledDailyHours(course);
+  const defaultDaily = scheduledDaily > 0 ? scheduledDaily : DEFAULT_DAILY_HOURS;
 
   let total = 0;
   for (const date of allDates) {

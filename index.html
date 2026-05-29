@@ -1435,7 +1435,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
               </select>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:10 }}>
             {[{label:"총 시수",key:"hours",ph:"200"},{label:"쉬는시간(분)",key:"breakMinutes",ph:"60"},{label:"교육목표",key:"tgt",ph:"20"},{label:"수료목표",key:"cGoal",ph:"18"},{label:"취업목표",key:"eGoal",ph:"12"}].map(({label,key,ph})=>(
               <div key={key}>
                 <label style={{ fontSize:11,fontWeight:600,color:T.mu,display:"block",marginBottom:5 }}>{label}</label>
@@ -4498,7 +4498,7 @@ const generateCertQRDataUrl = (certNumber) => {
 =========================================================== */
 const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
 const DEFAULT_BREAK_MINUTES = 60;
-const BREAK_DEDUCTION_MIN_MINUTES = 5 * 60; // 5시간 이상 체류한 경우에만 휴식시간을 차감
+const BREAK_DEDUCTION_MIN_MINUTES = 5 * 60; // 반일 수업/짧은 참여(5시간 미만)는 휴식시간을 일괄 차감하지 않음
 
 // HH:MM → 분(minutes) 변환
 const parseTimeToMinutes = (timeStr) => {
@@ -4511,10 +4511,13 @@ const parseTimeToMinutes = (timeStr) => {
   return h * 60 + m;
 };
 
-const getCourseBreakMinutes = (course) => {
-  const raw = course?.breakMinutes ?? course?.break_minutes;
-  const n = Number(raw);
+const normalizeBreakMinutes = (breakMinutes) => {
+  const n = Number(breakMinutes);
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_BREAK_MINUTES;
+};
+
+const getCourseBreakMinutes = (course) => {
+  return normalizeBreakMinutes(course?.breakMinutes ?? course?.break_minutes);
 };
 
 const getScheduledDailyHours = (course) => {
@@ -4532,7 +4535,7 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES) => {
   const checkOutMin = parseTimeToMinutes(record.check_out);
   if (checkInMin === null || checkOutMin === null) return 0;
   if (checkOutMin <= checkInMin) return 0;
-  const safeBreak = Number.isFinite(Number(breakMinutes)) && Number(breakMinutes) >= 0 ? Number(breakMinutes) : DEFAULT_BREAK_MINUTES;
+  const safeBreak = normalizeBreakMinutes(breakMinutes);
   const stayMinutes = checkOutMin - checkInMin;
   const appliedBreak = stayMinutes >= BREAK_DEDUCTION_MIN_MINUTES ? safeBreak : 0;
   const diffMinutes = Math.max(0, stayMinutes - appliedBreak);

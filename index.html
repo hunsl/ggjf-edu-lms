@@ -1315,6 +1315,11 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
   const pdfRef = useRef();
+  const getNumericFieldValue = key => key === "breakMinutes" ? (form[key] ?? "") : (form[key] || "");
+  const parseNumericFieldValue = (key, rawValue) => {
+    if (rawValue === "") return key === "breakMinutes" ? "" : 0;
+    return +rawValue;
+  };
 
   // 링크 관리
   const addLink   = () => set("links", [...(form.links||[]), {label:"", url:""}]);
@@ -1441,8 +1446,8 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
                 <label style={{ fontSize:11,fontWeight:600,color:T.mu,display:"block",marginBottom:5 }}>{label}</label>
                 <input
                   type="number"
-                  value={key === "breakMinutes" ? (form[key] ?? "") : (form[key] || "")}
-                  onChange={e=>set(key, e.target.value === "" ? (key === "breakMinutes" ? "" : 0) : +e.target.value)}
+                  value={getNumericFieldValue(key)}
+                  onChange={e=>set(key, parseNumericFieldValue(key, e.target.value))}
                   placeholder={ph}
                   style={inp}
                 />
@@ -4498,7 +4503,7 @@ const generateCertQRDataUrl = (certNumber) => {
 =========================================================== */
 const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
 const DEFAULT_BREAK_MINUTES = 60;
-const BREAK_DEDUCTION_MIN_MINUTES = 5 * 60; // 반일 수업/짧은 참여(5시간 미만)는 휴식시간을 일괄 차감하지 않음
+const MIN_ATTENDANCE_FOR_BREAK_DEDUCTION_MINUTES = 5 * 60; // 반일 수업/짧은 참여(5시간 미만)는 휴식시간을 일괄 차감하지 않음
 
 // HH:MM → 분(minutes) 변환
 const parseTimeToMinutes = (timeStr) => {
@@ -4537,7 +4542,8 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES) => {
   if (checkOutMin <= checkInMin) return 0;
   const safeBreak = normalizeBreakMinutes(breakMinutes);
   const stayMinutes = checkOutMin - checkInMin;
-  const appliedBreak = stayMinutes >= BREAK_DEDUCTION_MIN_MINUTES ? safeBreak : 0;
+  // 휴식시간은 점심 포함 장시간 수업을 전제로 하므로, 5시간 이상 체류한 경우에만 차감
+  const appliedBreak = stayMinutes >= MIN_ATTENDANCE_FOR_BREAK_DEDUCTION_MINUTES ? safeBreak : 0;
   const diffMinutes = Math.max(0, stayMinutes - appliedBreak);
   return Math.round((diffMinutes / 60) * 100) / 100;
 };

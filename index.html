@@ -3380,7 +3380,16 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                     <td style={{ padding:"10px 8px", textAlign:"center" }}>
                       {(() => {
                         if (!curIn || !curOut) return <span style={{ fontSize:11, color:T.mu }}>—</span>;
-                        const daily = calculateDailyHours({ check_in: curIn, check_out: curOut, status: curStatus || 'O' }, getCourseBreakMinutes(course), getCourseScheduleMinutes(course));
+                        const includeBreakInHours = shouldIncludeBreakInHours(course);
+                        const defaultScheduleMinutes = getCourseScheduleMinutes(course);
+                        const effectiveScheduleMinutes = getOverrideScheduleMinutes(selectedDateOverride, defaultScheduleMinutes);
+                        const statusForCalc = selectedDateOverride?.type === 'cancelled' ? 'A' : (curStatus || 'O');
+                        const daily = calculateDailyHours(
+                          { check_in: curIn, check_out: curOut, status: statusForCalc },
+                          getCourseBreakMinutes(course),
+                          effectiveScheduleMinutes,
+                          includeBreakInHours
+                        );
                         return <span style={{ fontSize:12, fontWeight:700, color:T.ok }}>{daily.toFixed(1)}h</span>;
                       })()}
                       {(() => {
@@ -3680,11 +3689,44 @@ const buildCourseDatesAll = (course) => {
   return out;
 };
 
+const formatHourText = (hours) => {
+  const n = Number(hours) || 0;
+  return Number.isInteger(n) ? `${n}` : n.toFixed(1);
+};
+
+const isAttendanceCutoffStatus = (status) => status === "중도탈락" || status === "조기취업";
+
+const isAttendanceDateLocked = (student, date) => {
+  const status = student?.enrollmentStatus || "재학중";
+  const cutoffDate = student?.statusChangeDate || "";
+  return !!(date && cutoffDate && isAttendanceCutoffStatus(status) && date > cutoffDate);
+};
+
+const getAttendanceStatusMeta = (student) => {
+  const status = student?.enrollmentStatus || "재학중";
+  if (!status || status === "재학중") return null;
+  const cutoffDate = student?.statusChangeDate || "";
+  const cutoffLabel = cutoffDate && cutoffDate.length >= 10 ? cutoffDate.slice(5) : "";
+  const sc = STATUS_COLORS?.[status] || { bg:"#E5E7EB", color:"#475569" };
+  const label = cutoffLabel && isAttendanceCutoffStatus(status) ? `${status} ${cutoffLabel}` : status;
+  return { status, cutoffDate, cutoffLabel, label, shortLabel: status, colors: sc };
+};
+
+const getAttendanceSheetTotalHours = (course, student) => {
+  if (student?.enrollmentStatus === "조기취업" && student?.statusChangeDate) {
+    return getProportionalCourseHours(course, student.statusChangeDate);
+  }
+  return getTotalCourseHours(course);
+};
+
 const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorName) => {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const period = formatCoursePeriod(course);
   const schedInfo = course.schedDays ? `${course.schedDays}${course.schedTimeFrom && course.schedTimeTo ? ` / ${course.schedTimeFrom}~${course.schedTimeTo}` : ''}` : '';
+  const totalCourseHours = getTotalCourseHours(course);
+  const breakMinutes = getCourseBreakMinutes(course);
+  const includeBreakInHours = shouldIncludeBreakInHours(course);
 
   const fmtDate = d => { const [,m,dd] = d.split("-"); return `${+m}/${+dd}`; };
   const getDow  = d => { const dw = ["일","월","화","수","목","금","토"]; return dw[new Date(d).getDay()]; };
@@ -3700,7 +3742,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
   courseStudents.forEach(s => {
     let cnt = 0;
     dates.forEach(d => {
-      if (d <= todayStr && attMap[`${s.id}_${d}`]?.status === "O") cnt++;
+      if (d <= todayStr && !isAttendanceDateLocked(s, d) && attMap[`${s.id}_${d}`]?.status === "O") cnt++;
     });
     totalAttMap[s.id] = cnt;
   });
@@ -3709,12 +3751,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
     const n = datePart.length;
     const colW = Math.max(24, Math.min(36, Math.floor(1060 / Math.max(n, 1))));
     const isLast = pageNum === totalPages;
-    const datePartEnd = datePart[datePart.length - 1] || "";
-    const pageStudents = courseStudents.filter(s => {
-      if (s.enrollmentStatus !== "중도탈락") return true;
-      if (!s.statusChangeDate) return true;
-      return datePartEnd >= s.statusChangeDate;
-    });
+    const pageStudents = courseStudents;
     const miniHeader = totalPages > 1
       ? `<div class="page-mini-header"><span class="page-course-name">${course.name}</span><span class="page-info">출석부 (${pageNum}/${totalPages})</span></div>`
       : '';
@@ -3723,7 +3760,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
     <table class="att-table">
       <colgroup>
         <col style="width:28px"/>
-        <col style="width:58px"/>
+        <col style="width:90px"/>
         ${datePart.map(() => `<col style="width:${colW}px"/>`).join('')}
         <col style="width:44px"/>
       </colgroup>
@@ -3749,15 +3786,18 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
       <tbody>
         ${pageStudents.map((s, idx) => {
           let cnt = 0;
+          const statusMeta = getAttendanceStatusMeta(s);
+          const totalHoursForStudent = getAttendanceSheetTotalHours(course, s);
+          const nameSub = `누적 ${formatHourText(s.accumulatedHours || 0)}h / ${formatHourText(totalHoursForStudent)}h · ${formatHourText(s.rate || 0)}%`;
           const cells = datePart.map(d => {
             const rec = attMap[`${s.id}_${d}`] || {};
             const status = rec.status;
-            const isDropoutBefore = s.enrollmentStatus === "중도탈락" && s.statusChangeDate && d < s.statusChangeDate;
+            const isLocked = isAttendanceDateLocked(s, d);
             const checkIn = rec.checkIn ? String(rec.checkIn).slice(0,5) : "";
             const checkOut = rec.checkOut ? String(rec.checkOut).slice(0,5) : "";
             const timeHtml = (checkIn || checkOut) ? `<div class="cell-time">${checkIn || "—"}~${checkOut || "—"}</div>` : "";
             if (d > todayStr) return `<td class="cell"></td>`;
-            if (isDropoutBefore) return `<td class="cell"></td>`;
+            if (isLocked) return `<td class="cell cell-cutoff"></td>`;
             if (status === "O") { cnt++; return `<td class="cell cell-o">O${timeHtml}</td>`; }  // 출석
             if (status === "A") return `<td class="cell cell-x">X${timeHtml}</td>`;             // 결석
             if (status === "L") return `<td class="cell cell-tri">△${timeHtml}</td>`;          // 지각/조퇴
@@ -3766,7 +3806,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
           const cntCell = isLast && totalPages > 1
             ? `<td class="cell cell-cnt">${totalAttMap[s.id]}</td>`
             : `<td class="cell cell-cnt">${cnt}${!isLast ? '<div style="font-size:6pt;color:#888;">(소계)</div>' : ''}</td>`;
-          return `<tr class="${idx%2===1?'row-even':''}"><td class="cell cell-num">${idx+1}</td><td class="cell cell-name">${s.name}</td>${cells}${cntCell}</tr>`;
+          return `<tr class="${idx%2===1?'row-even':''}"><td class="cell cell-num">${idx+1}</td><td class="cell cell-name"><div class="cell-name-main">${s.name}</div>${statusMeta ? `<div class="cell-status" style="background:${statusMeta.colors.bg};color:${statusMeta.colors.color};">${statusMeta.label}</div>` : ''}<div class="cell-sub">${nameSub}</div></td>${cells}${cntCell}</tr>`;
         }).join('')}
       </tbody>
     </table>`;
@@ -3801,11 +3841,15 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
   .th-dow{background:#F8FAFC;font-weight:600;padding:2px 1px;text-align:center;font-size:7pt;}
   .cell{padding:2px 1px;text-align:center;font-size:10pt;height:20px;}
   .cell-num{background:#F8FAFC;font-size:8pt;color:#777;}
-  .cell-name{text-align:left;padding-left:4px;font-weight:600;white-space:nowrap;font-size:9pt;}
+  .cell-name{text-align:left;padding:3px 4px;font-weight:600;white-space:normal;font-size:9pt;line-height:1.2;vertical-align:middle;}
+  .cell-name-main{font-weight:700;}
+  .cell-status{display:inline-block;margin-top:2px;padding:1px 4px;border-radius:999px;font-size:6.3pt;font-weight:700;}
+  .cell-sub{margin-top:2px;font-size:6pt;color:#475569;font-weight:500;white-space:nowrap;}
   .cell-o{color:#15803D;font-weight:900;font-size:12pt;}
   .cell-x{color:#DC2626;font-weight:900;font-size:12pt;}
   .cell-tri{color:#D97706;font-weight:900;font-size:12pt;}
   .cell-time{font-size:5.6pt;line-height:1.1;font-weight:500;color:#334155;letter-spacing:-0.1px;white-space:nowrap;}
+  .cell-cutoff{background:#F8FAFC;}
   .cell-cnt{font-weight:700;background:#EFF6FF;color:#1D4ED8;vertical-align:middle;}
   .row-even td{background:#F8FAFC !important;}
   .sign-area{margin-top:14px;display:flex;justify-content:flex-end;gap:24px;}
@@ -3842,7 +3886,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
       <td class="lbl">수업일정</td>
       <td>${schedInfo}</td>
       <td class="lbl">총 시간</td>
-      <td>${course.hours}시간</td>
+      <td>${formatHourText(totalCourseHours)}시간 / 휴식 ${breakMinutes}분 ${includeBreakInHours ? '포함' : '제외'}</td>
     </tr>
     <tr>
       <td class="lbl">담당 강사</td>
@@ -3927,6 +3971,9 @@ const AttendanceSheet = ({ course, courses, students }) => {
   const allDates = buildCourseDatesAll(sheetCourse);
   const courseStudents = students.filter(s => s.cid === sheetCourse?.id);
   const today = new Date().toISOString().slice(0, 10);
+  const totalCourseHours = getTotalCourseHours(sheetCourse);
+  const breakMinutes = getCourseBreakMinutes(sheetCourse);
+  const includeBreakInHours = shouldIncludeBreakInHours(sheetCourse);
 
   // 담당 강사 찾기
   const instNames = instructors.filter(i => (i.cids || []).includes(sheetCourse?.id)).map(i => i.name);
@@ -3941,12 +3988,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
   const [showTimes, setShowTimes] = useState(false);
   const totalDatePages = Math.ceil(allDates.length / PAGE_SIZE);
   const visibleDates = allDates.slice(datePage * PAGE_SIZE, (datePage + 1) * PAGE_SIZE);
-  const visibleDateEnd = visibleDates[visibleDates.length - 1] || "";
-  const pageStudents = courseStudents.filter(s => {
-    if (s.enrollmentStatus !== "중도탈락") return true;
-    if (!s.statusChangeDate) return true;
-    return visibleDateEnd >= s.statusChangeDate;
-  });
+  const pageStudents = courseStudents;
 
   return (
     <div>
@@ -3974,7 +4016,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
         <div style={{ display:"flex", gap:14, alignItems:"center", flexWrap:"wrap",
           borderTop:`1px solid ${T.bd}`, paddingTop:10 }}>
           <div style={{ fontSize:12, color:T.tx }}>
-            <b>{sheetCourse?.name}</b> · {formatCoursePeriod(sheetCourse)} · 총 {sheetCourse?.hours || 0}시간
+            <b>{sheetCourse?.name}</b> · {formatCoursePeriod(sheetCourse)} · 총 {formatHourText(totalCourseHours)}시간 · 휴식 {breakMinutes}분 {includeBreakInHours ? "포함" : "제외"}
           </div>
           {instructorName && <Chip label={`강사: ${instructorName}`} bg={T.pbg} color={T.p}/>}
           <div style={{ marginLeft:"auto", display:"flex", gap:6 }}>
@@ -4024,7 +4066,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
                   background:datePage>=totalDatePages-1?T.s3:"#fff", color:datePage>=totalDatePages-1?T.mu:T.tx,
                   cursor:datePage>=totalDatePages-1?"default":"pointer", fontSize:11, fontWeight:600 }}>다음 ▶</button>
               <span style={{ marginLeft:"auto", fontSize:11, color:T.mu }}>
-              전체 수업일: {allDates.length}일 · 훈련생: {pageStudents.length}명
+              전체 수업일: {allDates.length}일 · 훈련생: {courseStudents.length}명
               </span>
             </div>
           )}
@@ -4033,7 +4075,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
             <thead>
               <tr style={{ background:T.s2 }}>
                 <th style={{ padding:"8px 6px", fontSize:10, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}`, position:"sticky", left:0, background:T.s2, zIndex:2, minWidth:36, textAlign:"center" }}>번호</th>
-                <th style={{ padding:"8px 6px", fontSize:10, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}`, position:"sticky", left:36, background:T.s2, zIndex:2, minWidth:70, textAlign:"left" }}>성명</th>
+                <th style={{ padding:"8px 6px", fontSize:10, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}`, position:"sticky", left:36, background:T.s2, zIndex:2, minWidth:140, textAlign:"left" }}>성명 / 상태</th>
                 {visibleDates.map(d => (
                   <th key={d} style={{ padding:"4px 2px", fontSize:9, color: d > today ? T.mu : T.tx, fontWeight:600,
                     borderBottom:`1px solid ${T.bd}`, textAlign:"center", minWidth: showTimes ? 44 : 26, whiteSpace:"nowrap",
@@ -4047,21 +4089,25 @@ const AttendanceSheet = ({ course, courses, students }) => {
             </thead>
             <tbody>
               {pageStudents.map((s, idx) => {
-                const presentDays = allDates.filter(d => attData[`${s.id}_${d}`]?.status === "O").length;
-                const absentDays  = allDates.filter(d => !( d > today) && attData[`${s.id}_${d}`]?.status === "A").length;
-                const cutoffDate = s.statusChangeDate || "";
-                const cutoffLabel = cutoffDate && cutoffDate.length >= 10 ? cutoffDate.slice(5) : "";
+                const presentDays = allDates.filter(d => !isAttendanceDateLocked(s, d) && attData[`${s.id}_${d}`]?.status === "O").length;
+                const absentDays  = allDates.filter(d => !(d > today) && !isAttendanceDateLocked(s, d) && attData[`${s.id}_${d}`]?.status === "A").length;
+                const statusMeta = getAttendanceStatusMeta(s);
+                const totalHoursForStudent = getAttendanceSheetTotalHours(sheetCourse, s);
                 const rowBg = absentDays >= 3 ? "#FFF8F8" : undefined;
                 return (
                   <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}`, background: rowBg }}>
                     <td style={{ padding:"6px 4px", fontSize:11, color:T.mu, textAlign:"center", position:"sticky", left:0, background: rowBg || T.s, zIndex:1 }}>{idx+1}</td>
                     <td style={{ padding:"6px 6px", fontSize:12, fontWeight:700, color:T.tx, whiteSpace:"nowrap", position:"sticky", left:36, background: rowBg || T.s, zIndex:1 }}>
                       {s.name}
-                      {s.enrollmentStatus === "중도탈락" && (
-                        <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEE2E2", color:"#DC2626", fontWeight:700 }}>
-                          중도탈락 {cutoffLabel}
+                      {statusMeta && (
+                        <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4,
+                          background:statusMeta.colors.bg, color:statusMeta.colors.color, fontWeight:700 }}>
+                          {statusMeta.label}
                         </span>
                       )}
+                      <div style={{ marginTop:3, fontSize:9, color:T.mu, fontWeight:500, whiteSpace:"nowrap" }}>
+                        누적 {formatHourText(s.accumulatedHours || 0)}h / {formatHourText(totalHoursForStudent)}h · {formatHourText(s.rate || 0)}%
+                      </div>
                       {absentDays >= 3 && (
                         <span style={{ marginLeft:4, fontSize:9, padding:"1px 4px", borderRadius:4, background:"#FEF3C7", color:"#92400E", fontWeight:600 }}>
                           결석 {absentDays}일
@@ -4073,12 +4119,12 @@ const AttendanceSheet = ({ course, courses, students }) => {
                       const rec = attData[key] || {};
                       const status = rec.status;
                       const isFuture = d > today;
-                      const isDropoutBefore = s.enrollmentStatus === "중도탈락" && cutoffDate && d < cutoffDate;
+                      const isLocked = isAttendanceDateLocked(s, d);
                       let display = "";
                       let color = T.mu;
                       let timeText = "";
                       if (!isFuture) {
-                        if (!isDropoutBefore) {
+                        if (!isLocked) {
                           if (status === "O") { display = "O"; color = T.ok; }
                           else if (status === "A") { display = "✕"; color = T.danger; }
                           else if (status === "L") { display = "△"; color = "#D97706"; }
@@ -4091,6 +4137,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
                       const isException = display === "✕" || display === "△";
                       const cellBg = d === today ? '#FFFBEB'
                         : isFuture ? T.s2
+                        : isLocked ? "#F8FAFC"
                         : display === "✕" ? "#FFF0F0"
                         : display === "△" ? "#FFFBEB"
                         : 'transparent';
@@ -4141,6 +4188,7 @@ const CompletionMgmt = ({ students, courses }) => {
   const list = students.filter(s => {
     if (s.cid !== course.id) return false;
     if (s.enrollmentStatus === '중도탈락') return false; // 중도탈락 제외
+    if (s.enrollmentStatus === '수료' || s.enrollmentStatus === '조기취업 수료') return false; // 이미 확정된 수료자는 목록에서 제외
     return true;
   });
   const get = s => {
@@ -4582,7 +4630,6 @@ const generateCertQRDataUrl = (certNumber) => {
 =========================================================== */
 const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
 const DEFAULT_BREAK_MINUTES = 60;
-const MIN_ATTENDANCE_FOR_BREAK_DEDUCTION_MINUTES = 5 * 60; // 반일 수업/짧은 참여(5시간 미만)는 휴식시간을 일괄 차감하지 않음
 
 // HH:MM → 분(minutes) 변환
 const parseTimeToMinutes = (timeStr) => {
@@ -4604,6 +4651,18 @@ const getCourseBreakMinutes = (course) => {
   return normalizeBreakMinutes(course?.breakMinutes ?? course?.break_minutes);
 };
 
+const shouldIncludeBreakInHours = (course) => {
+  const raw = course?.includeBreakInHours ?? course?.include_break_in_hours;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'string') {
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === 'false' || normalized === '0' || normalized === 'n') return false;
+    if (normalized === 'true' || normalized === '1' || normalized === 'y') return true;
+  }
+  if (typeof raw === 'number') return raw !== 0;
+  return false; // 기본값: 쉬는시간 제외
+};
+
 // 과정 수업 시작/종료 시각을 분(minute) 단위로 반환 (시간 범위 클리핑용)
 const getCourseScheduleMinutes = (course) => {
   const schedStart = parseTimeToMinutes(course?.schedTimeFrom);
@@ -4612,17 +4671,25 @@ const getCourseScheduleMinutes = (course) => {
   return { schedStart, schedEnd };
 };
 
-const getScheduledDailyHours = (course) => {
+const getOverrideScheduleMinutes = (override, fallbackScheduleMinutes = null) => {
+  if (!override || override.type === 'cancelled') return fallbackScheduleMinutes;
+  const schedStart = parseTimeToMinutes(override.timeFrom);
+  const schedEnd = parseTimeToMinutes(override.timeTo);
+  if (schedStart === null || schedEnd === null || schedEnd <= schedStart) return fallbackScheduleMinutes;
+  return { schedStart, schedEnd };
+};
+
+const getScheduledDailyHours = (course, includeBreakInHours = true) => {
   const fromMin = parseTimeToMinutes(course?.schedTimeFrom);
   const toMin   = parseTimeToMinutes(course?.schedTimeTo);
   if (fromMin === null || toMin === null || toMin <= fromMin) return 0;
-  const breakMinutes = getCourseBreakMinutes(course);
+  const breakMinutes = includeBreakInHours ? 0 : getCourseBreakMinutes(course);
   return Math.max(0, (toMin - fromMin - breakMinutes) / 60);
 };
 
 // 일별 출석시간 계산 (시간 단위, 소수점 2자리)
 // scheduleMinutes: { schedStart, schedEnd } (분 단위) — 수업시간 범위 내로 입/퇴실 클리핑
-const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null) => {
+const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
   if (record.status === 'A') return 0;
   let checkInMin  = parseTimeToMinutes(record.check_in);
   let checkOutMin = parseTimeToMinutes(record.check_out);
@@ -4635,21 +4702,30 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, sched
     checkOutMin = Math.min(checkOutMin, schedEnd);
     if (checkOutMin <= checkInMin) return 0;
   }
-  const safeBreak = normalizeBreakMinutes(breakMinutes);
   const stayMinutes = checkOutMin - checkInMin;
-  // 휴식시간은 점심 포함 장시간 수업을 전제로 하므로, 5시간 이상 체류한 경우에만 차감
-  const appliedBreak = stayMinutes >= MIN_ATTENDANCE_FOR_BREAK_DEDUCTION_MINUTES ? safeBreak : 0;
+  const safeBreak = normalizeBreakMinutes(breakMinutes);
+  const appliedBreak = includeBreakInHours ? 0 : safeBreak;
   const diffMinutes = Math.max(0, stayMinutes - appliedBreak);
   return Math.round((diffMinutes / 60) * 100) / 100;
 };
 
 // 누적 훈련시간 계산
-const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null) => {
+const calculateAccumulatedHours = (
+  attendanceRecords,
+  cutoffDate = null,
+  breakMinutes = DEFAULT_BREAK_MINUTES,
+  scheduleMinutes = null,
+  includeBreakInHours = true,
+  overridesByDate = null
+) => {
   const invalidRecords = [];
   let totalHours = 0;
   for (const record of attendanceRecords) {
     if (cutoffDate && record.date > cutoffDate) continue;
-    const dailyHours = calculateDailyHours(record, breakMinutes, scheduleMinutes);
+    const override = overridesByDate ? overridesByDate.get(record.date) : null;
+    if (override?.type === 'cancelled') continue;
+    const effectiveScheduleMinutes = getOverrideScheduleMinutes(override, scheduleMinutes);
+    const dailyHours = calculateDailyHours(record, breakMinutes, effectiveScheduleMinutes, includeBreakInHours);
     if (dailyHours === 0 && record.status !== 'A') {
       if (!record.check_in || !record.check_out) {
         invalidRecords.push({ ...record, reason: 'incomplete' });
@@ -4665,19 +4741,20 @@ const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMi
 // 과정 총 교육시간 산출
 const getTotalCourseHours = (course) => {
   if (!course) return 0;
+  const includeBreakInHours = shouldIncludeBreakInHours(course);
 
   const ovs = (window._overridesRef?.current || []).filter(o => o.courseId === course.id);
 
   if (ovs.length === 0) {
     if (course.hours && course.hours > 0) return course.hours;
-    const dailyHours = getScheduledDailyHours(course);
+    const dailyHours = getScheduledDailyHours(course, includeBreakInHours);
     if (dailyHours <= 0) return 0;
     const trainingDays = buildCourseDatesAll(course).length;
     return dailyHours * trainingDays;
   }
 
   const allDates = buildCourseDatesAll(course);
-  const scheduledDaily = getScheduledDailyHours(course);
+  const scheduledDaily = getScheduledDailyHours(course, includeBreakInHours);
   const defaultDaily = scheduledDaily > 0 ? scheduledDaily : DEFAULT_DAILY_HOURS;
 
   let total = 0;
@@ -4726,8 +4803,18 @@ const recalculateHoursAndRate = async (studentId, courseId) => {
       : null;
 
     const breakMinutes = getCourseBreakMinutes(course);
-    const scheduleMinutes = getCourseScheduleMinutes(course);
-    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate, breakMinutes, scheduleMinutes);
+    const includeBreakInHours = shouldIncludeBreakInHours(course);
+    const defaultScheduleMinutes = getCourseScheduleMinutes(course);
+    const courseOverrides = (window._overridesRef?.current || []).filter(o => o.courseId === course.id);
+    const overridesByDate = new Map(courseOverrides.map(o => [o.date, o]));
+    const { accumulatedHours } = calculateAccumulatedHours(
+      attRecords || [],
+      cutoffDate,
+      breakMinutes,
+      defaultScheduleMinutes,
+      includeBreakInHours,
+      overridesByDate
+    );
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {
@@ -4755,6 +4842,13 @@ const recalculateHoursAndRate = async (studentId, courseId) => {
 const batchRecalculateAllHours = async (students, courses) => {
   if (!students || students.length === 0) return 0;
   if (!courses  || courses.length  === 0) return 0;
+  const allOverrides = window._overridesRef?.current || [];
+  const overridesByCourse = new Map();
+  for (const ov of allOverrides) {
+    const cid = Number(ov.courseId);
+    if (!overridesByCourse.has(cid)) overridesByCourse.set(cid, new Map());
+    overridesByCourse.get(cid).set(ov.date, ov);
+  }
 
   // 모든 출결 기록 한번에 조회 (API 호출 최소화)
   const { data: allAtt, error: attErr } = await sbGet("attendance", "select=*&order=date.asc");
@@ -4774,8 +4868,17 @@ const batchRecalculateAllHours = async (students, courses) => {
       : null;
 
     const breakMinutes = getCourseBreakMinutes(course);
-    const scheduleMinutes = getCourseScheduleMinutes(course);
-    const { accumulatedHours } = calculateAccumulatedHours(records, cutoffDate, breakMinutes, scheduleMinutes);
+    const includeBreakInHours = shouldIncludeBreakInHours(course);
+    const defaultScheduleMinutes = getCourseScheduleMinutes(course);
+    const overridesByDate = overridesByCourse.get(Number(course.id)) || null;
+    const { accumulatedHours } = calculateAccumulatedHours(
+      records,
+      cutoffDate,
+      breakMinutes,
+      defaultScheduleMinutes,
+      includeBreakInHours,
+      overridesByDate
+    );
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {

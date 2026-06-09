@@ -3380,7 +3380,16 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                     <td style={{ padding:"10px 8px", textAlign:"center" }}>
                       {(() => {
                         if (!curIn || !curOut) return <span style={{ fontSize:11, color:T.mu }}>—</span>;
-                        const daily = calculateDailyHours({ check_in: curIn, check_out: curOut, status: curStatus || 'O' }, getCourseBreakMinutes(course), getCourseScheduleMinutes(course));
+                        const includeBreakInHours = shouldIncludeBreakInHours(course);
+                        const defaultScheduleMinutes = getCourseScheduleMinutes(course);
+                        const effectiveScheduleMinutes = getOverrideScheduleMinutes(selectedDateOverride, defaultScheduleMinutes);
+                        const statusForCalc = selectedDateOverride?.type === 'cancelled' ? 'A' : (curStatus || 'O');
+                        const daily = calculateDailyHours(
+                          { check_in: curIn, check_out: curOut, status: statusForCalc },
+                          getCourseBreakMinutes(course),
+                          effectiveScheduleMinutes,
+                          includeBreakInHours
+                        );
                         return <span style={{ fontSize:12, fontWeight:700, color:T.ok }}>{daily.toFixed(1)}h</span>;
                       })()}
                       {(() => {
@@ -4624,6 +4633,14 @@ const getCourseScheduleMinutes = (course) => {
   return { schedStart, schedEnd };
 };
 
+const getOverrideScheduleMinutes = (override, fallbackScheduleMinutes = null) => {
+  if (!override || override.type === 'cancelled') return fallbackScheduleMinutes;
+  const schedStart = parseTimeToMinutes(override.timeFrom);
+  const schedEnd = parseTimeToMinutes(override.timeTo);
+  if (schedStart === null || schedEnd === null || schedEnd <= schedStart) return fallbackScheduleMinutes;
+  return { schedStart, schedEnd };
+};
+
 const getScheduledDailyHours = (course, includeBreakInHours = true) => {
   const fromMin = parseTimeToMinutes(course?.schedTimeFrom);
   const toMin   = parseTimeToMinutes(course?.schedTimeTo);
@@ -4655,12 +4672,22 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, sched
 };
 
 // 누적 훈련시간 계산
-const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
+const calculateAccumulatedHours = (
+  attendanceRecords,
+  cutoffDate = null,
+  breakMinutes = DEFAULT_BREAK_MINUTES,
+  scheduleMinutes = null,
+  includeBreakInHours = true,
+  overridesByDate = null
+) => {
   const invalidRecords = [];
   let totalHours = 0;
   for (const record of attendanceRecords) {
     if (cutoffDate && record.date > cutoffDate) continue;
-    const dailyHours = calculateDailyHours(record, breakMinutes, scheduleMinutes, includeBreakInHours);
+    const override = overridesByDate ? overridesByDate.get(record.date) : null;
+    if (override?.type === 'cancelled') continue;
+    const effectiveScheduleMinutes = getOverrideScheduleMinutes(override, scheduleMinutes);
+    const dailyHours = calculateDailyHours(record, breakMinutes, effectiveScheduleMinutes, includeBreakInHours);
     if (dailyHours === 0 && record.status !== 'A') {
       if (!record.check_in || !record.check_out) {
         invalidRecords.push({ ...record, reason: 'incomplete' });
@@ -4739,8 +4766,17 @@ const recalculateHoursAndRate = async (studentId, courseId) => {
 
     const breakMinutes = getCourseBreakMinutes(course);
     const includeBreakInHours = shouldIncludeBreakInHours(course);
-    const scheduleMinutes = getCourseScheduleMinutes(course);
-    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate, breakMinutes, scheduleMinutes, includeBreakInHours);
+    const defaultScheduleMinutes = getCourseScheduleMinutes(course);
+    const courseOverrides = (window._overridesRef?.current || []).filter(o => o.courseId === course.id);
+    const overridesByDate = new Map(courseOverrides.map(o => [o.date, o]));
+    const { accumulatedHours } = calculateAccumulatedHours(
+      attRecords || [],
+      cutoffDate,
+      breakMinutes,
+      defaultScheduleMinutes,
+      includeBreakInHours,
+      overridesByDate
+    );
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {
@@ -4768,6 +4804,13 @@ const recalculateHoursAndRate = async (studentId, courseId) => {
 const batchRecalculateAllHours = async (students, courses) => {
   if (!students || students.length === 0) return 0;
   if (!courses  || courses.length  === 0) return 0;
+  const allOverrides = window._overridesRef?.current || [];
+  const overridesByCourse = new Map();
+  for (const ov of allOverrides) {
+    const cid = Number(ov.courseId);
+    if (!overridesByCourse.has(cid)) overridesByCourse.set(cid, new Map());
+    overridesByCourse.get(cid).set(ov.date, ov);
+  }
 
   // 모든 출결 기록 한번에 조회 (API 호출 최소화)
   const { data: allAtt, error: attErr } = await sbGet("attendance", "select=*&order=date.asc");
@@ -4788,8 +4831,16 @@ const batchRecalculateAllHours = async (students, courses) => {
 
     const breakMinutes = getCourseBreakMinutes(course);
     const includeBreakInHours = shouldIncludeBreakInHours(course);
-    const scheduleMinutes = getCourseScheduleMinutes(course);
-    const { accumulatedHours } = calculateAccumulatedHours(records, cutoffDate, breakMinutes, scheduleMinutes, includeBreakInHours);
+    const defaultScheduleMinutes = getCourseScheduleMinutes(course);
+    const overridesByDate = overridesByCourse.get(Number(course.id)) || null;
+    const { accumulatedHours } = calculateAccumulatedHours(
+      records,
+      cutoffDate,
+      breakMinutes,
+      defaultScheduleMinutes,
+      includeBreakInHours,
+      overridesByDate
+    );
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {

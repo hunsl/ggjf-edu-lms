@@ -5734,7 +5734,7 @@ const saveCertHistory = hist => {
   try { safeLocal.set(CERT_HIST_KEY, JSON.stringify(hist)); } catch {}
 };
 
-const CertMgmt = ({ students, courses }) => {
+const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
   const [course, setCourse]         = useState(courses[3] || courses[0]);
   const [docType, setDocType]       = useState("cert");   // "cert" | "attend" | "parti"
   const [issueDate, setIssueDate]   = useState("2026년　　월　　일");
@@ -5744,6 +5744,46 @@ const CertMgmt = ({ students, courses }) => {
   // 수강증명서 — 증명대상기간 수동 지정
   const [certOverrideStart, setCertOverrideStart] = useState("");
   const [certOverrideEnd,   setCertOverrideEnd]   = useState("");
+  const [historyFilter, setHistoryFilter] = useState({
+    q: "",
+    status: "all",
+    courseId: "all",
+    from: "",
+    to: "",
+    sort: "issuedAtDesc",
+  });
+  const [selectedHistory, setSelectedHistory] = useState(null);
+  const [memoDraft, setMemoDraft] = useState("");
+  const [historyBusyId, setHistoryBusyId] = useState("");
+
+  const issueStatusLabel = status => status === "취소" ? "취소" : "정상";
+  const normalizeHistoryRecord = r => ({
+    id:          r.id,
+    studentId:   r.student_id ?? r.studentId,
+    studentName: r.student_name ?? r.studentName,
+    courseId:    r.course_id ?? r.courseId,
+    courseName:  r.course_name ?? r.courseName,
+    docType:     r.doc_type ?? r.docType,
+    certNo:      r.cert_no ?? r.certNo,
+    fullNo:      r.full_no ?? r.fullNo,
+    issueDate:   r.issue_date ?? r.issueDate,
+    issuedAt:    r.issued_at ?? r.issuedAt,
+    issueReason: (r.issue_reason ?? r.issueReason) || "최초발급",
+    issueChannel: (r.issue_channel ?? r.issueChannel) || "미리보기",
+    issueStatus: issueStatusLabel(r.issue_status ?? r.issueStatus),
+    completionStatus: (r.completion_status ?? r.completionStatus) || "미정",
+    attendanceRate: Number(r.attendance_rate ?? r.attendanceRate ?? 0),
+    issuedBy:    (r.issued_by ?? r.issuedBy) || "시스템",
+    originalIssueId: (r.original_issue_id ?? r.originalIssueId) || "",
+    cancelledAt: (r.cancelled_at ?? r.cancelledAt) || "",
+    cancelReason: (r.cancel_reason ?? r.cancelReason) || "",
+    cancelledBy: (r.cancelled_by ?? r.cancelledBy) || "",
+    adminMemo: (r.admin_memo ?? r.adminMemo) || "",
+    printCount: Number(r.print_count ?? r.printCount ?? 0),
+    pdfCount: Number(r.pdf_count ?? r.pdfCount ?? 0),
+    imageCount: Number(r.image_count ?? r.imageCount ?? 0),
+    lastOutputAt: (r.last_output_at ?? r.lastOutputAt) || "",
+  });
 
   // 발급이력: localStorage에서 초기화, 이후 useState로 관리
   const [certHistory, setCertHistory] = useState(loadCertHistory);
@@ -5754,18 +5794,7 @@ const CertMgmt = ({ students, courses }) => {
       try {
         const { data, error } = await sbGet("cert_issuances", "select=*&order=issued_at.desc&limit=2000");
         if (!error && data && data.length > 0) {
-          const hist = data.map(r => ({
-            id:          r.id,
-            studentId:   r.student_id,
-            studentName: r.student_name,
-            courseId:    r.course_id,
-            courseName:  r.course_name,
-            docType:     r.doc_type,
-            certNo:      r.cert_no,
-            fullNo:      r.full_no,
-            issueDate:   r.issue_date,
-            issuedAt:    r.issued_at,
-          }));
+          const hist = data.map(normalizeHistoryRecord);
           setCertHistory(hist);
           saveCertHistory(hist); // localStorage 동기화
         }
@@ -5776,13 +5805,24 @@ const CertMgmt = ({ students, courses }) => {
     loadFromDB();
   }, []);
 
+  useEffect(() => {
+    setCertHistory(prev => {
+      const next = prev.map(normalizeHistoryRecord);
+      saveCertHistory(next);
+      return next;
+    });
+  }, []);
+
   // certHistory → issued 맵 (key: studentId+docType+courseId)
   const issued = useMemo(() => {
     const map = {};
-    certHistory.forEach(r => {
+    certHistory
+      .filter(r => r.issueStatus !== "취소")
+      .sort((a, b) => new Date(b.issuedAt) - new Date(a.issuedAt))
+      .forEach(r => {
       const key = String(r.studentId) + r.docType + String(r.courseId);
       if (!map[key]) map[key] = { no: r.certNo, date: r.issueDate, issuedAt: r.issuedAt };
-    });
+      });
     return map;
   }, [certHistory]);
 
@@ -5830,7 +5870,8 @@ const CertMgmt = ({ students, courses }) => {
     const existing = hist.find(r =>
       String(r.studentId) === String(s.id) &&
       r.docType === docType &&
-      String(r.courseId) === String(course.id)
+      String(r.courseId) === String(course.id) &&
+      r.issueStatus !== "취소"
     );
     if (existing) return existing.certNo;
     const maxNo = hist
@@ -5839,14 +5880,33 @@ const CertMgmt = ({ students, courses }) => {
     return String(maxNo + 1).padStart(3, "0");
   };
 
+  const findLatestIssuedRecord = (s, histRef) => {
+    return [...histRef]
+      .filter(r =>
+        String(r.studentId) === String(s.id) &&
+        r.docType === docType &&
+        String(r.courseId) === String(course.id) &&
+        r.issueStatus !== "취소"
+      )
+      .sort((a, b) => new Date(b.issuedAt) - new Date(a.issuedAt))[0] || null;
+  };
+
   // 이력에 발급 기록 추가 (중복 방지)
-  const recordIssue = (s, no, histRef) => {
-    const alreadyIssued = histRef.find(r =>
+  const recordIssue = (s, no, histRef, channel = "미리보기") => {
+    const latest = findLatestIssuedRecord(s, histRef);
+    const latestAny = [...histRef]
+      .filter(r =>
+        String(r.studentId) === String(s.id) &&
+        r.docType === docType &&
+        String(r.courseId) === String(course.id)
+      )
+      .sort((a, b) => new Date(b.issuedAt) - new Date(a.issuedAt))[0] || null;
+    const hasAnyHistory = histRef.some(r =>
       String(r.studentId) === String(s.id) &&
       r.docType === docType &&
       String(r.courseId) === String(course.id)
     );
-    if (alreadyIssued) return histRef; // 재출력: 이력 추가 없음
+    const isReissue = hasAnyHistory;
     const record = {
       id:          `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
       studentId:   s.id,
@@ -5858,6 +5918,21 @@ const CertMgmt = ({ students, courses }) => {
       fullNo:      `2026-${docSeries(docType)}-${no}호`,
       issueDate,
       issuedAt:    new Date().toISOString(),
+      issueReason: isReissue ? "재발급" : "최초발급",
+      issueChannel: channel,
+      issueStatus: "정상",
+      completionStatus: s.enrollmentStatus || "재학중",
+      attendanceRate: Number(s.rate || 0),
+      issuedBy: currentUser?.name || "시스템",
+      originalIssueId: isReissue ? ((latest?.originalIssueId) || latest?.id || latestAny?.id || "") : "",
+      cancelledAt: "",
+      cancelReason: "",
+      cancelledBy: "",
+      adminMemo: "",
+      printCount: 0,
+      pdfCount: 0,
+      imageCount: 0,
+      lastOutputAt: "",
     };
     return [record, ...histRef];
   };
@@ -5876,6 +5951,21 @@ const CertMgmt = ({ students, courses }) => {
         full_no:      rec.fullNo,
         issue_date:   rec.issueDate,
         issued_at:    rec.issuedAt,
+        issue_reason: rec.issueReason,
+        issue_channel: rec.issueChannel,
+        issue_status: rec.issueStatus,
+        completion_status: rec.completionStatus,
+        attendance_rate: rec.attendanceRate,
+        issued_by: rec.issuedBy,
+        original_issue_id: rec.originalIssueId || null,
+        cancelled_at: rec.cancelledAt || null,
+        cancel_reason: rec.cancelReason || null,
+        cancelled_by: rec.cancelledBy || null,
+        admin_memo: rec.adminMemo || "",
+        print_count: rec.printCount || 0,
+        pdf_count: rec.pdfCount || 0,
+        image_count: rec.imageCount || 0,
+        last_output_at: rec.lastOutputAt || null,
       });
     } catch(e) {
       console.warn("발급이력 DB 저장 오류:", e);
@@ -5884,18 +5974,29 @@ const CertMgmt = ({ students, courses }) => {
 
   const handleIssue = async (s, histOverride = null) => {
     const hist = histOverride || certHistory;
-    const no = getCertNo(s, hist);
-    const nextHist = recordIssue(s, no, hist);
-
-    // 신규 발급인 경우에만 Supabase에 저장
-    const isNewRecord = nextHist.length > hist.length;
+    const latestIssued = findLatestIssuedRecord(s, hist);
+    const no = latestIssued ? latestIssued.certNo : getCertNo(s, hist);
+    const nextHist = recordIssue(s, no, hist, "미리보기");
+    const issuedRec = nextHist[0];
 
     if (!histOverride) {
       // 단건 발급: 상태+localStorage 즉시 갱신
       setCertHistory(nextHist);
       saveCertHistory(nextHist);
-      if (isNewRecord) saveCertIssuanceToDB(nextHist[0]);
+      saveCertIssuanceToDB(issuedRec);
+      addAudit?.(
+        issuedRec.issueReason === "최초발급" ? "증명서 발급" : "증명서 재발급",
+        `${issuedRec.studentName} · ${issuedRec.fullNo} · ${issuedRec.docType}`,
+        currentUser?.name
+      );
     }
+
+    window._pendingPreviewMeta = {
+      certIssueId: issuedRec.id,
+      docType: issuedRec.docType,
+      studentName: issuedRec.studentName,
+      fullNo: issuedRec.fullNo,
+    };
 
     if (docType==="cert") {
       printCertificate(s, course, no, issueDate);
@@ -5966,7 +6067,8 @@ const CertMgmt = ({ students, courses }) => {
         const existing = runningHist.find(r =>
           String(r.studentId) === String(s.id) &&
           r.docType === docType &&
-          String(r.courseId) === String(course.id)
+          String(r.courseId) === String(course.id) &&
+          r.issueStatus !== "취소"
         );
         const no = existing ? existing.certNo : (() => {
           while (usedNoSet.has(nextNoInt)) nextNoInt += 1;
@@ -5975,15 +6077,19 @@ const CertMgmt = ({ students, courses }) => {
           nextNoInt += 1;
           return assigned;
         })();
-        runningHist = recordIssue(s, no, runningHist);
+        runningHist = recordIssue(s, no, runningHist, "일괄출력");
         batchPrintItems.push({ student: s, certNo: no });
       }
+      window._pendingPreviewMeta = {
+        certIssueId: "",
+        docType,
+        studentName: "",
+        fullNo: "",
+      };
       printCertificateBatch(batchPrintItems, course, issueDate);
     } else {
       for (const s of eligible) {
-        const no = getCertNo(s, runningHist);
-        runningHist = recordIssue(s, no, runningHist);
-        await handleIssue(s, runningHist);
+        runningHist = await handleIssue(s, runningHist);
       }
     }
     setCertHistory(runningHist);
@@ -5994,6 +6100,9 @@ const CertMgmt = ({ students, courses }) => {
     for (const rec of newRecords) {
       await saveCertIssuanceToDB(rec);
     }
+    if (newRecords.length > 0) {
+      addAudit?.("증명서 일괄발급", `${DOC_TYPE_NAMES[docType] || docType} ${newRecords.length}건 처리`, currentUser?.name);
+    }
   };
 
   const handleBatchRenumber = async () => {
@@ -6002,7 +6111,7 @@ const CertMgmt = ({ students, courses }) => {
       return;
     }
     const target = certHistory
-      .filter(r => r.docType === docType && String(r.courseId) === String(course.id))
+      .filter(r => r.docType === docType && String(r.courseId) === String(course.id) && r.issueStatus !== "취소")
       .sort((a, b) => new Date(a.issuedAt) - new Date(b.issuedAt));
     if (target.length === 0) {
       alert("현재 과정의 수료증 발급이력이 없습니다.");
@@ -6025,6 +6134,7 @@ const CertMgmt = ({ students, courses }) => {
         full_no: u.fullNo,
       }).catch(e => console.warn("일괄번호 DB 반영 실패:", e))
     ));
+    addAudit?.("수료증 번호 일괄수정", `${course.name} ${updates.length}건`, currentUser?.name);
     alert(`✅ 수료증 번호 ${updates.length}건을 일괄 수정했습니다.`);
   };
 
@@ -6039,6 +6149,115 @@ const CertMgmt = ({ students, courses }) => {
   const historyForCurrent  = certHistory.filter(r =>
     r.docType === docType && String(r.courseId) === String(course.id)
   );
+  const filteredHistory = certHistory
+    .filter(r => r.docType === docType)
+    .filter(r => historyFilter.status === "all" ? true : r.issueStatus === historyFilter.status)
+    .filter(r => historyFilter.courseId === "all" ? true : String(r.courseId) === String(historyFilter.courseId))
+    .filter(r => {
+      if (!historyFilter.from && !historyFilter.to) return true;
+      const v = (r.issuedAt || "").slice(0, 10);
+      if (historyFilter.from && v < historyFilter.from) return false;
+      if (historyFilter.to && v > historyFilter.to) return false;
+      return true;
+    })
+    .filter(r => {
+      if (!historyFilter.q) return true;
+      const q = historyFilter.q.trim();
+      return [r.studentName, r.courseName, r.fullNo, r.issueReason, r.issuedBy, r.cancelReason, r.adminMemo]
+        .some(v => String(v || "").includes(q));
+    })
+    .sort((a, b) => {
+      if (historyFilter.sort === "issuedAtAsc") return new Date(a.issuedAt) - new Date(b.issuedAt);
+      if (historyFilter.sort === "nameAsc") return String(a.studentName).localeCompare(String(b.studentName), "ko");
+      if (historyFilter.sort === "noAsc") return String(a.fullNo).localeCompare(String(b.fullNo), "ko");
+      return new Date(b.issuedAt) - new Date(a.issuedAt);
+    });
+
+  const updateHistoryRecord = async (targetId, patch, auditAction = "증명서 이력 변경", auditDetail = "") => {
+    const prev = certHistory.find(r => r.id === targetId);
+    if (!prev) return;
+    const nextRec = { ...prev, ...patch };
+    const nextHist = certHistory.map(r => r.id === targetId ? nextRec : r);
+    setCertHistory(nextHist);
+    saveCertHistory(nextHist);
+    if (selectedHistory?.id === targetId) {
+      setSelectedHistory(nextRec);
+      setMemoDraft(nextRec.adminMemo || "");
+    }
+    try {
+      await sbUpdate("cert_issuances", `id=eq.${encodeURIComponent(targetId)}`, {
+        issue_status: nextRec.issueStatus,
+        issue_reason: nextRec.issueReason,
+        issue_channel: nextRec.issueChannel,
+        completion_status: nextRec.completionStatus,
+        attendance_rate: nextRec.attendanceRate,
+        issued_by: nextRec.issuedBy,
+        original_issue_id: nextRec.originalIssueId || null,
+        cancelled_at: nextRec.cancelledAt || null,
+        cancel_reason: nextRec.cancelReason || null,
+        cancelled_by: nextRec.cancelledBy || null,
+        admin_memo: nextRec.adminMemo || "",
+        print_count: nextRec.printCount || 0,
+        pdf_count: nextRec.pdfCount || 0,
+        image_count: nextRec.imageCount || 0,
+        last_output_at: nextRec.lastOutputAt || null,
+      });
+    } catch (e) {
+      console.warn("발급이력 DB 갱신 오류:", e);
+    }
+    addAudit?.(auditAction, auditDetail || `${nextRec.studentName} · ${nextRec.fullNo}`, currentUser?.name);
+  };
+
+  const handleToggleCancel = async rec => {
+    if (historyBusyId) return;
+    setHistoryBusyId(rec.id);
+    try {
+      if (rec.issueStatus === "취소") {
+        if (!window.confirm("취소된 발급건을 정상 상태로 복구할까요?")) return;
+        await updateHistoryRecord(rec.id, {
+          issueStatus: "정상",
+          cancelledAt: "",
+          cancelReason: "",
+          cancelledBy: "",
+        }, "증명서 발급취소 복구", `${rec.studentName} · ${rec.fullNo}`);
+      } else {
+        const reason = window.prompt("취소(무효) 사유를 입력하세요.", rec.cancelReason || "");
+        if (reason === null) return;
+        await updateHistoryRecord(rec.id, {
+          issueStatus: "취소",
+          cancelledAt: new Date().toISOString(),
+          cancelReason: reason.trim() || "관리자 취소",
+          cancelledBy: currentUser?.name || "시스템",
+        }, "증명서 발급취소", `${rec.studentName} · ${rec.fullNo}`);
+      }
+    } finally {
+      setHistoryBusyId("");
+    }
+  };
+
+  const handleSaveMemo = async () => {
+    if (!selectedHistory) return;
+    await updateHistoryRecord(selectedHistory.id, { adminMemo: memoDraft }, "증명서 관리자메모 수정", `${selectedHistory.studentName} · ${selectedHistory.fullNo}`);
+    alert("관리자 메모를 저장했습니다.");
+  };
+
+  useEffect(() => {
+    const handler = async (evt) => {
+      const d = evt?.detail || {};
+      if (!d.certIssueId) return;
+      const target = certHistory.find(r => r.id === d.certIssueId);
+      if (!target) return;
+      const patch = {
+        printCount: target.printCount + (d.action === "print" ? 1 : 0),
+        pdfCount: target.pdfCount + (d.action === "pdf" ? 1 : 0),
+        imageCount: target.imageCount + (d.action === "image" ? 1 : 0),
+        lastOutputAt: new Date().toISOString(),
+      };
+      await updateHistoryRecord(target.id, patch, "증명서 출력", `${target.studentName} · ${target.fullNo} · ${d.action}`);
+    };
+    window.addEventListener("cert-print-action", handler);
+    return () => window.removeEventListener("cert-print-action", handler);
+  }, [certHistory, currentUser, addAudit]);
 
   return (
     <div className="page">
@@ -6179,6 +6398,7 @@ const CertMgmt = ({ students, courses }) => {
                 setCertHistory(prev => {
                   const next = prev.filter(r => r.docType !== docType);
                   saveCertHistory(next);
+                  addAudit?.("증명서 이력 초기화", `${DOC_TYPE_NAMES[docType] || docType}`, currentUser?.name);
                   return next;
                 });
               }} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:`1px solid ${T.bd}`,
@@ -6191,33 +6411,78 @@ const CertMgmt = ({ students, courses }) => {
               </button>
             </div>
           </div>
-          {certHistory.filter(r => r.docType === docType).length === 0 ? (
+          <div style={{ padding:"10px 16px", borderBottom:`1px solid ${T.bd}`, display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", background:T.s2 }}>
+            <input value={historyFilter.q} onChange={e => setHistoryFilter(f => ({ ...f, q: e.target.value }))}
+              placeholder="검색 (이름/문서번호/과정/사유/메모)" style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
+                fontSize:11, minWidth:180, flex:1, background:"#fff" }}/>
+            <select value={historyFilter.status} onChange={e => setHistoryFilter(f => ({ ...f, status: e.target.value }))}
+              style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:11 }}>
+              <option value="all">전체상태</option>
+              <option value="정상">정상</option>
+              <option value="취소">취소</option>
+            </select>
+            <select value={historyFilter.courseId} onChange={e => setHistoryFilter(f => ({ ...f, courseId: e.target.value }))}
+              style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:11 }}>
+              <option value="all">전체과정</option>
+              {courses.map(c => <option key={c.id} value={String(c.id)}>{shortCourseName(c.name)}</option>)}
+            </select>
+            <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter(f => ({ ...f, from: e.target.value }))}
+              style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:11 }}/>
+            <span style={{ color:T.mu, fontSize:11 }}>~</span>
+            <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter(f => ({ ...f, to: e.target.value }))}
+              style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:11 }}/>
+            <select value={historyFilter.sort} onChange={e => setHistoryFilter(f => ({ ...f, sort: e.target.value }))}
+              style={{ padding:"6px 10px", border:`1px solid ${T.bd}`, borderRadius:8, fontSize:11 }}>
+              <option value="issuedAtDesc">최신순</option>
+              <option value="issuedAtAsc">오래된순</option>
+              <option value="nameAsc">이름순</option>
+              <option value="noAsc">문서번호순</option>
+            </select>
+          </div>
+          {filteredHistory.length === 0 ? (
             <div style={{ padding:"28px 0", textAlign:"center", fontSize:13, color:T.mu }}>
-              발급이력이 없습니다
+              발급이력이 없습니다 (필터 결과 0건)
             </div>
           ) : (
             <table style={{ width:"100%", borderCollapse:"collapse" }}>
               <thead>
                 <tr style={{ background:T.s2 }}>
-                  {["문서번호","이름","과정명","발급일자","발급시각"].map(h=>(
+                  {["문서번호","이름","과정명","상태","발급사유","채널","발급일자","발급시각","출력이력","관리"].map(h=>(
                     <th key={h} style={{ padding:"8px 14px", textAlign:"center",
                       fontSize:11, color:T.mu, fontWeight:700, borderBottom:`1px solid ${T.bd}` }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {certHistory
-                  .filter(r => r.docType === docType)
-                  .sort((a,b) => new Date(b.issuedAt) - new Date(a.issuedAt))
-                  .map(r => (
+                {filteredHistory.map(r => (
                   <tr key={r.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
                     <td style={{ padding:"9px 14px", textAlign:"center", fontFamily:"monospace",
                       fontSize:11, fontWeight:700, color:T.p }}>{r.fullNo}</td>
                     <td style={{ padding:"9px 14px", textAlign:"center", fontSize:12, fontWeight:700, color:T.tx }}>{r.studentName}</td>
                     <td style={{ padding:"9px 14px", textAlign:"center", fontSize:11, color:T.mu }}>{r.courseName}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"center" }}>
+                      <Chip label={r.issueStatus} bg={r.issueStatus==="취소" ? "#FEE2E2" : "#DCFCE7"} color={r.issueStatus==="취소" ? "#B91C1C" : "#15803D"}/>
+                    </td>
+                    <td style={{ padding:"9px 14px", textAlign:"center", fontSize:11, color:T.mu }}>{r.issueReason}</td>
+                    <td style={{ padding:"9px 14px", textAlign:"center", fontSize:11, color:T.mu }}>{r.issueChannel}</td>
                     <td style={{ padding:"9px 14px", textAlign:"center", fontSize:11, color:T.mu }}>{r.issueDate}</td>
                     <td style={{ padding:"9px 14px", textAlign:"center", fontSize:10, color:T.mu }}>
                       {new Date(r.issuedAt).toLocaleString("ko-KR")}
+                    </td>
+                    <td style={{ padding:"9px 10px", textAlign:"center", fontSize:10, color:T.mu }}>
+                      🖨 {r.printCount || 0} · PDF {r.pdfCount || 0} · 이미지 {r.imageCount || 0}
+                    </td>
+                    <td style={{ padding:"9px 8px", textAlign:"center", whiteSpace:"nowrap" }}>
+                      <button onClick={() => { setSelectedHistory(r); setMemoDraft(r.adminMemo || ""); }}
+                        style={{ fontSize:10, padding:"3px 8px", borderRadius:6, border:`1px solid ${T.bd}`, background:"#fff", color:T.p, cursor:"pointer", marginRight:6 }}>
+                        상세
+                      </button>
+                      <button onClick={() => handleToggleCancel(r)} disabled={historyBusyId === r.id}
+                        style={{ fontSize:10, padding:"3px 8px", borderRadius:6, border:`1px solid ${r.issueStatus==="취소" ? "#86EFAC" : "#FECACA"}`,
+                          background:r.issueStatus==="취소" ? "#ECFDF5" : "#FEF2F2",
+                          color:r.issueStatus==="취소" ? "#166534" : "#B91C1C", cursor:"pointer" }}>
+                        {r.issueStatus === "취소" ? "복구" : "취소"}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -6225,6 +6490,50 @@ const CertMgmt = ({ students, courses }) => {
             </table>
           )}
         </Card>
+      )}
+
+      {selectedHistory && (
+        <div style={{ position:"fixed", inset:0, zIndex:2200, background:"rgba(0,0,0,.45)", display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={() => setSelectedHistory(null)}>
+          <div style={{ width:560, maxWidth:"96vw", maxHeight:"82vh", overflow:"auto", background:T.s, borderRadius:16, border:`1px solid ${T.bd}` }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.bd}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontSize:13, fontWeight:800, color:T.tx }}>📑 발급 상세</div>
+              <button onClick={() => setSelectedHistory(null)} style={{ border:"none", background:"transparent", color:T.mu, cursor:"pointer", fontSize:14 }}>✕</button>
+            </div>
+            <div style={{ padding:"14px 18px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              {[
+                ["문서번호", selectedHistory.fullNo],
+                ["이름", selectedHistory.studentName],
+                ["과정명", selectedHistory.courseName],
+                ["상태", selectedHistory.issueStatus],
+                ["발급사유", selectedHistory.issueReason],
+                ["발급채널", selectedHistory.issueChannel],
+                ["수료기준상태", selectedHistory.completionStatus],
+                ["출석률", `${selectedHistory.attendanceRate || 0}%`],
+                ["발급자", selectedHistory.issuedBy],
+                ["발급일시", new Date(selectedHistory.issuedAt).toLocaleString("ko-KR")],
+                ["취소자", selectedHistory.cancelledBy || "-"],
+                ["취소사유", selectedHistory.cancelReason || "-"],
+              ].map(([k, v]) => (
+                <div key={k} style={{ border:`1px solid ${T.bd}`, borderRadius:8, padding:"8px 10px", background:T.s2 }}>
+                  <div style={{ fontSize:10, color:T.mu, marginBottom:3 }}>{k}</div>
+                  <div style={{ fontSize:12, color:T.tx, fontWeight:600, wordBreak:"break-all" }}>{v || "-"}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:"0 18px 16px" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:T.mu, marginBottom:6 }}>관리자 메모</div>
+              <textarea value={memoDraft} onChange={e => setMemoDraft(e.target.value)}
+                style={{ width:"100%", minHeight:72, border:`1px solid ${T.bd}`, borderRadius:8, padding:"8px 10px", fontSize:12, resize:"vertical", fontFamily:"inherit" }}/>
+              <div style={{ marginTop:8, display:"flex", justifyContent:"flex-end", gap:8 }}>
+                <button onClick={handleSaveMemo} style={{ fontSize:11, fontWeight:700, color:"#fff", background:T.p, border:"none", borderRadius:8, padding:"6px 12px", cursor:"pointer" }}>
+                  메모 저장
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 대상자 테이블 */}
@@ -6391,7 +6700,7 @@ const calcAge = birth => {
 /* ===========================================================
    🖥️ PRINT PREVIEW MODAL — 통합 미리보기 시스템
 =========================================================== */
-const PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = 'portrait' }) => {
+const PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = 'portrait', meta = {} }) => {
   const [zoom, setZoom] = useState(100);
   const [exporting, setExporting] = useState(false);
   const iframeRef = useRef(null);
@@ -6405,6 +6714,9 @@ const PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = 'p
   const handlePrint = () => {
     if (!iframeRef.current || !iframeRef.current.contentWindow) return;
     iframeRef.current.contentWindow.print();
+    if (meta?.certIssueId) {
+      window.dispatchEvent(new CustomEvent("cert-print-action", { detail: { ...meta, action: "print" } }));
+    }
   };
 
   const handlePDF = async () => {
@@ -6415,6 +6727,9 @@ const PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = 'p
       if (el) {
         const fname = generatePrintFilename(docType, '', '', 'pdf');
         await generatePDF(el, { orientation, filename: fname });
+        if (meta?.certIssueId) {
+          window.dispatchEvent(new CustomEvent("cert-print-action", { detail: { ...meta, action: "pdf" } }));
+        }
       }
     } catch (err) {
       alert('PDF 생성 오류: ' + err.message);
@@ -6435,6 +6750,9 @@ const PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = 'p
       a.href = canvas.toDataURL('image/png');
       a.download = generatePrintFilename(docType, '', '', 'png');
       a.click();
+      if (meta?.certIssueId) {
+        window.dispatchEvent(new CustomEvent("cert-print-action", { detail: { ...meta, action: "image" } }));
+      }
     } catch (err) {
       alert('이미지 생성 오류: ' + err.message);
     }
@@ -10580,12 +10898,14 @@ function App() {
 
   // ── 미리보기 모달 상태 ──
   const [previewState, setPreviewState] = useState({
-    isOpen: false, docHtml: '', docType: '', orientation: 'portrait'
+    isOpen: false, docHtml: '', docType: '', orientation: 'portrait', meta: {}
   });
 
   // 전역 미리보기 함수 (기존 인쇄 함수에서 호출)
   window._showPrintPreview = (html, docType, orientation) => {
-    setPreviewState({ isOpen: true, docHtml: html, docType, orientation });
+    const pendingMeta = window._pendingPreviewMeta || {};
+    window._pendingPreviewMeta = null;
+    setPreviewState({ isOpen: true, docHtml: html, docType, orientation, meta: pendingMeta });
   };
 
   // ── 감사 로그 (Audit Log) — localStorage 영구 보관 ──
@@ -11023,7 +11343,7 @@ function App() {
       case "rooms":       return <RoomMgmt courses={courses}/>;
       case "attendance":  return <AttendanceMgmt students={students} courses={courses} overrides={overrides} setOverrides={setOverrides} onRatesUpdated={recalculateAttendanceRate}/>;
       case "completion":  return <CompletionMgmt students={students} courses={courses}/>;
-      case "cert":        return <CertMgmt students={students} courses={courses}/>;
+      case "cert":        return <CertMgmt students={students} courses={courses} currentUser={currentUser} addAudit={addAudit}/>;
       default:            return null;
     }
   };
@@ -11036,6 +11356,7 @@ function App() {
         docHtml={previewState.docHtml}
         docType={previewState.docType}
         orientation={previewState.orientation}
+        meta={previewState.meta}
         onClose={() => setPreviewState(p => ({ ...p, isOpen: false }))}
       />
       {/* ── 모달들 ── */}

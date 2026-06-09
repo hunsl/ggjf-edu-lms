@@ -173,7 +173,22 @@ CREATE TABLE IF NOT EXISTS cert_issuances (
   cert_no      TEXT,
   full_no      TEXT,
   issue_date   TEXT,
-  issued_at    TIMESTAMPTZ DEFAULT NOW()
+  issued_at    TIMESTAMPTZ DEFAULT NOW(),
+  issue_reason TEXT DEFAULT '최초발급',
+  issue_channel TEXT DEFAULT '미리보기',
+  issue_status TEXT DEFAULT '정상',
+  completion_status TEXT,
+  attendance_rate NUMERIC DEFAULT 0,
+  issued_by TEXT,
+  original_issue_id TEXT,
+  cancelled_at TIMESTAMPTZ,
+  cancel_reason TEXT,
+  cancelled_by TEXT,
+  admin_memo TEXT DEFAULT '',
+  print_count INTEGER DEFAULT 0,
+  pdf_count INTEGER DEFAULT 0,
+  image_count INTEGER DEFAULT 0,
+  last_output_at TIMESTAMPTZ
 );
 
 -- ------------------------------------------------------------
@@ -293,6 +308,21 @@ ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS cert_no TEXT;
 ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS full_no TEXT;
 ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS issue_date TEXT;
 ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS issued_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS issue_reason TEXT DEFAULT '최초발급';
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS issue_channel TEXT DEFAULT '미리보기';
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS issue_status TEXT DEFAULT '정상';
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS completion_status TEXT;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS attendance_rate NUMERIC DEFAULT 0;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS issued_by TEXT;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS original_issue_id TEXT;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS cancelled_by TEXT;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS admin_memo TEXT DEFAULT '';
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS print_count INTEGER DEFAULT 0;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS pdf_count INTEGER DEFAULT 0;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS image_count INTEGER DEFAULT 0;
+ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS last_output_at TIMESTAMPTZ;
 
 -- ------------------------------------------------------------
 -- 3) 제약/인덱스

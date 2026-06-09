@@ -6080,12 +6080,7 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
         runningHist = recordIssue(s, no, runningHist, "일괄출력");
         batchPrintItems.push({ student: s, certNo: no });
       }
-      window._pendingPreviewMeta = {
-        certIssueId: "",
-        docType,
-        studentName: "",
-        fullNo: "",
-      };
+      window._pendingPreviewMeta = null;
       printCertificateBatch(batchPrintItems, course, issueDate);
     } else {
       for (const s of eligible) {

@@ -4141,6 +4141,7 @@ const CompletionMgmt = ({ students, courses }) => {
   const list = students.filter(s => {
     if (s.cid !== course.id) return false;
     if (s.enrollmentStatus === '중도탈락') return false; // 중도탈락 제외
+    if (s.enrollmentStatus === '수료' || s.enrollmentStatus === '조기취업 수료') return false; // 이미 확정된 수료자는 목록에서 제외
     return true;
   });
   const get = s => {
@@ -4582,7 +4583,6 @@ const generateCertQRDataUrl = (certNumber) => {
 =========================================================== */
 const DEFAULT_DAILY_HOURS = 4; // 과정 시간 정보가 없을 때 기존 시스템 기본 수업시간(4h) 유지
 const DEFAULT_BREAK_MINUTES = 60;
-const MIN_ATTENDANCE_FOR_BREAK_DEDUCTION_MINUTES = 5 * 60; // 반일 수업/짧은 참여(5시간 미만)는 휴식시간을 일괄 차감하지 않음
 
 // HH:MM → 분(minutes) 변환
 const parseTimeToMinutes = (timeStr) => {
@@ -4604,6 +4604,18 @@ const getCourseBreakMinutes = (course) => {
   return normalizeBreakMinutes(course?.breakMinutes ?? course?.break_minutes);
 };
 
+const shouldIncludeBreakInHours = (course) => {
+  const raw = course?.includeBreakInHours ?? course?.include_break_in_hours;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'string') {
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === 'false' || normalized === '0' || normalized === 'n') return false;
+    if (normalized === 'true' || normalized === '1' || normalized === 'y') return true;
+  }
+  if (typeof raw === 'number') return raw !== 0;
+  return true; // 기본값: 쉬는시간 포함
+};
+
 // 과정 수업 시작/종료 시각을 분(minute) 단위로 반환 (시간 범위 클리핑용)
 const getCourseScheduleMinutes = (course) => {
   const schedStart = parseTimeToMinutes(course?.schedTimeFrom);
@@ -4612,17 +4624,17 @@ const getCourseScheduleMinutes = (course) => {
   return { schedStart, schedEnd };
 };
 
-const getScheduledDailyHours = (course) => {
+const getScheduledDailyHours = (course, includeBreakInHours = true) => {
   const fromMin = parseTimeToMinutes(course?.schedTimeFrom);
   const toMin   = parseTimeToMinutes(course?.schedTimeTo);
   if (fromMin === null || toMin === null || toMin <= fromMin) return 0;
-  const breakMinutes = getCourseBreakMinutes(course);
+  const breakMinutes = includeBreakInHours ? 0 : getCourseBreakMinutes(course);
   return Math.max(0, (toMin - fromMin - breakMinutes) / 60);
 };
 
 // 일별 출석시간 계산 (시간 단위, 소수점 2자리)
 // scheduleMinutes: { schedStart, schedEnd } (분 단위) — 수업시간 범위 내로 입/퇴실 클리핑
-const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null) => {
+const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
   if (record.status === 'A') return 0;
   let checkInMin  = parseTimeToMinutes(record.check_in);
   let checkOutMin = parseTimeToMinutes(record.check_out);
@@ -4635,21 +4647,20 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, sched
     checkOutMin = Math.min(checkOutMin, schedEnd);
     if (checkOutMin <= checkInMin) return 0;
   }
-  const safeBreak = normalizeBreakMinutes(breakMinutes);
   const stayMinutes = checkOutMin - checkInMin;
-  // 휴식시간은 점심 포함 장시간 수업을 전제로 하므로, 5시간 이상 체류한 경우에만 차감
-  const appliedBreak = stayMinutes >= MIN_ATTENDANCE_FOR_BREAK_DEDUCTION_MINUTES ? safeBreak : 0;
+  const safeBreak = normalizeBreakMinutes(breakMinutes);
+  const appliedBreak = includeBreakInHours ? 0 : safeBreak;
   const diffMinutes = Math.max(0, stayMinutes - appliedBreak);
   return Math.round((diffMinutes / 60) * 100) / 100;
 };
 
 // 누적 훈련시간 계산
-const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null) => {
+const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
   const invalidRecords = [];
   let totalHours = 0;
   for (const record of attendanceRecords) {
     if (cutoffDate && record.date > cutoffDate) continue;
-    const dailyHours = calculateDailyHours(record, breakMinutes, scheduleMinutes);
+    const dailyHours = calculateDailyHours(record, breakMinutes, scheduleMinutes, includeBreakInHours);
     if (dailyHours === 0 && record.status !== 'A') {
       if (!record.check_in || !record.check_out) {
         invalidRecords.push({ ...record, reason: 'incomplete' });
@@ -4665,19 +4676,20 @@ const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMi
 // 과정 총 교육시간 산출
 const getTotalCourseHours = (course) => {
   if (!course) return 0;
+  const includeBreakInHours = shouldIncludeBreakInHours(course);
 
   const ovs = (window._overridesRef?.current || []).filter(o => o.courseId === course.id);
 
   if (ovs.length === 0) {
     if (course.hours && course.hours > 0) return course.hours;
-    const dailyHours = getScheduledDailyHours(course);
+    const dailyHours = getScheduledDailyHours(course, includeBreakInHours);
     if (dailyHours <= 0) return 0;
     const trainingDays = buildCourseDatesAll(course).length;
     return dailyHours * trainingDays;
   }
 
   const allDates = buildCourseDatesAll(course);
-  const scheduledDaily = getScheduledDailyHours(course);
+  const scheduledDaily = getScheduledDailyHours(course, includeBreakInHours);
   const defaultDaily = scheduledDaily > 0 ? scheduledDaily : DEFAULT_DAILY_HOURS;
 
   let total = 0;
@@ -4726,8 +4738,9 @@ const recalculateHoursAndRate = async (studentId, courseId) => {
       : null;
 
     const breakMinutes = getCourseBreakMinutes(course);
+    const includeBreakInHours = shouldIncludeBreakInHours(course);
     const scheduleMinutes = getCourseScheduleMinutes(course);
-    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate, breakMinutes, scheduleMinutes);
+    const { accumulatedHours } = calculateAccumulatedHours(attRecords || [], cutoffDate, breakMinutes, scheduleMinutes, includeBreakInHours);
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {
@@ -4774,8 +4787,9 @@ const batchRecalculateAllHours = async (students, courses) => {
       : null;
 
     const breakMinutes = getCourseBreakMinutes(course);
+    const includeBreakInHours = shouldIncludeBreakInHours(course);
     const scheduleMinutes = getCourseScheduleMinutes(course);
-    const { accumulatedHours } = calculateAccumulatedHours(records, cutoffDate, breakMinutes, scheduleMinutes);
+    const { accumulatedHours } = calculateAccumulatedHours(records, cutoffDate, breakMinutes, scheduleMinutes, includeBreakInHours);
 
     let totalHours = getTotalCourseHours(course);
     if (student.enrollmentStatus === '조기취업' && cutoffDate) {

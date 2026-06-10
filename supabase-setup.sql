@@ -378,3 +378,29 @@ ALTER TABLE holidays                  DISABLE ROW LEVEL SECURITY;
 ALTER TABLE course_schedule_overrides DISABLE ROW LEVEL SECURITY;
 ALTER TABLE status_changes            DISABLE ROW LEVEL SECURITY;
 ALTER TABLE cert_issuances            DISABLE ROW LEVEL SECURITY;
+
+-- ------------------------------------------------------------
+-- 6) 출석/수료 시간 계산 로직 업데이트 (manual adjustment + break inclusion)
+-- ------------------------------------------------------------
+
+-- courses 테이블: 쉬는시간 포함 여부 컬럼 추가
+ALTER TABLE courses
+ADD COLUMN IF NOT EXISTS include_break_in_hours BOOLEAN DEFAULT TRUE;
+
+UPDATE courses
+SET include_break_in_hours = TRUE
+WHERE include_break_in_hours IS NULL;
+
+-- attendance 테이블: 수동 보정 컬럼 추가
+ALTER TABLE attendance
+ADD COLUMN IF NOT EXISTS manual_add_hours    NUMERIC  DEFAULT 0,
+ADD COLUMN IF NOT EXISTS manual_deduct_hours NUMERIC  DEFAULT 0,
+ADD COLUMN IF NOT EXISTS manual_reason       TEXT,
+ADD COLUMN IF NOT EXISTS manual_memo         TEXT,
+ADD COLUMN IF NOT EXISTS manual_updated_by   TEXT,
+ADD COLUMN IF NOT EXISTS manual_updated_at   TIMESTAMPTZ;
+
+UPDATE attendance
+SET
+  manual_add_hours    = COALESCE(manual_add_hours,    0),
+  manual_deduct_hours = COALESCE(manual_deduct_hours, 0);

@@ -895,6 +895,13 @@ const downloadTemplate = (courses) => {
 /* ===========================================================
    DASHBOARD
 =========================================================== */
+const isDropoutStudent = (s) => (s?.enrollmentStatus || '') === '중도탈락';
+const visibleRate = (s) => isDropoutStudent(s) ? null : Number(s?.rate || 0);
+const formatVisibleRate = (s) => {
+  const r = visibleRate(s);
+  return r === null ? '중도탈락' : `${r}%`;
+};
+
 const Dashboard = ({ students, courses }) => {
   const today    = new Date();
   const todayStr = today.toISOString().slice(0,10);
@@ -957,7 +964,8 @@ const Dashboard = ({ students, courses }) => {
   const liveCourses = courses.filter(isTodayClass);
 
   const totalTgt = courses.reduce((a,b)=>a+b.tgt,0);
-  const avgRate  = students.length ? (students.reduce((a,b)=>a+b.rate,0)/students.length).toFixed(1) : 0;
+  const rateStudents = students.filter(s => !isDropoutStudent(s));
+  const avgRate  = rateStudents.length ? (rateStudents.reduce((a,b)=>a+Number(b.rate || 0),0)/rateStudents.length).toFixed(1) : 0;
   const isRiskTarget = (s) => {
     const status = s.enrollmentStatus || '재학중';
     if (['수료', '조기취업 수료', '미수료', '중도탈락'].includes(status)) return false;
@@ -968,7 +976,8 @@ const Dashboard = ({ students, courses }) => {
   const courseProgress = courses.map(c => {
     const cs       = students.filter(s => s.cid === c.id);
     const enrolled = cs.length;
-    const avgR     = cs.length ? Math.round(cs.reduce((a,b)=>a+b.rate,0)/cs.length) : 0;
+    const rateCs   = cs.filter(s => !isDropoutStudent(s));
+    const avgR     = rateCs.length ? Math.round(rateCs.reduce((a,b)=>a+Number(b.rate || 0),0)/rateCs.length) : 0;
     const isActive = c.dateFrom && c.dateFrom <= todayStr && (!c.dateTo || c.dateTo >= todayStr);
     const status   = isActive ? "진행중" : (c.dateTo && c.dateTo < todayStr) ? "종료" : "예정";
     return { ...c, enrolled, avgR, isActive, status };
@@ -985,7 +994,7 @@ const Dashboard = ({ students, courses }) => {
   });
   // 오늘 진행 중인 과정 중 출석률 50% 미만
   liveCourses.forEach(c => {
-    const cs = students.filter(s=>s.cid===c.id);
+    const cs = students.filter(s=>s.cid===c.id && !isDropoutStudent(s));
     const att = todayAtt[c.id] || {};
     const confirmed = (att.present||0) + (att.absent||0);
     if (confirmed > 0 && cs.length > 0) {
@@ -1042,7 +1051,7 @@ const Dashboard = ({ students, courses }) => {
         ) : (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:14 }}>
             {liveCourses.map(c => {
-              const cs        = students.filter(s=>s.cid===c.id);
+              const cs        = students.filter(s=>s.cid===c.id && !isDropoutStudent(s));
               const total     = cs.length;
               const att       = todayAtt[c.id] || {};
               const present   = att.present  || 0;
@@ -1884,7 +1893,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 
   const filtered = useMemo(() => students.filter(s => {
     if(cFilter && s.cid!==cFilter) return false;
-    if(riskOnly && s.rate>=80) return false;
+    if(riskOnly && (isDropoutStudent(s) || s.rate>=80)) return false;
     if(search && !s.name.includes(search) && !s.phone.includes(search)) return false;
     return true;
   }), [students, cFilter, riskOnly, search]);
@@ -2153,7 +2162,8 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
               <tbody>
                 {filtered.map(s=>{
                   const c = courses.find(x=>x.id===s.cid);
-                  const col = rateColor(s.rate);
+                  const hiddenRate = isDropoutStudent(s);
+                  const col = hiddenRate ? T.mu : rateColor(s.rate);
                   // 나이 계산
                   const age = (() => {
                     if(!s.birth) return "-";
@@ -2295,11 +2305,17 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 
                       {/* 출석률 */}
                       <td style={{ padding:"11px 12px", textAlign:"center", minWidth:80 }}>
-                        <div style={{ fontSize:14, fontWeight:800, color:col }}>{s.rate}%</div>
-                        <RBar r={s.rate} h={4}/>
-                        <div style={{ fontSize:9, color:col, marginTop:2 }}>
-                          {s.rate>=80?"정상":s.rate>=70?"주의":"위험"}
-                        </div>
+                        {hiddenRate ? (
+                          <Chip label="중도탈락" bg="#FEE2E2" color={T.danger} size={10}/>
+                        ) : (
+                          <>
+                            <div style={{ fontSize:14, fontWeight:800, color:col }}>{s.rate}%</div>
+                            <RBar r={s.rate} h={4}/>
+                            <div style={{ fontSize:9, color:col, marginTop:2 }}>
+                              {s.rate>=80?"정상":s.rate>=70?"주의":"위험"}
+                            </div>
+                          </>
+                        )}
                       </td>
 
                       {/* 출결 조회 */}
@@ -3391,14 +3407,20 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                       textDecoration: isDropout ? "line-through" : "none" }}>
                     <td style={{ padding:"10px 12px", fontSize:13, fontWeight:700, color:T.tx }}>
                       {s.name}
-                      {s.rate<80 && <span style={{ marginLeft:6, fontSize:10, color:T.danger }}>⚠</span>}
+                      {!isDropout && s.rate<80 && <span style={{ marginLeft:6, fontSize:10, color:T.danger }}>⚠</span>}
                       {isDropout && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEE2E2", color:"#DC2626", fontWeight:700 }}>중도탈락 {cutoffLabel}</span>}
                       {isEarlyEmployment && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#F3E8FF", color:"#7E22CE", fontWeight:700 }}>조기취업 {cutoffLabel}</span>}
                       {isAfterCutoff && <span style={{ marginLeft:4, fontSize:9, color:T.mu }}>(입력불가)</span>}
                     </td>
                     <td style={{ padding:"10px 12px", textAlign:"center" }}>
-                      <div style={{ fontSize:13, fontWeight:800, color:rateColor(s.rate) }}>{s.rate}%</div>
-                      <RBar r={s.rate} h={3}/>
+                      {isDropout ? (
+                        <Chip label="중도탈락" bg="#FEE2E2" color={T.danger} size={10}/>
+                      ) : (
+                        <>
+                          <div style={{ fontSize:13, fontWeight:800, color:rateColor(s.rate) }}>{s.rate}%</div>
+                          <RBar r={s.rate} h={3}/>
+                        </>
+                      )}
                       <button type="button" onClick={()=>showAttendanceHourBasis(s, course)}
                         style={{ marginTop:4, padding:"2px 6px", borderRadius:5,
                           border:`1px solid ${T.bd}`, background:T.s2, color:T.mu,
@@ -3907,7 +3929,9 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
           let cnt = 0;
           const statusMeta = getAttendanceStatusMeta(s);
           const totalHoursForStudent = getAttendanceSheetTotalHours(course, s);
-          const nameSub = `누적 ${formatHourText(s.accumulatedHours || 0)}h / ${formatHourText(totalHoursForStudent)}h · ${formatHourText(s.rate || 0)}%`;
+          const nameSub = isDropoutStudent(s)
+            ? `누적 ${formatHourText(s.accumulatedHours || 0)}h / ${formatHourText(totalHoursForStudent)}h · 중도탈락`
+            : `누적 ${formatHourText(s.accumulatedHours || 0)}h / ${formatHourText(totalHoursForStudent)}h · ${formatHourText(s.rate || 0)}%`;
           const cells = datePart.map(d => {
             const rec = attMap[`${s.id}_${d}`] || {};
             const status = rec.status;
@@ -4225,7 +4249,7 @@ const AttendanceSheet = ({ course, courses, students }) => {
                         </span>
                       )}
                       <div style={{ marginTop:3, fontSize:9, color:T.mu, fontWeight:500, whiteSpace:"nowrap" }}>
-                        누적 {formatHourText(s.accumulatedHours || 0)}h / {formatHourText(totalHoursForStudent)}h · {formatHourText(s.rate || 0)}%
+                        누적 {formatHourText(s.accumulatedHours || 0)}h / {formatHourText(totalHoursForStudent)}h · {isDropoutStudent(s) ? "중도탈락" : `${formatHourText(s.rate || 0)}%`}
                       </div>
                       {absentDays >= 3 && (
                         <span style={{ marginLeft:4, fontSize:9, padding:"1px 4px", borderRadius:4, background:"#FEF3C7", color:"#92400E", fontWeight:600 }}>
@@ -6848,8 +6872,12 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
                     })()}
                   </td>
                   <td style={{ padding:"12px 14px", textAlign:"center" }}>
-                    <span style={{ fontSize:14, fontWeight:800,
-                      color: s.rate>=80?T.ok:s.rate>=60?T.warn:T.danger }}>{s.rate}%</span>
+                    {isDropoutStudent(s) ? (
+                      <Chip label="중도탈락" bg="#FEE2E2" color={T.danger} size={10}/>
+                    ) : (
+                      <span style={{ fontSize:14, fontWeight:800,
+                        color: s.rate>=80?T.ok:s.rate>=60?T.warn:T.danger }}>{s.rate}%</span>
+                    )}
                   </td>
                   <td style={{ padding:"12px 14px", textAlign:"center", fontSize:11, fontFamily:"monospace" }}>
                     {cert
@@ -7128,9 +7156,13 @@ const StatusChangeDialog = ({ student, course, onStatusChanged, onClose, current
             </div>
             <div>
               <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>출석률</div>
-              <span style={{ fontSize:14, fontWeight:800, color: student.rate >= 80 ? T.ok : T.danger }}>
-                {student.rate || 0}%
-              </span>
+              {isDropoutStudent(student) ? (
+                <Chip label="중도탈락" bg="#FEE2E2" color={T.danger} size={10}/>
+              ) : (
+                <span style={{ fontSize:14, fontWeight:800, color: student.rate >= 80 ? T.ok : T.danger }}>
+                  {student.rate || 0}%
+                </span>
+              )}
             </div>
             <div>
               <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>누적시간</div>
@@ -9210,9 +9242,10 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
   /* ── 과정별 집계 ── */
   const stats = courses.map(c => {
     const ss = students.filter(s => s.cid === c.id);
-    const completed = ss.filter(s => s.rate >= 80).length;
-    const avgRate   = ss.length ? Math.round(ss.reduce((a,s)=>a+s.rate,0)/ss.length) : 0;
-    return { ...c, enrolled:ss.length, completed, avgRate };
+    const rateSs = ss.filter(s => !isDropoutStudent(s));
+    const completed = rateSs.filter(s => s.rate >= 80).length;
+    const avgRate   = rateSs.length ? Math.round(rateSs.reduce((a,s)=>a+s.rate,0)/rateSs.length) : 0;
+    return { ...c, enrolled:ss.length, completed, avgRate, rateCount: rateSs.length };
   });
 
   /* ── 전체 백업 엑셀 ── */
@@ -9230,7 +9263,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
         "과정코드":c?.code||"", "과정명":c?.name||"", "분야":c?.cat||"",
         "면접일":s.itvDate||"", "면접점수":s.itvScore||"", "면접등급":s.itvGrade||"",
         "합격여부":s.itvPass?"합격":"불합격", "특이사항":s.memo||"",
-        "출석률(%)":s.rate, "수료여부":s.rate>=80?"수료":"미수료",
+        "출석률(%)":isDropoutStudent(s) ? "" : s.rate, "수료여부":isDropoutStudent(s) ? "중도탈락" : (s.rate>=80?"수료":"미수료"),
       };
     });
     const ws1 = XLSX.utils.json_to_sheet(rows);
@@ -9240,8 +9273,8 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
       "과정코드":c.code,"과정명":c.name,"분야":c.cat,
       "모집목표":c.tgt,"현재등록":c.enrolled,"충원율(%)":c.tgt?Math.round(c.enrolled/c.tgt*100):0,
       "수료목표":c.cGoal,"수료인원":c.completed,
-      "수료율(%)":c.enrolled?Math.round(c.completed/c.enrolled*100):0,
-      "평균출석률(%)":c.avgRate,
+      "수료율(%)":c.rateCount?Math.round(c.completed/c.rateCount*100):0,
+      "평균출석률(%)":c.rateCount ? c.avgRate : "",
     }));
     const ws2 = XLSX.utils.json_to_sheet(summary);
     ws2["!cols"] = [8,28,12,8,8,8,8,8,8,10].map(w=>({wch:w}));
@@ -9268,7 +9301,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
         "연락처":s.phone,"거주시군":s.addrCity||"",
         "면접일":s.itvDate||"","면접점수":s.itvScore||"","면접등급":s.itvGrade||"",
         "합격여부":s.itvPass?"합격":"불합격","특이사항":s.memo||"",
-        "출석률(%)":s.rate,"수료여부":s.rate>=80?"수료":"미수료",
+        "출석률(%)":isDropoutStudent(s) ? "" : s.rate,"수료여부":isDropoutStudent(s) ? "중도탈락" : (s.rate>=80?"수료":"미수료"),
       };
     });
     const wb = XLSX.utils.book_new();
@@ -9353,8 +9386,8 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
               <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
                 {[
                   { l:"총 훈련생", v:students.length, sub:`목표 ${courses.reduce((a,c)=>a+c.tgt,0)}명`, c:T.p },
-                  { l:"수료 예정", v:students.filter(s=>s.rate>=80).length, sub:"출석률 80% 이상", c:T.ok },
-                  { l:"위험군",    v:students.filter(s=>s.rate<60&&s.rate>0).length, sub:"출석률 60% 미만", c:T.danger },
+                  { l:"수료 예정", v:students.filter(s=>!isDropoutStudent(s) && s.rate>=80).length, sub:"출석률 80% 이상", c:T.ok },
+                  { l:"위험군",    v:students.filter(s=>!isDropoutStudent(s) && s.rate<60&&s.rate>0).length, sub:"출석률 60% 미만", c:T.danger },
                 ].map(({l,v,sub,c})=>(
                   <div key={l} style={{ padding:"14px 16px", borderRadius:10, background:T.s2,
                     border:`1px solid ${T.bd}`, textAlign:"center" }}>
@@ -9402,8 +9435,8 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                         </td>
                         <td style={{ padding:"9px 12px", textAlign:"center" }}>
                           <span style={{ fontSize:12, fontWeight:700,
-                            color: c.avgRate>=80?T.ok:c.avgRate>=60?T.warn:c.enrolled?T.danger:T.mu }}>
-                            {c.enrolled ? `${c.avgRate}%` : "—"}
+                            color: c.avgRate>=80?T.ok:c.avgRate>=60?T.warn:c.rateCount?T.danger:T.mu }}>
+                            {c.rateCount ? `${c.avgRate}%` : "—"}
                           </span>
                         </td>
                       </tr>
@@ -9453,8 +9486,8 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                     <div style={{ display:"flex", gap:16, marginTop:10 }}>
                       {[
                         {l:"등록",   v:selStudents.length,                              c:T.p    },
-                        {l:"수료권",  v:selStudents.filter(s=>s.rate>=80).length,        c:T.ok   },
-                        {l:"위험",   v:selStudents.filter(s=>s.rate<60&&s.rate>0).length, c:T.danger},
+                        {l:"수료권",  v:selStudents.filter(s=>!isDropoutStudent(s) && s.rate>=80).length,        c:T.ok   },
+                        {l:"위험",   v:selStudents.filter(s=>!isDropoutStudent(s) && s.rate<60&&s.rate>0).length, c:T.danger},
                         {l:"미등록", v:Math.max(0,selCourse.tgt-selStudents.length),     c:T.mu   },
                       ].map(({l,v,c})=>(
                         <div key={l} style={{ textAlign:"center" }}>
@@ -9481,10 +9514,14 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                             <span style={{ fontSize:12, fontWeight:700, color:T.tx }}>{s.name}</span>
                             <span style={{ fontSize:10, color:T.mu, marginLeft:8 }}>{s.phone}</span>
                           </div>
-                          <span style={{ fontSize:12, fontWeight:800,
-                            color:s.rate>=80?T.ok:s.rate>=60?T.warn:T.danger }}>
-                            {s.rate}%
-                          </span>
+                          {isDropoutStudent(s) ? (
+                            <Chip label="중도탈락" bg="#FEE2E2" color={T.danger} size={10}/>
+                          ) : (
+                            <span style={{ fontSize:12, fontWeight:800,
+                              color:s.rate>=80?T.ok:s.rate>=60?T.warn:T.danger }}>
+                              {s.rate}%
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -10187,7 +10224,8 @@ const ProgressMgmt = ({ students, courses }) => {
   const courseData = courses.map(c => {
     const cs       = students.filter(s => s.cid === c.id);
     const enrolled = cs.length;
-    const avgRate  = enrolled ? Math.round(cs.reduce((a, b) => a + b.rate, 0) / enrolled) : 0;
+    const rateCs   = cs.filter(s => !isDropoutStudent(s));
+    const avgRate  = rateCs.length ? Math.round(rateCs.reduce((a, b) => a + b.rate, 0) / rateCs.length) : 0;
     const isActive = c.dateFrom && c.dateFrom <= todayStr && (!c.dateTo || c.dateTo >= todayStr);
     const isEnded  = c.dateTo && c.dateTo < todayStr;
     const status   = isActive ? "진행중" : isEnded ? "종료" : "예정";
@@ -10211,7 +10249,7 @@ const ProgressMgmt = ({ students, courses }) => {
       daysLeft = Math.max(0, Math.round((new Date(c.dateTo) - today) / 86400000));
     }
 
-    return { ...c, enrolled, avgRate, isActive, isEnded, status, datePct, daysLeft };
+    return { ...c, enrolled, avgRate, rateCount: rateCs.length, isActive, isEnded, status, datePct, daysLeft };
   }).sort((a, b) => (a.dateFrom || "9").localeCompare(b.dateFrom || "9") || a.name.localeCompare(b.name));
 
   const filtered = filterStatus === "전체" ? courseData : courseData.filter(c => c.status === filterStatus);
@@ -10438,7 +10476,7 @@ const ProgressMgmt = ({ students, courses }) => {
                     <span style={{ fontSize:10, color:T.mu }}>/{c.tgt}명</span>
                   </td>
                   <td style={{ padding:"10px 12px", textAlign:"center" }}>
-                    {c.enrolled > 0
+                    {c.rateCount > 0
                       ? <span style={{ fontWeight:700,
                           color:c.avgRate>=80?T.ok:c.avgRate>=70?T.warn:T.danger }}>{c.avgRate}%</span>
                       : <span style={{ color:T.mu }}>—</span>}

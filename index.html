@@ -3432,11 +3432,13 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
                           effectiveScheduleMinutes,
                           includeBreakInHours
                         );
-                        const hasTime = curIn && curOut;
+                        const hasAnyTime = curIn || curOut;
+                        const hasStatus = curStatus === 'O' || curStatus === 'L';
                         const hasManual = Number(curManualAdd || 0) > 0 || Number(curManualDeduct || 0) > 0;
+                        const showHours = hasAnyTime || (hasStatus && effectiveScheduleMinutes) || hasManual;
                         return (
-                          <span style={{ fontSize:12, fontWeight:700, color: (hasTime || hasManual) ? T.ok : T.mu }}>
-                            {(hasTime || hasManual) ? `${daily.toFixed(1)}h` : "—"}
+                          <span style={{ fontSize:12, fontWeight:700, color: showHours ? T.ok : T.mu }}>
+                            {showHours ? `${daily.toFixed(1)}h` : "—"}
                           </span>
                         );
                       })()}
@@ -4813,6 +4815,19 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, sched
   let checkInMin  = parseTimeToMinutes(record.check_in);
   let checkOutMin = parseTimeToMinutes(record.check_out);
   if (checkInMin === null || checkOutMin === null) {
+    // 출석(O) 또는 지각(L) 상태이고 예정 수업 시간이 있으면 시간 정보 없는 경우 예정 시간으로 대체
+    // (퇴실 미기록, 수동 O 처리 등 check_out 누락 시 0%가 되는 문제 방지)
+    if ((record.status === 'O' || record.status === 'L') && scheduleMinutes) {
+      const { schedStart, schedEnd } = scheduleMinutes;
+      if (schedEnd > schedStart) {
+        const effectiveIn  = checkInMin !== null ? Math.max(checkInMin, schedStart) : schedStart;
+        const safeBreak    = normalizeBreakMinutes(breakMinutes);
+        const appliedBreak = includeBreakInHours ? 0 : safeBreak;
+        const diffMinutes  = Math.max(0, schedEnd - effectiveIn - appliedBreak);
+        const autoHours    = Math.round((diffMinutes / 60) * 100) / 100;
+        return applyManualHoursAdjustment(autoHours, record);
+      }
+    }
     return applyManualHoursAdjustment(0, record);
   }
   if (checkOutMin <= checkInMin) {

@@ -5321,7 +5321,7 @@ const getCertificateMarkup = (s, c, certNo, issueDate) => {
   const period = c?.dateFrom
     ? `${fmtDot(c.dateFrom)}~${c.dateTo ? fmtDot(c.dateTo) : ""}`
     : "기간 미정";
-  const hours  = (() => { const h = getTotalCourseHours(c); return h > 0 ? `${formatHourText(h)}시간` : "시간 미정"; })();
+  const hours  = (() => { const h = Number(c?.hours || 0); return h > 0 ? `${formatHourText(h)}시간` : "시간 미정"; })();
   const completeDate = c?.dateTo ? fmtDot(c.dateTo) : "수료일 미정";
   const issueDateText = issueDate || "　　년　　월　　일";
   const currentYear = String(new Date().getFullYear());
@@ -5381,7 +5381,7 @@ const CERTIFICATE_PRINT_STYLE = `
     box-shadow:0 4px 20px rgba(234,88,12,.35);font-family:'Pretendard',sans-serif;z-index:99;}
   @media print{
     body{background:#fff;padding:0;}
-    .doc{box-shadow:none;padding:24mm 28mm 22mm;}
+    .doc{box-shadow:none;padding:30mm 28mm 16mm;}
     .print-btn{display:none;}
     @page{size:A4 portrait;margin:0;}
   }
@@ -6151,6 +6151,26 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
       .sort((a, b) => new Date(b.issuedAt) - new Date(a.issuedAt))[0] || null;
   };
 
+  const getCurrentIssuedRecordsForCourse = () => {
+    const latestByStudent = {};
+    certHistory
+      .filter(r =>
+        r.docType === docType &&
+        String(r.courseId) === String(course.id) &&
+        r.issueStatus !== "취소"
+      )
+      .sort((a, b) => new Date(b.issuedAt) - new Date(a.issuedAt))
+      .forEach(r => {
+        const key = `${r.studentId}_${r.docType}_${r.courseId}`;
+        if (!latestByStudent[key]) latestByStudent[key] = r;
+      });
+    return Object.values(latestByStudent)
+      .sort((a, b) =>
+        String(a.studentName || "").localeCompare(String(b.studentName || ""), "ko") ||
+        new Date(a.issuedAt) - new Date(b.issuedAt)
+      );
+  };
+
   // 이력에 발급 기록 추가 (중복 방지)
   const recordIssue = (s, no, histRef, channel = "미리보기") => {
     const latest = findLatestIssuedRecord(s, histRef);
@@ -6365,9 +6385,7 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
       alert("일괄번호 수정은 수료증에서만 가능합니다.");
       return;
     }
-    const target = certHistory
-      .filter(r => r.docType === docType && String(r.courseId) === String(course.id) && r.issueStatus !== "취소")
-      .sort((a, b) => new Date(a.issuedAt) - new Date(b.issuedAt));
+    const target = getCurrentIssuedRecordsForCourse();
     if (target.length === 0) {
       alert("현재 과정의 수료증 발급이력이 없습니다.");
       return;

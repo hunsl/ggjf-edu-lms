@@ -5313,6 +5313,12 @@ const PRINT_STYLE = `
 
 /* ── 수료증 (프리미엄 A4 레이아웃) ── */
 const getCertificateMarkup = (s, c, certNo, issueDate) => {
+  const formatCertificateCourseName = name => {
+    const text = String(name || "");
+    if (!text || /과정\s*$/.test(text)) return text;
+    if (/양성\s*$/.test(text)) return `${text}과정`;
+    return text;
+  };
   const fmtDot = d => {
     if (!d) return "";
     const [y, m, day] = d.split("-");
@@ -5337,7 +5343,7 @@ const getCertificateMarkup = (s, c, certNo, issueDate) => {
   <div class="title">수 료 증</div>
   <div class="fields">
     <div class="row"><span class="dot">·</span><span class="label">성　명</span><span class="colon">:</span><span class="val">${s.name}</span></div>
-    <div class="row"><span class="dot">·</span><span class="label">교육과정</span><span class="colon">:</span><span class="val">${c.name}</span></div>
+    <div class="row"><span class="dot">·</span><span class="label">교육과정</span><span class="colon">:</span><span class="val">${formatCertificateCourseName(c.name)}</span></div>
     <div class="row"><span class="dot">·</span><span class="label">교육기간</span><span class="colon">:</span><span class="val">${period} (${hours})</span></div>
     <div class="row"><span class="dot">·</span><span class="label">수료일</span><span class="colon">:</span><span class="val">${completeDate}</span></div>
   </div>

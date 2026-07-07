@@ -331,6 +331,12 @@ ALTER TABLE cert_issuances ADD COLUMN IF NOT EXISTS last_output_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS attendance_student_date_course_uidx
   ON attendance (student_id, date, course_id);
 
+CREATE INDEX IF NOT EXISTS attendance_course_student_date_idx
+  ON attendance (course_id, student_id, date);
+
+CREATE INDEX IF NOT EXISTS attendance_course_date_idx
+  ON attendance (course_id, date);
+
 CREATE UNIQUE INDEX IF NOT EXISTS course_schedule_overrides_course_date_uidx
   ON course_schedule_overrides (course_id, date);
 

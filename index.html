@@ -88,6 +88,12 @@ if (storageBlocked) {
 const SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";  // ← 여기에 Project URL
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";  // ← 여기에 anon public key
 const API   = `${SB_URL}/rest/v1`;
+const COURSE_LIST_SELECT = [
+  "id", "cat", "cc", "name", "code", "date_from", "date_to", "period", "method",
+  "hours", "tgt", "c_goal", "e_goal", "sched_days", "sched_time_from", "sched_time_to",
+  "break_minutes", "include_break_in_hours", "notes", "pdf_name", "links"
+].join(",");
+const ENABLE_REALTIME = false; // Supabase 리소스 회복 전까지 WebSocket 구독/재연결 중지
 const H     = {
   "apikey":        SB_KEY,
   "Authorization": `Bearer ${SB_KEY}`,
@@ -1641,7 +1647,26 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
   const list = cat==="전체" ? courses : courses.filter(c=>c.cat===cat);
 
   const openNew  = () => { setIsNew(true);  setEdit({}); };
-  const openEdit = c  => { setIsNew(false); setEdit(c);  };
+  const loadFullCourse = async (c) => {
+    if (!c?.id || c.pdfData) return c;
+    try {
+      const { data, error } = await sbGet("courses", `select=*&id=eq.${c.id}&limit=1`);
+      if (!error && data?.[0]) return toCourse(data[0]);
+    } catch (err) {
+      console.warn("PDF 데이터 로드 실패:", err);
+    }
+    return c;
+  };
+  const openEdit = async c  => {
+    setIsNew(false);
+    setEdit(await loadFullCourse(c));
+  };
+  const previewPdf = async (c) => {
+    const full = await loadFullCourse(c);
+    if (!full?.pdfData) return alert("첨부 PDF를 불러오지 못했습니다.");
+    const w = window.open();
+    w.document.write(`<iframe src="${full.pdfData}" style="width:100%;height:100vh;border:none;"/>`);
+  };
 
   const handleDelete = c => {
     if(!window.confirm(`"${c.name}" 과정을 삭제하시겠습니까?\n※ 해당 과정 훈련생 데이터는 유지됩니다.`)) return;
@@ -1715,8 +1740,8 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
             </div>
 
             {/* PDF 첨부 */}
-            {c.pdfData && (
-              <button onClick={()=>{ const w=window.open(); w.document.write(`<iframe src="${c.pdfData}" style="width:100%;height:100vh;border:none;"/>`); }}
+            {c.pdfName && (
+              <button onClick={()=>previewPdf(c)}
                 style={{ width:"100%", padding:"7px 10px", borderRadius:7, border:`1px solid ${T.pl}60`,
                   background:T.pbg, color:T.p, cursor:"pointer", fontSize:11, fontWeight:600,
                   display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
@@ -1813,7 +1838,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 
   // 모달이 열린 동안 Realtime 구독 (해당 학생 출결 실시간 갱신)
   useEffect(() => {
-    if (!attModal) return;
+    if (!attModal || !ENABLE_REALTIME) return;
     const studentId = Number(attModal.id);
     if (!studentId) return;
     let intentionallyClosed = false;
@@ -2736,7 +2761,7 @@ const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRat
 
   // ── 실시간 출결 업데이트 구독 (안정화 버전) ──
   useEffect(() => {
-    if (!course || !date) return;
+    if (!course || !date || !ENABLE_REALTIME) return;
 
     let intentionallyClosed = false;
     let heartbeatId         = null;
@@ -5106,7 +5131,7 @@ const batchRecalculateAllHours = async (students, courses, overridesArg = null) 
     const studentFilter = studentIds.length ? `&student_id=in.(${studentIds.join(",")})` : "";
     const { data, error } = await sbGet(
       "attendance",
-      `select=*&course_id=eq.${Number(course.id)}${studentFilter}&order=date.asc&limit=10000`
+      `select=id,course_id,student_id,date,status,check_in,check_out&course_id=eq.${Number(course.id)}${studentFilter}&order=date.asc&limit=10000`
     );
     if (error) {
       console.error("일괄 재계산 — 출결 조회 실패:", course.name, error);
@@ -5154,13 +5179,16 @@ const batchRecalculateAllHours = async (students, courses, overridesArg = null) 
     }
   }
 
-  // 변경된 학생만 DB 업데이트
-  await Promise.all(
-    updates.map(u => sbUpdate("students", `id=eq.${u.id}`, {
-      accumulated_hours: u.accumulated_hours,
-      rate: u.rate,
-    }).catch(e => console.warn("일괄 재계산 업데이트 실패:", e)))
-  );
+  // 변경된 학생만 DB 업데이트. Supabase 리소스 보호를 위해 작은 묶음으로 순차 처리한다.
+  for (let i = 0; i < updates.length; i += 5) {
+    const chunk = updates.slice(i, i + 5);
+    await Promise.all(
+      chunk.map(u => sbUpdate("students", `id=eq.${u.id}`, {
+        accumulated_hours: u.accumulated_hours,
+        rate: u.rate,
+      }).catch(e => console.warn("일괄 재계산 업데이트 실패:", e)))
+    );
+  }
 
   // 로컬 state 즉시 반영
   if (updates.length > 0 && window._setStudents) {
@@ -10588,7 +10616,7 @@ const MobileCheckin = () => {
     const init = async () => {
       try {
         // 과정 정보 로드 (cidNum으로 숫자 비교) — Supabase 없으면 로컬 COURSES 상수 폴백
-        const { data: cData, error: cErr } = await sbGet("courses", `select=*&id=eq.${cidNum}`);
+        const { data: cData, error: cErr } = await sbGet("courses", `select=${COURSE_LIST_SELECT}&id=eq.${cidNum}`);
         let c;
         if (!cErr && cData && cData.length > 0) {
           c = toCourse(cData[0]);
@@ -10980,6 +11008,7 @@ class RealtimeManager {
   _nextRef() { return String(++this._refCount); }
 
   subscribe(table, callbacks = {}) {
+    if (!ENABLE_REALTIME) return;
     if (this.subscriptions.has(table)) return;
 
     const { onInsert, onUpdate, onDelete, onStatus } = callbacks;
@@ -11281,7 +11310,7 @@ function App() {
       setDbError("");
       try {
         const [cRes, sRes, ovRes] = await Promise.all([
-          sbGet("courses", "select=*&order=id"),
+          sbGet("courses", `select=${COURSE_LIST_SELECT}&order=id`),
           sbGet("students", "select=*&order=id"),
           sbGet("course_schedule_overrides", "select=*&order=date"),
         ]);
@@ -11303,8 +11332,6 @@ function App() {
         // 공휴일 로드 (실패해도 앱 동작에 영향 없음)
         await loadHolidays().catch(console.warn);
         // 누적시간 일괄 재계산 (백그라운드 — 값이 달라진 학생만 DB/state 업데이트)
-        const loadedOverridesForCalc = ovRes?.error ? [] : (ovRes?.data || []).map(toOverride).filter(Boolean);
-        batchRecalculateAllHours(loadedStudents, loadedCourses, loadedOverridesForCalc).catch(console.warn);
       } catch (e) {
         setDbError(diagErr(e));
         setLoading(false);
@@ -11486,7 +11513,7 @@ function App() {
       });
     } else {
       // Prefer 헤더가 무시된 경우(드물지만) DB에서 최신 목록 재조회
-      const { data: fresh } = await sbGet("courses", "select=*&order=id");
+      const { data: fresh } = await sbGet("courses", `select=${COURSE_LIST_SELECT}&order=id`);
       if (fresh && fresh.length > 0) setCourses(fresh.map(toCourse));
     }
     addAudit("과정 등록", `${c.name} (${c.code}) 추가`, currentUser?.name);

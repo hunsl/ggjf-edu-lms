@@ -19479,24 +19479,38 @@ function App() {
     auditLog: auditLog,
     onSave: async updated => {
       try {
-        console.log("💾 계정 저장 중...");
-        setAccounts(updated);
-        setCurrentUser(prev => updated.find(a => a.id === prev.id) || prev);
-        addAudit("계정 수정", `계정 목록 저장 (${updated.length}개)`, currentUser?.name);
-        setTimeout(async () => {
-          try {
-            await sbDelete("accounts", "id=gte.0");
-            const {
-              error
-            } = await sbInsert("accounts", updated.map(fromAccount));
-            if (error) throw error;
-            console.log("✅ 계정 저장 완료:", updated.length, "개");
-          } catch (err) {
-            console.error("❌ 계정 저장 실패 (로컬은 유지):", err);
-          }
-        }, 100);
+        console.log("Saving accounts...");
+        const {
+          data: existingRows,
+          error: loadErr
+        } = await sbGet("accounts", "select=id&order=id");
+        if (loadErr) throw loadErr;
+        const existingIds = new Set((existingRows || []).map(r => Number(r.id)));
+        const nextIds = new Set(updated.map(a => Number(a.id)));
+        const removedIds = [...existingIds].filter(id => !nextIds.has(id));
+        const {
+          error: upsertErr
+        } = await sbUpsert("accounts", updated.map(fromAccount), "id");
+        if (upsertErr) throw upsertErr;
+        for (const id of removedIds) {
+          const {
+            error: delErr
+          } = await sbDelete("accounts", `id=eq.${id}`);
+          if (delErr) throw delErr;
+        }
+        const {
+          data: freshRows,
+          error: freshErr
+        } = await sbGet("accounts", "select=*&order=id");
+        if (freshErr) throw freshErr;
+        const savedAccounts = (freshRows || []).map(toAccount);
+        setAccounts(savedAccounts);
+        setCurrentUser(prev => savedAccounts.find(a => a.id === prev.id) || prev);
+        addAudit("Account update", `Saved account list (${savedAccounts.length})`, currentUser?.name);
+        console.log("Accounts saved:", savedAccounts.length);
       } catch (err) {
-        console.error("계정 저장 오류:", err);
+        console.error("Account save failed:", err);
+        alert("Account save failed: changes were not saved to Supabase.\n\n" + fmtSaveError(err));
       }
     },
     onClose: () => setShowAccMgr(false)

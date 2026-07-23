@@ -655,7 +655,7 @@ var GgjfEduLms = (() => {
     { id: 6, cat: "\uC9C0\uC5ED\uC5F0\uACC4\xB7\uAE30\uC5EC", cc: "#0D9488", name: "\uC911\uC7A5\uB144 \uAE30\uD68C\uAC15\uC0AC \uC591\uC131", code: "JY-03", dateFrom: "2026-05-01", dateTo: "2026-07-31", period: "5~7\uC6D4", method: "\uBE14\uB80C\uB514\uB4DC", hours: 83, tgt: 15, cGoal: 14, eGoal: 9, schedDays: "\uD654, \uBAA9", schedTimeFrom: "09:30", schedTimeTo: "13:30" },
     {
       id: 7,
-      cat: "\uC9C0\uC5ED\uC5F0\uACC4\xB7\uAE30\uC5EC",
+      cat: "AI\uD65C\uC6A9 \uBD84\uC57C",
       cc: "#7C3AED",
       name: "\uACF5\uACF5 \uC7AC\uC815\uB370\uC774\uD130 \uBB38\uC81C\uD574\uACB0 \uACF5\uBAA8 \uD504\uB85C\uC81D\uD2B8",
       code: "JY-04",
@@ -678,7 +678,7 @@ var GgjfEduLms = (() => {
     { id: 11, cat: "IT \uC2E0\uC9C1\uBB34", cc: "#F97316", name: "AI \uC2DC\uB300\uC758 \uCE90\uB9AD\uD130 \uD06C\uB9AC\uC5D0\uC774\uD130 \uC591\uC131", code: "IT-01", dateFrom: "2026-08-03", dateTo: "2026-09-30", period: "8~9\uC6D4", method: "\uBE44\uB300\uBA74", hours: 108, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uC218, \uAE08", schedTimeFrom: "10:00", schedTimeTo: "14:00" },
     {
       id: 12,
-      cat: "IT \uC2E0\uC9C1\uBB34",
+      cat: "AI\uD65C\uC6A9 \uBD84\uC57C",
       cc: "#2563EB",
       name: "AI \uD65C\uC6A9 \uB370\uC774\uD130 \uBD84\uC11D \uC2E4\uBB34 \uC785\uBB38\uACFC\uC815",
       code: "IT-02",
@@ -697,7 +697,7 @@ var GgjfEduLms = (() => {
     },
     {
       id: 13,
-      cat: "IT \uC2E0\uC9C1\uBB34",
+      cat: "AI\uD65C\uC6A9 \uBD84\uC57C",
       cc: "#8B5CF6",
       name: "AI-POT \uC5F0\uACC4 AI \uD65C\uC6A9 \uC2E4\uBB34 \uC2EC\uD654\uACFC\uC815",
       code: "IT-03",

@@ -1003,7 +1003,7 @@ var GgjfEduLms = (() => {
     boxShadow: "0 1px 3px rgba(0,0,0,.04),0 4px 16px rgba(15,118,110,.05)",
     ...style
   } }, children);
-  const Btn = ({ children, onClick, variant = "primary", size = "md", style = {} }) => {
+  const Btn = ({ children, onClick, variant = "primary", size = "md", style = {}, disabled = false }) => {
     const base = {
       border: "none",
       borderRadius: 9,
@@ -1023,7 +1023,13 @@ var GgjfEduLms = (() => {
       danger: { background: "#FEF2F2", color: T.danger, border: "1px solid #FECACA" },
       outline: { background: "transparent", color: T.p, border: `1.5px solid ${T.p}` }
     };
-    return /* @__PURE__ */ React.createElement("button", { onClick, style: { ...base, ...sizes[size], ...vars[variant] } }, children);
+    return /* @__PURE__ */ React.createElement("button", { onClick, disabled, style: {
+      ...base,
+      ...sizes[size],
+      ...vars[variant],
+      opacity: disabled ? 0.55 : 1,
+      cursor: disabled ? "not-allowed" : base.cursor
+    } }, children);
   };
   const Icon = ({ n, s = 16 }) => {
     const d = {
@@ -1197,7 +1203,7 @@ var GgjfEduLms = (() => {
     const completedCnt = students.filter((s) => ["\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC"].includes(s.enrollmentStatus || "")).length;
     const earlyEmploymentCnt = students.filter((s) => (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5").length;
     const employedCnt = students.filter((s) => {
-      const employment = s.status || "\uBBF8\uCDE8\uC5C5";
+      const employment = getEffectiveEmploymentStatus(s);
       return employment !== "\uBBF8\uCDE8\uC5C5" || (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5";
     }).length;
     const employmentGoal = courses.reduce((a, b) => a + Number(b.eGoal || 0), 0);
@@ -1915,12 +1921,15 @@ var GgjfEduLms = (() => {
   const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew, currentUser }) => {
     const [search, setSearch] = useState("");
     const [cFilter, setCFilter] = useState(0);
+    const [enrollFilter, setEnrollFilter] = useState("all");
+    const [empFilter, setEmpFilter] = useState("all");
     const [riskOnly, setRisk] = useState(false);
     const [dragging, setDragging] = useState(false);
     const [preview, setPreview] = useState(null);
     const [tab, setTab] = useState("list");
     const fileRef = useRef();
     const [statusTarget, setStatusTarget] = useState(null);
+    const [employmentTarget, setEmploymentTarget] = useState(null);
     const [attModal, setAttModal] = useState(null);
     const [attRecords, setAttRecords] = useState([]);
     const [attLoading, setAttLoading] = useState(false);
@@ -2050,10 +2059,31 @@ var GgjfEduLms = (() => {
     }, [attModal]);
     const filtered = useMemo(() => students.filter((s) => {
       if (cFilter && s.cid !== cFilter) return false;
+      if (enrollFilter !== "all" && (s.enrollmentStatus || "\uC7AC\uD559\uC911") !== enrollFilter) return false;
+      if (empFilter !== "all" && getEffectiveEmploymentStatus(s) !== empFilter) return false;
       if (riskOnly && (isDropoutStudent(s) || s.rate >= 80)) return false;
       if (search && !s.name.includes(search) && !s.phone.includes(search)) return false;
       return true;
-    }), [students, cFilter, riskOnly, search]);
+    }), [students, cFilter, enrollFilter, empFilter, riskOnly, search]);
+    const studentSummary = useMemo(() => {
+      const enrolled = {};
+      const employment = {};
+      students.forEach((s) => {
+        const es = s.enrollmentStatus || "\uC7AC\uD559\uC911";
+        const emp = getEffectiveEmploymentStatus(s);
+        enrolled[es] = (enrolled[es] || 0) + 1;
+        employment[emp] = (employment[emp] || 0) + 1;
+      });
+      const mismatch = students.filter((s) => (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5" && (s.status || "\uBBF8\uCDE8\uC5C5") !== "\uCDE8\uC5C5");
+      return { enrolled, employment, mismatch };
+    }, [students]);
+    const syncEarlyEmployment = async () => {
+      const targets = studentSummary.mismatch;
+      if (targets.length === 0) return alert("\uBCF4\uC815\uD560 \uC870\uAE30\uCDE8\uC5C5 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.");
+      if (!window.confirm(`\uC870\uAE30\uCDE8\uC5C5 ${targets.length}\uBA85\uC758 \uCDE8\uC5C5\uC5EC\uBD80\uB97C '\uCDE8\uC5C5'\uC73C\uB85C \uBCF4\uC815\uD560\uAE4C\uC694?`)) return;
+      await Promise.all(targets.map((s) => onUpdate({ ...s, status: "\uCDE8\uC5C5" })));
+      alert(`\u2705 ${targets.length}\uBA85 \uBCF4\uC815 \uC644\uB8CC`);
+    };
     const parseFile = (file) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -2204,7 +2234,32 @@ var GgjfEduLms = (() => {
     } }, h)), /* @__PURE__ */ React.createElement("th", { style: { padding: "9px 14px", fontSize: 11, color: T.mu, fontWeight: 700, borderBottom: `1px solid ${T.bd}` } }, "\uB9E4\uCE6D \uACFC\uC815"))), /* @__PURE__ */ React.createElement("tbody", null, preview.map((r, i) => {
       const c = courses.find((x) => x.code === r["\uACFC\uC815\uCF54\uB4DC"]);
       return /* @__PURE__ */ React.createElement("tr", { key: i, className: "row-hover", style: { borderBottom: `1px solid ${T.bd}` } }, TEMPLATE_HEADERS.map((h) => /* @__PURE__ */ React.createElement("td", { key: h, style: { padding: "10px 14px", fontSize: 12, color: T.tx } }, r[h] || "")), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 14px" } }, c ? /* @__PURE__ */ React.createElement(Chip, { label: shortCourseName(c.name), bg: `${c.cc}12`, color: c.cc }) : /* @__PURE__ */ React.createElement(Chip, { label: "\uACFC\uC815\uCF54\uB4DC \uC624\uB958", bg: "#FEF2F2", color: T.danger })));
-    })))))) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Card, { style: { padding: "13px 16px", marginBottom: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: T.mu, pointerEvents: "none" } }, /* @__PURE__ */ React.createElement(Icon, { n: "search", s: 13 })), /* @__PURE__ */ React.createElement(
+    })))))) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 12 } }, [
+      { label: "\uC804\uCCB4 \uD6C8\uB828\uC0DD", value: students.length, color: T.p, sub: "\uB4F1\uB85D \uAE30\uC900" },
+      { label: "\uC7AC\uD559\uC911", value: studentSummary.enrolled["\uC7AC\uD559\uC911"] || 0, color: "#1D4ED8", sub: "\uD604\uC7AC \uC218\uAC15" },
+      { label: "\uC218\uB8CC/\uC608\uC815", value: (studentSummary.enrolled["\uC218\uB8CC"] || 0) + (studentSummary.enrolled["\uC218\uB8CC\uC608\uC815"] || 0), color: "#15803D", sub: "\uC218\uB8CC \uAD00\uB9AC" },
+      { label: "\uCDE8\uC5C5/\uC608\uC815", value: (studentSummary.employment["\uCDE8\uC5C5"] || 0) + (studentSummary.employment["\uCDE8\uC5C5\uC608\uC815"] || 0), color: "#0369A1", sub: "\uCDE8\uC5C5\uC5EC\uBD80 \uAE30\uC900" },
+      { label: "\uC870\uAE30\uCDE8\uC5C5 \uBCF4\uC815", value: studentSummary.mismatch.length, color: studentSummary.mismatch.length ? T.danger : T.ok, sub: "\uC0C1\uD0DC/\uCDE8\uC5C5 \uBD88\uC77C\uCE58" }
+    ].map((k) => /* @__PURE__ */ React.createElement("div", { key: k.label, style: {
+      border: `1px solid ${k.color}25`,
+      borderRadius: 10,
+      background: "#fff",
+      padding: "11px 13px",
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    } }, /* @__PURE__ */ React.createElement("div", { style: {
+      width: 34,
+      height: 34,
+      borderRadius: 8,
+      background: `${k.color}14`,
+      color: k.color,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 16,
+      fontWeight: 900
+    } }, k.value), /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: T.tx } }, k.label), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, k.sub))))), /* @__PURE__ */ React.createElement(Card, { style: { padding: "13px 16px", marginBottom: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: T.mu, pointerEvents: "none" } }, /* @__PURE__ */ React.createElement(Icon, { n: "search", s: 13 })), /* @__PURE__ */ React.createElement(
       "input",
       {
         value: search,
@@ -2233,7 +2288,25 @@ var GgjfEduLms = (() => {
       background: T.s2,
       color: T.tx,
       cursor: "pointer"
-    } }, /* @__PURE__ */ React.createElement("option", { value: 0 }, "\uC804\uCCB4 \uACFC\uC815"), courses.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, shortCourseName(c.name), " [", c.code, "]"))), /* @__PURE__ */ React.createElement("button", { onClick: () => setRisk(!riskOnly), style: {
+    } }, /* @__PURE__ */ React.createElement("option", { value: 0 }, "\uC804\uCCB4 \uACFC\uC815"), courses.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, shortCourseName(c.name), " [", c.code, "]"))), /* @__PURE__ */ React.createElement("select", { value: enrollFilter, onChange: (e) => setEnrollFilter(e.target.value), style: {
+      padding: "7px 10px",
+      border: `1px solid ${T.bd}`,
+      borderRadius: 8,
+      fontSize: 12,
+      outline: "none",
+      background: T.s2,
+      color: T.tx,
+      cursor: "pointer"
+    } }, /* @__PURE__ */ React.createElement("option", { value: "all" }, "\uC804\uCCB4 \uB4F1\uB85D\uC0C1\uD0DC"), ENROLLMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v))), /* @__PURE__ */ React.createElement("select", { value: empFilter, onChange: (e) => setEmpFilter(e.target.value), style: {
+      padding: "7px 10px",
+      border: `1px solid ${T.bd}`,
+      borderRadius: 8,
+      fontSize: 12,
+      outline: "none",
+      background: T.s2,
+      color: T.tx,
+      cursor: "pointer"
+    } }, /* @__PURE__ */ React.createElement("option", { value: "all" }, "\uC804\uCCB4 \uCDE8\uC5C5\uC5EC\uBD80"), EMPLOYMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v))), /* @__PURE__ */ React.createElement("button", { onClick: () => setRisk(!riskOnly), style: {
       display: "flex",
       alignItems: "center",
       gap: 5,
@@ -2268,7 +2341,19 @@ var GgjfEduLms = (() => {
       fontSize: 12,
       fontWeight: 600,
       transition: "all .15s"
-    } }, "\u{1F504} \uB204\uC801\uC2DC\uAC04 \uC804\uCCB4 \uC7AC\uACC4\uC0B0"), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontSize: 12, color: T.mu, fontWeight: 600 } }, "\uCD1D ", filtered.length, "\uBA85")), /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 980 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: T.s2, borderBottom: `1px solid ${T.bd}` } }, [
+    } }, "\u{1F504} \uB204\uC801\uC2DC\uAC04 \uC804\uCCB4 \uC7AC\uACC4\uC0B0"), studentSummary.mismatch.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: syncEarlyEmployment, style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 5,
+      padding: "7px 13px",
+      border: `1px solid ${T.danger}`,
+      borderRadius: 8,
+      background: "#FEF2F2",
+      color: T.danger,
+      cursor: "pointer",
+      fontSize: 12,
+      fontWeight: 700
+    } }, "\uC870\uAE30\uCDE8\uC5C5 \uCDE8\uC5C5\uC5EC\uBD80 \uBCF4\uC815 ", studentSummary.mismatch.length, "\uBA85"), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontSize: 12, color: T.mu, fontWeight: 600 } }, "\uCD1D ", filtered.length, "\uBA85")), /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 980 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: T.s2, borderBottom: `1px solid ${T.bd}` } }, [
       { h: "\uC774\uB984\xB7\uC131\uBCC4\xB7\uB098\uC774", align: "left" },
       { h: "\uACFC\uC815", align: "left" },
       { h: "\uAC70\uC8FC\uC9C0", align: "center" },
@@ -2355,9 +2440,19 @@ var GgjfEduLms = (() => {
         const sc = STATUS_COLORS[es] || { bg: T.s3, color: T.mu };
         return /* @__PURE__ */ React.createElement(Chip, { label: es, bg: sc.bg, color: sc.color, size: 11 });
       })()), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
-        const emp = s.status || "\uBBF8\uCDE8\uC5C5";
+        const emp = getEffectiveEmploymentStatus(s);
         const ec = employmentChipStyle(emp);
-        return /* @__PURE__ */ React.createElement(Chip, { label: emp, bg: ec.bg, color: ec.color, size: 11 });
+        const needsSync = (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5" && (s.status || "\uBBF8\uCDE8\uC5C5") !== "\uCDE8\uC5C5";
+        return /* @__PURE__ */ React.createElement("button", { onClick: () => setEmploymentTarget(s), title: "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815", style: {
+          border: `1px solid ${needsSync ? T.danger : "transparent"}`,
+          borderRadius: 999,
+          background: ec.bg,
+          color: ec.color,
+          padding: "3px 9px",
+          cursor: "pointer",
+          fontSize: 11,
+          fontWeight: 800
+        } }, emp, needsSync ? " \xB7 \uBCF4\uC815\uD544\uC694" : "");
       })(), s.employerName && /* @__PURE__ */ React.createElement("div", { style: {
         marginTop: 3,
         fontSize: 9,
@@ -2586,6 +2681,13 @@ var GgjfEduLms = (() => {
         onStatusChanged: () => {
         },
         onClose: () => setStatusTarget(null)
+      }
+    ), employmentTarget && /* @__PURE__ */ React.createElement(
+      EmploymentQuickDialog,
+      {
+        student: employmentTarget,
+        onSave: onUpdate,
+        onClose: () => setEmploymentTarget(null)
       }
     ));
   };
@@ -4897,6 +4999,7 @@ ${invalidLines.join("\n")}` : null
     console.log(`[\uB204\uC801\uC2DC\uAC04 \uC77C\uAD04 \uC7AC\uACC4\uC0B0] ${updates.length}\uBA85 \uC5C5\uB370\uC774\uD2B8 \uC644\uB8CC`);
     return updates.length;
   };
+  const ENROLLMENT_STATUSES = ["\uC7AC\uD559\uC911", "\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5", "\uC911\uB3C4\uD0C8\uB77D", "\uC218\uB8CC\uC608\uC815"];
   const DROPOUT_REASONS = ["\uAC1C\uC778\uC0AC\uC720", "\uCDE8\uC5C5", "\uAC74\uAC15", "\uAE30\uD0C0"];
   const VALID_TRANSITIONS = {
     "\uC7AC\uD559\uC911": ["\uC218\uB8CC\uC608\uC815", "\uC870\uAE30\uCDE8\uC5C5", "\uC911\uB3C4\uD0C8\uB77D"],
@@ -4922,6 +5025,11 @@ ${invalidLines.join("\n")}` : null
     "\uAE30\uD0C0": { bg: "#E5E7EB", color: "#374151" }
   };
   const employmentChipStyle = (status) => EMPLOYMENT_COLORS[status || "\uBBF8\uCDE8\uC5C5"] || EMPLOYMENT_COLORS["\uAE30\uD0C0"];
+  const getEffectiveEmploymentStatus = (s) => {
+    if (!s) return "\uBBF8\uCDE8\uC5C5";
+    if ((s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5" && (!s.status || s.status === "\uBBF8\uCDE8\uC5C5")) return "\uCDE8\uC5C5";
+    return s.status || "\uBBF8\uCDE8\uC5C5";
+  };
   const isValidTransition = (fromStatus, toStatus) => {
     const allowed = VALID_TRANSITIONS[fromStatus];
     return allowed ? allowed.includes(toStatus) : false;
@@ -4941,8 +5049,10 @@ ${invalidLines.join("\n")}` : null
       warning = `\uCD9C\uC11D\uB960\uC774 ${student.rate}%\uB85C 80% \uBBF8\uB9CC\uC785\uB2C8\uB2E4. \uACC4\uC18D\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?`;
     }
     const finalReason = newStatus === "\uC911\uB3C4\uD0C8\uB77D" ? dropoutReason === "\uAE30\uD0C0" ? reasonDetail : dropoutReason : null;
+    const employmentStatus = newStatus === "\uC870\uAE30\uCDE8\uC5C5" ? "\uCDE8\uC5C5" : student.status || "\uBBF8\uCDE8\uC5C5";
     await sbUpdate("students", `id=eq.${studentId}`, {
       enrollment_status: newStatus,
+      status: employmentStatus,
       status_change_date: changeDate,
       dropout_reason: finalReason,
       employer_name: newStatus === "\uC870\uAE30\uCDE8\uC5C5" ? employerName || null : null
@@ -4966,6 +5076,7 @@ ${invalidLines.join("\n")}` : null
         (s) => sameId(s.id, studentId) ? {
           ...s,
           enrollmentStatus: newStatus,
+          status: employmentStatus,
           statusChangeDate: changeDate,
           dropoutReason: finalReason,
           employerName: newStatus === "\uC870\uAE30\uCDE8\uC5C5" ? employerName || null : null
@@ -6717,7 +6828,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
     const [changeDate, setChangeDate] = useState((/* @__PURE__ */ new Date()).toISOString().slice(0, 10));
     const [dropoutReason, setDropoutReason] = useState("\uAC1C\uC778\uC0AC\uC720");
     const [reasonDetail, setReasonDetail] = useState("");
-    const [employerName, setEmployerName] = useState("");
+    const [employerName, setEmployerName] = useState(student.employerName || "");
     const [warning, setWarning] = useState("");
     const [saving, setSaving] = useState(false);
     const inp = {
@@ -6734,6 +6845,9 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       if (!newStatus) {
         setWarning("\uBCC0\uACBD\uD560 \uC0C1\uD0DC\uB97C \uC120\uD0DD\uD558\uC138\uC694.");
         return;
+      }
+      if ((newStatus === "\uC218\uB8CC" || newStatus === "\uC218\uB8CC\uC608\uC815") && student.rate < 80) {
+        if (!window.confirm(`\uCD9C\uC11D\uB960\uC774 ${student.rate}%\uB85C 80% \uBBF8\uB9CC\uC785\uB2C8\uB2E4. \uACC4\uC18D \uBCC0\uACBD\uD560\uAE4C\uC694?`)) return;
       }
       setSaving(true);
       setWarning("");
@@ -6846,7 +6960,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
           placeholder: "\uAE30\uC5C5\uBA85 \uC785\uB825",
           style: inp
         }
-      )), warning && /* @__PURE__ */ React.createElement("div", { style: {
+      ), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.ok, marginTop: 5, fontWeight: 700 } }, "\uC800\uC7A5\uD558\uBA74 \uCDE8\uC5C5\uC5EC\uBD80\uAC00 \uC790\uB3D9\uC73C\uB85C '\uCDE8\uC5C5' \uCC98\uB9AC\uB429\uB2C8\uB2E4.")), warning && /* @__PURE__ */ React.createElement("div", { style: {
         padding: "10px 14px",
         background: "#FEF2F2",
         borderRadius: 8,
@@ -6871,6 +6985,123 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         fontSize: 12,
         fontWeight: 700
       } }, saving ? "\uC800\uC7A5 \uC911\u2026" : "\uC0C1\uD0DC \uBCC0\uACBD")))))
+    );
+  };
+  const EmploymentQuickDialog = ({ student, onSave, onClose }) => {
+    const initialStatus = getEffectiveEmploymentStatus(student);
+    const [status, setStatus] = useState(initialStatus);
+    const [employerName, setEmployerName] = useState(student.employerName || "");
+    const [saving, setSaving] = useState(false);
+    const inp = {
+      width: "100%",
+      padding: "8px 10px",
+      border: `1px solid ${T.bd}`,
+      borderRadius: 8,
+      fontSize: 12,
+      outline: "none",
+      color: T.tx,
+      background: T.s2
+    };
+    const ec = employmentChipStyle(status);
+    const isEarly = (student.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5";
+    const submit = async () => {
+      setSaving(true);
+      try {
+        await onSave({
+          ...student,
+          status,
+          employerName: ["\uCDE8\uC5C5", "\uCDE8\uC5C5\uC608\uC815"].includes(status) ? employerName : ""
+        });
+        onClose();
+      } finally {
+        setSaving(false);
+      }
+    };
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "modal-backdrop",
+        style: {
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,.5)",
+          zIndex: 1250,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        },
+        onClick: (e) => {
+          if (e.target === e.currentTarget) onClose();
+        }
+      },
+      /* @__PURE__ */ React.createElement("div", { style: {
+        background: T.s,
+        borderRadius: 16,
+        width: 420,
+        maxWidth: "96vw",
+        boxShadow: "0 24px 64px rgba(0,0,0,.28)",
+        overflow: "hidden",
+        animation: "fadeUp .2s ease"
+      } }, /* @__PURE__ */ React.createElement("div", { style: {
+        padding: "15px 18px",
+        background: `linear-gradient(135deg,#0F766E,#0369A1)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between"
+      } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: "#fff", fontWeight: 900 } }, "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,.7)", marginTop: 2 } }, student.name)), /* @__PURE__ */ React.createElement("button", { onClick: onClose, style: {
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        border: "none",
+        background: "rgba(255,255,255,.15)",
+        color: "#fff",
+        cursor: "pointer",
+        fontSize: 16
+      } }, "\xD7")), /* @__PURE__ */ React.createElement("div", { style: { padding: "18px 20px", display: "flex", flexDirection: "column", gap: 13 } }, isEarly && /* @__PURE__ */ React.createElement("div", { style: {
+        padding: "10px 12px",
+        borderRadius: 8,
+        background: "#F0FDF4",
+        border: "1px solid #BBF7D0",
+        color: "#166534",
+        fontSize: 12,
+        fontWeight: 700
+      } }, "\uC870\uAE30\uCDE8\uC5C5 \uC0C1\uD0DC\uC774\uBBC0\uB85C \uCDE8\uC5C5\uC5EC\uBD80\uB294 \uAE30\uBCF8\uC801\uC73C\uB85C '\uCDE8\uC5C5'\uC73C\uB85C \uAD00\uB9AC\uB429\uB2C8\uB2E4."), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: T.mu, marginBottom: 6 } }, "\uCDE8\uC5C5\uC5EC\uBD80"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, EMPLOYMENT_STATUSES.map((v) => {
+        const c = employmentChipStyle(v);
+        const active = status === v;
+        return /* @__PURE__ */ React.createElement("button", { key: v, onClick: () => setStatus(v), style: {
+          padding: "6px 11px",
+          borderRadius: 999,
+          border: `2px solid ${active ? c.color : T.bd}`,
+          background: active ? c.bg : T.s2,
+          color: active ? c.color : T.mu,
+          fontSize: 12,
+          fontWeight: 800,
+          cursor: "pointer"
+        } }, v);
+      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: T.mu, marginBottom: 6 } }, "\uCDE8\uC5C5 \uAE30\uC5C5\uBA85"), /* @__PURE__ */ React.createElement(
+        "input",
+        {
+          value: employerName,
+          onChange: (e) => setEmployerName(e.target.value),
+          placeholder: "\uAE30\uC5C5\uBA85 \uB610\uB294 \uCDE8\uC5C5\uCC98",
+          style: inp
+        }
+      )), /* @__PURE__ */ React.createElement("div", { style: { border: `1px solid ${T.bd}`, background: T.s2, borderRadius: 8, padding: "10px 12px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, marginBottom: 4 } }, "\uC800\uC7A5 \uD6C4 \uD45C\uC2DC"), /* @__PURE__ */ React.createElement("span", { style: {
+        display: "inline-block",
+        padding: "3px 10px",
+        borderRadius: 999,
+        background: ec.bg,
+        color: ec.color,
+        fontSize: 11,
+        fontWeight: 900
+      } }, status), employerName && /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 8, fontSize: 12, color: T.tx, fontWeight: 700 } }, employerName))), /* @__PURE__ */ React.createElement("div", { style: {
+        padding: "12px 20px",
+        borderTop: `1px solid ${T.bd}`,
+        background: T.s2,
+        display: "flex",
+        justifyContent: "flex-end",
+        gap: 8
+      } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { onClick: submit, disabled: saving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " ", saving ? "\uC800\uC7A5 \uC911\u2026" : "\uC800\uC7A5")))
     );
   };
   const EditModal = ({ student, onSave, onClose, isNew = false, courses = COURSES }) => {

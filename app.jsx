@@ -770,7 +770,7 @@ const Card = ({ children, style={} }) => (
   </div>
 );
 
-const Btn = ({ children, onClick, variant="primary", size="md", style={} }) => {
+const Btn = ({ children, onClick, variant="primary", size="md", style={}, disabled=false }) => {
   const base = { border:"none", borderRadius:9, cursor:"pointer", fontWeight:700,
     display:"inline-flex", alignItems:"center", gap:6, transition:"all .15s",
     whiteSpace:"nowrap", ...style };
@@ -781,7 +781,11 @@ const Btn = ({ children, onClick, variant="primary", size="md", style={} }) => {
     danger:   { background:"#FEF2F2", color:T.danger, border:"1px solid #FECACA" },
     outline:  { background:"transparent", color:T.p, border:`1.5px solid ${T.p}` },
   };
-  return <button onClick={onClick} style={{...base,...sizes[size],...vars[variant]}}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{
+    ...base, ...sizes[size], ...vars[variant],
+    opacity:disabled ? .55 : 1,
+    cursor:disabled ? "not-allowed" : base.cursor,
+  }}>{children}</button>;
 };
 
 const Icon = ({ n, s=16 }) => {
@@ -958,7 +962,7 @@ const Dashboard = ({ students, courses }) => {
   const completedCnt = students.filter(s => ['수료', '조기취업 수료'].includes(s.enrollmentStatus || '')).length;
   const earlyEmploymentCnt = students.filter(s => (s.enrollmentStatus || '') === '조기취업').length;
   const employedCnt = students.filter(s => {
-    const employment = s.status || '미취업';
+    const employment = getEffectiveEmploymentStatus(s);
     return employment !== '미취업' || (s.enrollmentStatus || '') === '조기취업';
   }).length;
   const employmentGoal = courses.reduce((a,b)=>a+Number(b.eGoal || 0),0);
@@ -1791,6 +1795,8 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
 const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew, currentUser }) => {
   const [search, setSearch] = useState("");
   const [cFilter, setCFilter] = useState(0);
+  const [enrollFilter, setEnrollFilter] = useState("all");
+  const [empFilter, setEmpFilter] = useState("all");
   const [riskOnly, setRisk] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState(null);   // parsed excel rows
@@ -1799,6 +1805,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 
   // ── 상태 변경 다이얼로그 ──
   const [statusTarget, setStatusTarget] = useState(null); // { student, course }
+  const [employmentTarget, setEmploymentTarget] = useState(null);
 
   // ── 출결 상세 모달 ──
   const [attModal, setAttModal] = useState(null);         // 선택된 학생 (또는 null)
@@ -1910,10 +1917,33 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 
   const filtered = useMemo(() => students.filter(s => {
     if(cFilter && s.cid!==cFilter) return false;
+    if(enrollFilter !== "all" && (s.enrollmentStatus || "재학중") !== enrollFilter) return false;
+    if(empFilter !== "all" && getEffectiveEmploymentStatus(s) !== empFilter) return false;
     if(riskOnly && (isDropoutStudent(s) || s.rate>=80)) return false;
     if(search && !s.name.includes(search) && !s.phone.includes(search)) return false;
     return true;
-  }), [students, cFilter, riskOnly, search]);
+  }), [students, cFilter, enrollFilter, empFilter, riskOnly, search]);
+
+  const studentSummary = useMemo(() => {
+    const enrolled = {};
+    const employment = {};
+    students.forEach(s => {
+      const es = s.enrollmentStatus || "재학중";
+      const emp = getEffectiveEmploymentStatus(s);
+      enrolled[es] = (enrolled[es] || 0) + 1;
+      employment[emp] = (employment[emp] || 0) + 1;
+    });
+    const mismatch = students.filter(s => (s.enrollmentStatus || "") === "조기취업" && (s.status || "미취업") !== "취업");
+    return { enrolled, employment, mismatch };
+  }, [students]);
+
+  const syncEarlyEmployment = async () => {
+    const targets = studentSummary.mismatch;
+    if (targets.length === 0) return alert("보정할 조기취업 데이터가 없습니다.");
+    if (!window.confirm(`조기취업 ${targets.length}명의 취업여부를 '취업'으로 보정할까요?`)) return;
+    await Promise.all(targets.map(s => onUpdate({ ...s, status: "취업" })));
+    alert(`✅ ${targets.length}명 보정 완료`);
+  };
 
   const parseFile = file => {
     const reader = new FileReader();
@@ -2107,6 +2137,27 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
         </div>
       ) : (
         <>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:10, marginBottom:12 }}>
+            {[
+              { label:"전체 훈련생", value:students.length, color:T.p, sub:"등록 기준" },
+              { label:"재학중", value:studentSummary.enrolled["재학중"] || 0, color:"#1D4ED8", sub:"현재 수강" },
+              { label:"수료/예정", value:(studentSummary.enrolled["수료"] || 0) + (studentSummary.enrolled["수료예정"] || 0), color:"#15803D", sub:"수료 관리" },
+              { label:"취업/예정", value:(studentSummary.employment["취업"] || 0) + (studentSummary.employment["취업예정"] || 0), color:"#0369A1", sub:"취업여부 기준" },
+              { label:"조기취업 보정", value:studentSummary.mismatch.length, color:studentSummary.mismatch.length ? T.danger : T.ok, sub:"상태/취업 불일치" },
+            ].map(k => (
+              <div key={k.label} style={{ border:`1px solid ${k.color}25`, borderRadius:10, background:"#fff",
+                padding:"11px 13px", display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:34, height:34, borderRadius:8, background:`${k.color}14`,
+                  color:k.color, display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:16, fontWeight:900 }}>{k.value}</div>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:T.tx }}>{k.label}</div>
+                  <div style={{ fontSize:10, color:T.mu }}>{k.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
           {/* 검색 필터 바 */}
           <Card style={{ padding:"13px 16px", marginBottom:14, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
             <div style={{ position:"relative" }}>
@@ -2124,6 +2175,18 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
               fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer" }}>
               <option value={0}>전체 과정</option>
               {courses.map(c=><option key={c.id} value={c.id}>{shortCourseName(c.name)} [{c.code}]</option>)}
+            </select>
+            <select value={enrollFilter} onChange={e=>setEnrollFilter(e.target.value)} style={{
+              padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
+              fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer" }}>
+              <option value="all">전체 등록상태</option>
+              {ENROLLMENT_STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select value={empFilter} onChange={e=>setEmpFilter(e.target.value)} style={{
+              padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
+              fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer" }}>
+              <option value="all">전체 취업여부</option>
+              {EMPLOYMENT_STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
             <button onClick={()=>setRisk(!riskOnly)} style={{
               display:"flex", alignItems:"center", gap:5, padding:"7px 13px",
@@ -2145,6 +2208,15 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
               cursor:"pointer", fontSize:12, fontWeight:600, transition:"all .15s" }}>
               🔄 누적시간 전체 재계산
             </button>
+            {studentSummary.mismatch.length > 0 && (
+              <button onClick={syncEarlyEmployment} style={{
+                display:"flex", alignItems:"center", gap:5, padding:"7px 13px",
+                border:`1px solid ${T.danger}`, borderRadius:8,
+                background:"#FEF2F2", color:T.danger,
+                cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                조기취업 취업여부 보정 {studentSummary.mismatch.length}명
+              </button>
+            )}
             <div style={{ marginLeft:"auto", fontSize:12, color:T.mu, fontWeight:600 }}>
               총 {filtered.length}명
             </div>
@@ -2307,9 +2379,17 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                       {/* 취업여부 */}
                       <td style={{ padding:"11px 12px", textAlign:"center" }}>
                         {(() => {
-                          const emp = s.status || "미취업";
+                          const emp = getEffectiveEmploymentStatus(s);
                           const ec = employmentChipStyle(emp);
-                          return <Chip label={emp} bg={ec.bg} color={ec.color} size={11}/>;
+                          const needsSync = (s.enrollmentStatus || "") === "조기취업" && (s.status || "미취업") !== "취업";
+                          return (
+                            <button onClick={()=>setEmploymentTarget(s)} title="취업정보 빠른 수정" style={{
+                              border:`1px solid ${needsSync ? T.danger : "transparent"}`,
+                              borderRadius:999, background:ec.bg, color:ec.color,
+                              padding:"3px 9px", cursor:"pointer", fontSize:11, fontWeight:800 }}>
+                              {emp}{needsSync ? " · 보정필요" : ""}
+                            </button>
+                          );
                         })()}
                         {s.employerName && (
                           <div style={{ marginTop:3, fontSize:9, color:T.mu, maxWidth:90,
@@ -2596,6 +2676,13 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
             // 학생 목록은 window._setStudents를 통해 업데이트됨
           }}
           onClose={() => setStatusTarget(null)}
+        />
+      )}
+      {employmentTarget && (
+        <EmploymentQuickDialog
+          student={employmentTarget}
+          onSave={onUpdate}
+          onClose={() => setEmploymentTarget(null)}
         />
       )}
     </div>
@@ -5310,6 +5397,11 @@ const EMPLOYMENT_COLORS = {
 };
 
 const employmentChipStyle = status => EMPLOYMENT_COLORS[status || '미취업'] || EMPLOYMENT_COLORS['기타'];
+const getEffectiveEmploymentStatus = s => {
+  if (!s) return '미취업';
+  if ((s.enrollmentStatus || '') === '조기취업' && (!s.status || s.status === '미취업')) return '취업';
+  return s.status || '미취업';
+};
 
 const isValidTransition = (fromStatus, toStatus) => {
   const allowed = VALID_TRANSITIONS[fromStatus];
@@ -5339,9 +5431,11 @@ const changeEnrollmentStatus = async (params) => {
   const finalReason = newStatus === '중도탈락'
     ? (dropoutReason === '기타' ? reasonDetail : dropoutReason)
     : null;
+  const employmentStatus = newStatus === '조기취업' ? '취업' : (student.status || '미취업');
 
   await sbUpdate("students", `id=eq.${studentId}`, {
     enrollment_status: newStatus,
+    status: employmentStatus,
     status_change_date: changeDate,
     dropout_reason: finalReason,
     employer_name: newStatus === '조기취업' ? (employerName || null) : null,
@@ -5367,6 +5461,7 @@ const changeEnrollmentStatus = async (params) => {
       sameId(s.id, studentId)
         ? { ...s,
             enrollmentStatus: newStatus,
+            status: employmentStatus,
             statusChangeDate: changeDate,
             dropoutReason: finalReason,
             employerName: newStatus === '조기취업' ? (employerName || null) : null,
@@ -7302,7 +7397,7 @@ const StatusChangeDialog = ({ student, course, onStatusChanged, onClose, current
   const [changeDate,    setChangeDate]    = useState(new Date().toISOString().slice(0,10));
   const [dropoutReason, setDropoutReason] = useState('개인사유');
   const [reasonDetail,  setReasonDetail]  = useState('');
-  const [employerName,  setEmployerName]  = useState('');
+  const [employerName,  setEmployerName]  = useState(student.employerName || '');
   const [warning,       setWarning]       = useState('');
   const [saving,        setSaving]        = useState(false);
 
@@ -7311,6 +7406,9 @@ const StatusChangeDialog = ({ student, course, onStatusChanged, onClose, current
 
   const handleSubmit = async () => {
     if (!newStatus) { setWarning("변경할 상태를 선택하세요."); return; }
+    if ((newStatus === '수료' || newStatus === '수료예정') && student.rate < 80) {
+      if (!window.confirm(`출석률이 ${student.rate}%로 80% 미만입니다. 계속 변경할까요?`)) return;
+    }
     setSaving(true);
     setWarning('');
     try {
@@ -7455,6 +7553,9 @@ const StatusChangeDialog = ({ student, course, onStatusChanged, onClose, current
                   </label>
                   <input value={employerName} onChange={e => setEmployerName(e.target.value)}
                     placeholder="기업명 입력" style={inp}/>
+                  <div style={{ fontSize:10, color:T.ok, marginTop:5, fontWeight:700 }}>
+                    저장하면 취업여부가 자동으로 '취업' 처리됩니다.
+                  </div>
                 </div>
               )}
 
@@ -7481,6 +7582,93 @@ const StatusChangeDialog = ({ student, course, onStatusChanged, onClose, current
               </div>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const EmploymentQuickDialog = ({ student, onSave, onClose }) => {
+  const initialStatus = getEffectiveEmploymentStatus(student);
+  const [status, setStatus] = useState(initialStatus);
+  const [employerName, setEmployerName] = useState(student.employerName || "");
+  const [saving, setSaving] = useState(false);
+  const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
+    borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
+  const ec = employmentChipStyle(status);
+  const isEarly = (student.enrollmentStatus || "") === "조기취업";
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await onSave({
+        ...student,
+        status,
+        employerName: ["취업", "취업예정"].includes(status) ? employerName : "",
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:1250,
+      display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:T.s, borderRadius:16, width:420, maxWidth:"96vw",
+        boxShadow:"0 24px 64px rgba(0,0,0,.28)", overflow:"hidden", animation:"fadeUp .2s ease" }}>
+        <div style={{ padding:"15px 18px", background:`linear-gradient(135deg,#0F766E,#0369A1)`,
+          display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:15, color:"#fff", fontWeight:900 }}>취업정보 빠른 수정</div>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,.7)", marginTop:2 }}>{student.name}</div>
+          </div>
+          <button onClick={onClose} style={{ width:28, height:28, borderRadius:6, border:"none",
+            background:"rgba(255,255,255,.15)", color:"#fff", cursor:"pointer", fontSize:16 }}>×</button>
+        </div>
+        <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:13 }}>
+          {isEarly && (
+            <div style={{ padding:"10px 12px", borderRadius:8, background:"#F0FDF4",
+              border:"1px solid #BBF7D0", color:"#166534", fontSize:12, fontWeight:700 }}>
+              조기취업 상태이므로 취업여부는 기본적으로 '취업'으로 관리됩니다.
+            </div>
+          )}
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:T.mu, marginBottom:6 }}>취업여부</div>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {EMPLOYMENT_STATUSES.map(v => {
+                const c = employmentChipStyle(v);
+                const active = status === v;
+                return (
+                  <button key={v} onClick={()=>setStatus(v)} style={{
+                    padding:"6px 11px", borderRadius:999, border:`2px solid ${active ? c.color : T.bd}`,
+                    background:active ? c.bg : T.s2, color:active ? c.color : T.mu,
+                    fontSize:12, fontWeight:800, cursor:"pointer" }}>
+                    {v}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:T.mu, marginBottom:6 }}>취업 기업명</div>
+            <input value={employerName} onChange={e=>setEmployerName(e.target.value)}
+              placeholder="기업명 또는 취업처" style={inp}/>
+          </div>
+          <div style={{ border:`1px solid ${T.bd}`, background:T.s2, borderRadius:8, padding:"10px 12px" }}>
+            <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>저장 후 표시</div>
+            <span style={{ display:"inline-block", padding:"3px 10px", borderRadius:999,
+              background:ec.bg, color:ec.color, fontSize:11, fontWeight:900 }}>{status}</span>
+            {employerName && <span style={{ marginLeft:8, fontSize:12, color:T.tx, fontWeight:700 }}>{employerName}</span>}
+          </div>
+        </div>
+        <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`, background:T.s2,
+          display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <Btn variant="ghost" onClick={onClose}>취소</Btn>
+          <Btn onClick={submit} disabled={saving}>
+            <Icon n="check" s={13}/> {saving ? "저장 중…" : "저장"}
+          </Btn>
         </div>
       </div>
     </div>

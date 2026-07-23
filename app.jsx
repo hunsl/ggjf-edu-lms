@@ -573,13 +573,16 @@ const COURSES = [
   { id:4,  cat:"지역연계·기여", cc:"#C2410C", name:"ERP·지게차 물류관리 실무자 양성", code:"JY-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월",  method:"대면",     hours:182, tgt:15, cGoal:14, eGoal:9,  schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:5,  cat:"지역연계·기여", cc:"#0891B2", name:"승강기 전문가 양성",               code:"JY-02", dateFrom:"2026-05-04", dateTo:"2026-06-26", period:"5~6월",  method:"대면",     hours:80,  tgt:15, cGoal:14, eGoal:9,  schedDays:"월, 화, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:6,  cat:"지역연계·기여", cc:"#0D9488", name:"중장년 기회강사 양성",             code:"JY-03", dateFrom:"2026-05-01", dateTo:"2026-07-31", period:"5~7월",  method:"블렌디드", hours:83,  tgt:15, cGoal:14, eGoal:9,  schedDays:"화, 목",     schedTimeFrom:"09:30", schedTimeTo:"13:30" },
-  { id:7,  cat:"지역연계·기여", cc:"#7C3AED", name:"미지정 공모과정 (지역연계)",       code:"JY-04", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+  { id:7,  cat:"지역연계·기여", cc:"#7C3AED", name:"공공 재정데이터 문제해결 공모 프로젝트", code:"JY-04", dateFrom:"2026-09-21", dateTo:"2026-10-22", period:"9.21~10.22 검토", method:"블렌디드", hours:80, tgt:40, cGoal:35, eGoal:25, schedDays:"", schedTimeFrom:"13:00", schedTimeTo:"17:00",
+    notes:"STEP 2. 35~45명·8~10개 팀 규모 검토. 프로젝트 60H+취업역량 20H, 총상금 300만원, 현직자 멘토링, 10.22 최종 발표·평가·시상·수료식 예정. 문황영 강사 일정 및 재정정보원 심사위원 참여 최종 협의 필요." },
   { id:8,  cat:"사무분야",      cc:"#9A3412", name:"행정회계 사무 OA (1기)",           code:"SM-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:9,  cat:"사무분야",      cc:"#BE185D", name:"행정회계 사무 OA (2기)",           code:"SM-02", dateFrom:"2026-07-01", dateTo:"2026-09-30", period:"7~9월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:10, cat:"식품분야",      cc:"#DC2626", name:"HACCP 전문인력 양성",               code:"FD-01", dateFrom:"2026-04-01", dateTo:"2026-05-31", period:"4~5월",  method:"대면",     hours:112, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목",  schedTimeFrom:"09:00", schedTimeTo:"14:00" },
   { id:11, cat:"IT 신직무",     cc:"#F97316", name:"AI 시대의 캐릭터 크리에이터 양성",  code:"IT-01", dateFrom:"2026-08-03", dateTo:"2026-09-30", period:"8~9월",  method:"비대면",   hours:108, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금",     schedTimeFrom:"10:00", schedTimeTo:"14:00" },
-  { id:12, cat:"IT 신직무",     cc:"#2563EB", name:"미지정 공모과정 (IT-A)",            code:"IT-02", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:20, cGoal:18, eGoal:12, schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
-  { id:13, cat:"IT 신직무",     cc:"#8B5CF6", name:"미지정 공모과정 (IT-B)",            code:"IT-03", dateFrom:"",          dateTo:"",          period:"-",      method:"-",       hours:0,   tgt:15, cGoal:14, eGoal:9,  schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
+  { id:12, cat:"IT 신직무",     cc:"#2563EB", name:"AI 활용 데이터 분석 실무 입문과정", code:"IT-02", dateFrom:"2026-08-19", dateTo:"2026-09-15", period:"8.19~9.15", method:"대면", hours:80, tgt:21, cGoal:19, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"13:00", schedTimeTo:"17:00",
+    notes:"STEP 1. Python·데이터분석·생성형 AI·협업도구·웹 포트폴리오 기초역량 과정. 한연동 36H, 김상영 20H, 이지우 보조 56H, 9.9~9.14 재정정보원 연계교육 16H. 팀별기획 강사·교육장소·운영주체 확인 필요." },
+  { id:13, cat:"IT 신직무",     cc:"#8B5CF6", name:"AI-POT 연계 AI 활용 실무 심화과정", code:"IT-03", dateFrom:"2026-09-28", dateTo:"2026-10-16", period:"9.28~10.16", method:"대면", hours:48, tgt:25, cGoal:20, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"13:00", schedTimeTo:"17:00",
+    notes:"STEP 3. AI-POT 2급 대비 40H+취업·포트폴리오 특강 8H, 임재연 강사 참여 회신. 정원 20/25명, 교재 ISBN·단가·수량, 시험응시료·접수·사후관리 기준 확정 필요. 구글 계정 비밀번호는 수집하지 않음." },
 ];
 
 const SEED_STUDENTS = [
@@ -7920,6 +7923,22 @@ const SEED_INSTRUCTORS = [
     career:"8년", cert:"회계사 2급", cids:[7,8], note:"", hourlyRate:55000 },
   { id:3, name:"박현우", type:"보조강사", category:"외부 강사", subject:"물류·ERP", phone:"010-5555-6666", email:"park@gjf.or.kr",
     career:"3년", cert:"지게차 면허", cids:[4], note:"", hourlyRate:40000 },
+  { id:12, name:"한연동", type:"주강사", category:"외부 강사", subject:"Python·데이터 분석", phone:"", email:"",
+    career:"", cert:"", cids:[12], note:"AI 활용 데이터 분석 실무 입문과정 1~4, 9~13회차 36H 담당", hourlyRate:0 },
+  { id:13, name:"김상영", type:"주강사", category:"외부 강사", subject:"생성형 AI·협업도구·포트폴리오", phone:"", email:"",
+    career:"", cert:"", cids:[12], note:"AI 활용 데이터 분석 실무 입문과정 5~8, 14회차 20H 담당", hourlyRate:0 },
+  { id:14, name:"이지우", type:"보조강사", category:"외부 강사", subject:"AI 데이터분석 실습 지원", phone:"", email:"",
+    career:"", cert:"", cids:[12], note:"AI 활용 데이터 분석 실무 입문과정 1~14회차 보조 56H", hourlyRate:0 },
+  { id:15, name:"이춘식", type:"주강사", category:"외부 강사", subject:"재정정보원 연계 데이터 분석", phone:"", email:"",
+    career:"", cert:"", cids:[12], note:"9.9~9.14 재정정보원 연계교육 16H 공동 담당", hourlyRate:0 },
+  { id:16, name:"전혜경", type:"주강사", category:"외부 강사", subject:"재정정보원 연계 데이터 분석", phone:"", email:"",
+    career:"", cert:"", cids:[12], note:"9.9~9.14 재정정보원 연계교육 16H 공동 담당", hourlyRate:0 },
+  { id:17, name:"이경심", type:"주강사", category:"외부 강사", subject:"재정정보원 연계 데이터 분석", phone:"", email:"",
+    career:"", cert:"", cids:[12], note:"9.9~9.14 재정정보원 연계교육 16H 공동 담당", hourlyRate:0 },
+  { id:18, name:"문황영", type:"주강사", category:"외부 강사", subject:"취업역량·모의면접", phone:"", email:"",
+    career:"", cert:"", cids:[7], note:"STEP 2 취업역량교육 참여 의사 확인. 9.28, 10.12~14 일정 중첩으로 최종 재협의 필요", hourlyRate:0 },
+  { id:19, name:"임재연", type:"주강사", category:"외부 강사", subject:"AI-POT 2급·AI 활용 실무", phone:"", email:"",
+    career:"", cert:"", cids:[13], note:"AI-POT 연계 AI 활용 실무 심화과정 주강사 참여 회신", hourlyRate:0 },
 ];
 
 const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {

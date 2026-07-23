@@ -955,6 +955,16 @@ const Dashboard = ({ students, courses }) => {
     return Number(s.rate || 0) < 80;
   };
   const atRisk   = students.filter(isRiskTarget);
+  const completedCnt = students.filter(s => ['수료', '조기취업 수료'].includes(s.enrollmentStatus || '')).length;
+  const earlyEmploymentCnt = students.filter(s => (s.enrollmentStatus || '') === '조기취업').length;
+  const employedCnt = students.filter(s => {
+    const employment = s.status || '미취업';
+    return employment !== '미취업' || (s.enrollmentStatus || '') === '조기취업';
+  }).length;
+  const employmentGoal = courses.reduce((a,b)=>a+Number(b.eGoal || 0),0);
+  const completionGoal = courses.reduce((a,b)=>a+Number(b.cGoal || 0),0);
+  const employmentRate = students.length ? Math.round(employedCnt / students.length * 100) : 0;
+  const completionGoalRate = completionGoal ? Math.round(completedCnt / completionGoal * 100) : 0;
 
   const courseProgress = courses.map(c => {
     const cs       = students.filter(s => s.cid === c.id);
@@ -1133,6 +1143,10 @@ const Dashboard = ({ students, courses }) => {
           { label:"이번달 진행중", val:`${activeCnt}개`, sub:"운영 과정 수", icon:"cal", color:T.ok },
           { label:"평균 출석률", val:`${avgRate}%`, sub:"전체 훈련생", icon:"check", color:T.info },
           { label:"수료 위험", val:`${atRisk.length}명`, sub:"출석률 80% 미만", icon:"alert", color:T.danger },
+          { label:"수료 확정", val:`${completedCnt}명`, sub:`목표 대비 ${completionGoalRate}%`, icon:"award", color:"#15803D" },
+          { label:"취업/예정", val:`${employedCnt}명`, sub:`취업 목표 ${employmentGoal}명`, icon:"user", color:"#0369A1" },
+          { label:"조기취업", val:`${earlyEmploymentCnt}명`, sub:"수료 전 취업", icon:"check", color:"#7E22CE" },
+          { label:"취업률", val:`${employmentRate}%`, sub:"전체 훈련생 기준", icon:"dash", color:"#B45309" },
         ].map((k,i) => (
           <div key={i} style={{
             background:T.s, borderRadius:12, border:`1.5px solid ${k.color}20`,
@@ -1790,6 +1804,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
   const [attModal, setAttModal] = useState(null);         // 선택된 학생 (또는 null)
   const [attRecords, setAttRecords] = useState([]);       // 출결 일별 기록
   const [attLoading, setAttLoading] = useState(false);
+  const [studentDetailTab, setStudentDetailTab] = useState("profile");
 
   // 모달 열릴 때 출결 데이터 로드
   useEffect(() => {
@@ -2138,7 +2153,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
           {/* 훈련생 테이블 */}
           <Card style={{ overflow:"hidden" }}>
             <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", minWidth:860 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", minWidth:980 }}>
               <thead>
                 <tr style={{ background:T.s2, borderBottom:`1px solid ${T.bd}` }}>
                   {[
@@ -2150,9 +2165,10 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                     {h:"취약계층",        align:"center"},
                     {h:"면접",            align:"center"},
                     {h:"등록상태",        align:"center"},
+                    {h:"취업여부",        align:"center"},
                     {h:"누적시간",        align:"center"},
                     {h:"출석률",          align:"center"},
-                    {h:"출결조회",        align:"center"},
+                    {h:"상세",            align:"center"},
                     {h:"",               align:"center"},
                   ].map(({h,align})=>(
                     <th key={h} style={{ padding:"10px 12px",
@@ -2288,6 +2304,21 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         })()}
                       </td>
 
+                      {/* 취업여부 */}
+                      <td style={{ padding:"11px 12px", textAlign:"center" }}>
+                        {(() => {
+                          const emp = s.status || "미취업";
+                          const ec = employmentChipStyle(emp);
+                          return <Chip label={emp} bg={ec.bg} color={ec.color} size={11}/>;
+                        })()}
+                        {s.employerName && (
+                          <div style={{ marginTop:3, fontSize:9, color:T.mu, maxWidth:90,
+                            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                            {s.employerName}
+                          </div>
+                        )}
+                      </td>
+
                       {/* 누적시간 */}
                       <td style={{ padding:"11px 12px", textAlign:"center" }}>
                         {(() => {
@@ -2320,9 +2351,9 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         )}
                       </td>
 
-                      {/* 출결 조회 */}
+                      {/* 상세 */}
                       <td style={{ padding:"11px 12px", textAlign:"center" }}>
-                        <button onClick={()=>setAttModal(s)} title="출결 상세 조회" style={{
+                        <button onClick={()=>{ setAttModal(s); setStudentDetailTab("profile"); }} title="훈련생 상세 조회" style={{
                           padding:"4px 8px", borderRadius:6, border:`1px solid ${T.bd}`,
                           background:T.s2, color:"#2563EB", cursor:"pointer",
                           fontSize:11, fontWeight:600, whiteSpace:"nowrap" }}>
@@ -2387,10 +2418,10 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                 padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
                 <div>
                   <div style={{ fontSize:15, fontWeight:800, color:"#fff" }}>
-                    📋 출결 상세 현황 — {attModal.name}
+                    📋 훈련생 상세 — {attModal.name}
                   </div>
                   <div style={{ fontSize:11, color:"rgba(255,255,255,.65)", marginTop:2 }}>
-                    {modalCourse?.name || "-"} · 전체 출결 기록 (실시간)
+                    {modalCourse?.name || "-"} · 기본정보 / 출결현황
                   </div>
                 </div>
                 <button onClick={()=>setAttModal(null)} style={{ width:28, height:28, borderRadius:6, border:"none",
@@ -2400,6 +2431,71 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                 </button>
               </div>
 
+              <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.bd}`, background:T.s2 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:8, marginBottom:10 }}>
+                  {[
+                    ["등록상태", attModal.enrollmentStatus || "재학중"],
+                    ["취업여부", attModal.status || "미취업"],
+                    ["출석률", isDropoutStudent(attModal) ? "중도탈락" : `${attModal.rate || 0}%`],
+                    ["누적시간", `${(attModal.accumulatedHours || 0).toFixed(1)}h`],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ border:`1px solid ${T.bd}`, borderRadius:8, padding:"8px 10px", background:"#fff" }}>
+                      <div style={{ fontSize:10, color:T.mu, marginBottom:3 }}>{k}</div>
+                      <div style={{ fontSize:12, color:T.tx, fontWeight:800, wordBreak:"break-all" }}>{v || "-"}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  {[
+                    ["profile", "기본정보"],
+                    ["attendance", `출결현황 ${attRecords.length ? `(${attRecords.length}일)` : ""}`],
+                  ].map(([id, label]) => {
+                    const active = studentDetailTab === id;
+                    return (
+                      <button key={id} onClick={() => setStudentDetailTab(id)}
+                        className={`tab-pill${active ? " tab-pill-active" : ""}`}
+                        style={{ padding:"6px 12px", borderRadius:999, border:`1px solid ${active ? T.p : T.bd}`,
+                          background:active ? T.p : "#fff", color:active ? "#fff" : T.mu,
+                          cursor:"pointer", fontSize:11, fontWeight:800 }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {studentDetailTab === "profile" ? (
+                <div style={{ flex:1, overflowY:"auto", padding:"16px 18px" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:10 }}>
+                    {[
+                      ["이름", attModal.name],
+                      ["성별", attModal.gender],
+                      ["생년월일", attModal.birth],
+                      ["연락처", attModal.phone],
+                      ["비상연락처", attModal.phone2],
+                      ["거주지", [attModal.addrCity, attModal.addrDetail].filter(Boolean).join(" ")],
+                      ["최종학력", attModal.edu],
+                      ["전공", attModal.major],
+                      ["경력", attModal.career],
+                      ["자격증", attModal.cert],
+                      ["면접", attModal.itvScore ? `${attModal.itvGrade || "-"} · ${attModal.itvScore}점 · ${attModal.itvPass ? "합격" : "불합격"}` : "-"],
+                      ["취업기업", attModal.employerName || "-"],
+                    ].map(([k, v]) => (
+                      <div key={k} style={{ border:`1px solid ${T.bd}`, borderRadius:8, padding:"9px 10px", background:T.s2 }}>
+                        <div style={{ fontSize:10, color:T.mu, marginBottom:4 }}>{k}</div>
+                        <div style={{ fontSize:12, color:T.tx, fontWeight:650, wordBreak:"break-all" }}>{v || "-"}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {attModal.memo && (
+                    <div style={{ marginTop:10, border:`1px solid ${T.bd}`, borderRadius:8, padding:"10px 12px", background:"#fff" }}>
+                      <div style={{ fontSize:10, color:T.mu, marginBottom:5 }}>특이사항 · 메모</div>
+                      <div style={{ fontSize:12, color:T.tx, lineHeight:1.6, whiteSpace:"pre-line" }}>{attModal.memo}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
               {/* 요약 통계 */}
               {!attLoading && attRecords.length > 0 && (() => {
                 const cnt = { O:0, A:0, L:0, U:0 };
@@ -2473,6 +2569,8 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                   </table>
                 )}
               </div>
+                </>
+              )}
 
               {/* 하단 */}
               <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`, flexShrink:0,
@@ -5201,6 +5299,18 @@ const STATUS_COLORS = {
   '수료예정': { bg: '#FFF7ED', color: '#C2410C' },
 };
 
+const EMPLOYMENT_STATUSES = ['미취업', '취업', '취업예정', '창업', '진학', '기타'];
+const EMPLOYMENT_COLORS = {
+  '취업':   { bg: '#DCFCE7', color: '#15803D' },
+  '취업예정': { bg: '#E0F2FE', color: '#0369A1' },
+  '창업':   { bg: '#F3E8FF', color: '#7E22CE' },
+  '진학':   { bg: '#FEF3C7', color: '#B45309' },
+  '미취업': { bg: '#F1F5F9', color: '#64748B' },
+  '기타':   { bg: '#E5E7EB', color: '#374151' },
+};
+
+const employmentChipStyle = status => EMPLOYMENT_COLORS[status || '미취업'] || EMPLOYMENT_COLORS['기타'];
+
 const isValidTransition = (fromStatus, toStatus) => {
   const allowed = VALID_TRANSITIONS[fromStatus];
   return allowed ? allowed.includes(toStatus) : false;
@@ -6026,6 +6136,8 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
   const [selectedHistory, setSelectedHistory] = useState(null);
   const [memoDraft, setMemoDraft] = useState("");
   const [historyBusyId, setHistoryBusyId] = useState("");
+  const [certDbStatus, setCertDbStatus] = useState("loading");
+  const [certDbError, setCertDbError] = useState("");
 
   const issueStatusLabel = status => status === "취소" ? "취소" : "정상";
   const normalizeHistoryRecord = r => ({
@@ -6064,16 +6176,56 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
     const loadFromDB = async () => {
       try {
         const { data, error } = await sbGet("cert_issuances", "select=*&order=issued_at.desc&limit=2000");
-        if (!error && data && data.length > 0) {
+        if (error) {
+          setCertDbStatus("error");
+          setCertDbError(error.message || JSON.stringify(error));
+          return;
+        }
+        setCertDbStatus("ok");
+        setCertDbError("");
+        if (data && data.length > 0) {
           const hist = data.map(normalizeHistoryRecord);
           setCertHistory(hist);
           saveCertHistory(hist); // localStorage 동기화
         }
       } catch(e) {
         console.warn("발급이력 DB 로드 오류:", e);
+        setCertDbStatus("error");
+        setCertDbError(e.message || String(e));
       }
     };
     loadFromDB();
+  }, []);
+
+  useEffect(() => {
+    if (!ENABLE_REALTIME) return;
+    realtimeManager.subscribe("cert_issuances", {
+      onInsert: (newRecord) => {
+        const rec = normalizeHistoryRecord(newRecord);
+        setCertHistory(prev => {
+          if (prev.some(r => r.id === rec.id)) return prev;
+          const next = [rec, ...prev].sort((a, b) => new Date(b.issuedAt) - new Date(a.issuedAt));
+          saveCertHistory(next);
+          return next;
+        });
+      },
+      onUpdate: (newRecord) => {
+        const rec = normalizeHistoryRecord(newRecord);
+        setCertHistory(prev => {
+          const next = prev.map(r => r.id === rec.id ? rec : r);
+          saveCertHistory(next);
+          return next;
+        });
+      },
+      onDelete: (oldRecord) => {
+        setCertHistory(prev => {
+          const next = prev.filter(r => r.id !== oldRecord.id);
+          saveCertHistory(next);
+          return next;
+        });
+      },
+    });
+    return () => realtimeManager.unsubscribe("cert_issuances");
   }, []);
 
   useEffect(() => {
@@ -6231,7 +6383,7 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
   // 발급이력 1건을 Supabase에 저장하는 헬퍼
   const saveCertIssuanceToDB = async (rec) => {
     try {
-      await sbInsert("cert_issuances", {
+      const { error } = await sbInsert("cert_issuances", {
         id:           rec.id,
         student_id:   rec.studentId,
         student_name: rec.studentName,
@@ -6258,8 +6410,16 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
         image_count: rec.imageCount || 0,
         last_output_at: rec.lastOutputAt || null,
       });
+      if (error) throw error;
+      setCertDbStatus("ok");
+      setCertDbError("");
+      return true;
     } catch(e) {
       console.warn("발급이력 DB 저장 오류:", e);
+      setCertDbStatus("error");
+      setCertDbError(e.message || JSON.stringify(e));
+      alert("발급이력을 Supabase에 저장하지 못했습니다.\n다른 PC에서 이 건이 보이지 않을 수 있습니다.\n\nSupabase SQL Editor에서 supabase-setup.sql을 다시 실행한 뒤 Schema Cache를 Reload 해주세요.\n\n오류: " + (e.message || JSON.stringify(e)));
+      return false;
     }
   };
 
@@ -6550,6 +6710,23 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
         sub="수료증 · 수강증명서 공식 양식 출력 · 브라우저 인쇄 → PDF 저장"
       />
 
+      <div style={{ marginBottom:12, display:"flex", alignItems:"center", gap:8,
+        padding:"9px 12px", borderRadius:10,
+        background: certDbStatus === "error" ? "#FEF2F2" : certDbStatus === "loading" ? "#FFFBEB" : "#F0FDF4",
+        border:`1px solid ${certDbStatus === "error" ? "#FECACA" : certDbStatus === "loading" ? "#FDE68A" : "#BBF7D0"}`,
+        color: certDbStatus === "error" ? T.danger : certDbStatus === "loading" ? "#B45309" : "#15803D",
+        fontSize:11, fontWeight:700 }}>
+        <span>{certDbStatus === "error" ? "⚠" : certDbStatus === "loading" ? "⏳" : "●"}</span>
+        <span>
+          {certDbStatus === "error"
+            ? "발급이력 DB 동기화 실패"
+            : certDbStatus === "loading"
+              ? "발급이력 DB 확인 중"
+              : "발급이력 Supabase 동기화 정상"}
+        </span>
+        {certDbError && <span style={{ color:T.mu, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{certDbError}</span>}
+      </div>
+
       {/* 문서 종류 선택 */}
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         {[
@@ -6684,6 +6861,16 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
                   saveCertHistory(next);
                   addAudit?.("증명서 이력 초기화", `${DOC_TYPE_NAMES[docType] || docType}`, currentUser?.name);
                   return next;
+                });
+                sbDelete("cert_issuances", `doc_type=eq.${encodeURIComponent(docType)}`).then(({ error }) => {
+                  if (error) {
+                    setCertDbStatus("error");
+                    setCertDbError(error.message || JSON.stringify(error));
+                    alert("로컬 이력은 초기화했지만 Supabase 이력 삭제에 실패했습니다.\n다른 PC에는 기존 이력이 남을 수 있습니다.\n\n" + (error.message || JSON.stringify(error)));
+                  }
+                }).catch(e => {
+                  setCertDbStatus("error");
+                  setCertDbError(e.message || String(e));
                 });
               }} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:`1px solid ${T.bd}`,
                 background:"#FEF2F2", color:T.danger, cursor:"pointer", fontWeight:600 }}>
@@ -7307,6 +7494,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
     birth: "", idBack: "",
     addrCity: "의정부시",
     phone: "",
+    status: "미취업",
     itvDate: new Date().toISOString().slice(0,10),
     itvScore: "", itvGrade: "B", itvPass: true,
     memo: "", rate: 0,
@@ -7445,6 +7633,18 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
+            </FLD>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:10 }}>
+            <FLD label="취업여부 (수료 후)">
+              <select value={form.status||"미취업"} onChange={e=>set("status",e.target.value)} style={selStyle}>
+                {EMPLOYMENT_STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </FLD>
+            <FLD label="취업 기업명">
+              <input value={form.employerName||""} onChange={e=>set("employerName",e.target.value)}
+                placeholder="취업/예정일 때 입력" style={inpStyle}/>
             </FLD>
           </div>
 

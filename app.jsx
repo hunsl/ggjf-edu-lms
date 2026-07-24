@@ -8047,6 +8047,7 @@ const SEED_INSTRUCTORS = [
 const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
   const empty = { name:"", type:"주강사", category:"경기도 강사", subject:"", phone:"", email:"", career:"", cert:"", cids:[], note:"", hourlyRate:0, customDates:{} };
   const [form, setForm] = useState(inst ? {...inst, cids:inst.cids||[], customDates:inst.customDates||{}} : empty);
+  const [isSaving, setIsSaving] = useState(false);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
@@ -8130,17 +8131,20 @@ const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
 
         <div style={{ padding:"13px 22px", borderTop:`1px solid ${T.bd}`,
           display:"flex", justifyContent:"flex-end", gap:8, background:T.s2 }}>
-          <Btn variant="ghost" onClick={onClose}>취소</Btn>
+          <Btn variant="ghost" onClick={onClose} disabled={isSaving}>취소</Btn>
           <Btn onClick={async ()=>{
+            if (isSaving) return;
             if(!form.name) return alert("이름은 필수입니다.");
+            setIsSaving(true);
             try {
               await onSave({...form, id: form.id ? form.id : undefined});
               onClose();
             } catch(err) {
               console.error("강사 저장 실패:", err);
               /* handleSave에서 alert 표시 후 throw하므로 여기서는 모달만 열어둠 */
+              setIsSaving(false);
             }
-          }}><Icon n="check" s={13}/>{isNew?"추가":"저장"}</Btn>
+          }} disabled={isSaving}><Icon n="check" s={13}/>{isSaving ? "저장 중..." : (isNew?"추가":"저장")}</Btn>
         </div>
       </div>
     </div>

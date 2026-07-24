@@ -7532,6 +7532,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
   const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
     const empty = { name: "", type: "\uC8FC\uAC15\uC0AC", category: "\uACBD\uAE30\uB3C4 \uAC15\uC0AC", subject: "", phone: "", email: "", career: "", cert: "", cids: [], note: "", hourlyRate: 0, customDates: {} };
     const [form, setForm] = useState(inst ? { ...inst, cids: inst.cids || [], customDates: inst.customDates || {} } : empty);
+    const [isSaving, setIsSaving] = useState(false);
     const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
     const inp = {
       width: "100%",
@@ -7638,15 +7639,18 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         justifyContent: "flex-end",
         gap: 8,
         background: T.s2
-      } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { onClick: async () => {
+      } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose, disabled: isSaving }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { onClick: async () => {
+        if (isSaving) return;
         if (!form.name) return alert("\uC774\uB984\uC740 \uD544\uC218\uC785\uB2C8\uB2E4.");
+        setIsSaving(true);
         try {
           await onSave({ ...form, id: form.id ? form.id : void 0 });
           onClose();
         } catch (err) {
           console.error("\uAC15\uC0AC \uC800\uC7A5 \uC2E4\uD328:", err);
+          setIsSaving(false);
         }
-      } }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), isNew ? "\uCD94\uAC00" : "\uC800\uC7A5")))
+      }, disabled: isSaving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), isSaving ? "\uC800\uC7A5 \uC911..." : isNew ? "\uCD94\uAC00" : "\uC800\uC7A5")))
     );
   };
   const InstructorMgmt = ({ courses, onUpdateCourse }) => {

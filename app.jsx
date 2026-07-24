@@ -578,7 +578,7 @@ const COURSES = [
   { id:8,  cat:"사무분야",      cc:"#9A3412", name:"행정회계 사무 OA (1기)",           code:"SM-01", dateFrom:"2026-03-02", dateTo:"2026-05-29", period:"3~5월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:9,  cat:"사무분야",      cc:"#BE185D", name:"행정회계 사무 OA (2기)",           code:"SM-02", dateFrom:"2026-07-01", dateTo:"2026-09-30", period:"7~9월",  method:"대면",     hours:200, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"09:00", schedTimeTo:"13:00" },
   { id:10, cat:"식품분야",      cc:"#DC2626", name:"HACCP 전문인력 양성",               code:"FD-01", dateFrom:"2026-04-01", dateTo:"2026-05-31", period:"4~5월",  method:"대면",     hours:112, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 화, 수, 목",  schedTimeFrom:"09:00", schedTimeTo:"14:00" },
-  { id:11, cat:"IT 신직무",     cc:"#F97316", name:"AI 시대의 캐릭터 크리에이터 양성",  code:"IT-01", dateFrom:"2026-08-03", dateTo:"2026-09-30", period:"8~9월",  method:"비대면",   hours:108, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금",     schedTimeFrom:"10:00", schedTimeTo:"14:00" },
+  { id:11, cat:"AI 신직무",     cc:"#F97316", name:"AI 시대의 캐릭터 크리에이터 양성",  code:"IT-01", dateFrom:"2026-08-03", dateTo:"2026-09-30", period:"8~9월",  method:"비대면",   hours:108, tgt:20, cGoal:18, eGoal:12, schedDays:"월, 수, 금",     schedTimeFrom:"10:00", schedTimeTo:"14:00" },
   { id:12, cat:"AI활용 분야", cc:"#2563EB", name:"AI 활용 데이터 분석 실무 입문과정", code:"IT-02", dateFrom:"2026-08-19", dateTo:"2026-09-15", period:"8.19~9.15", method:"대면", hours:80, tgt:21, cGoal:19, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"13:00", schedTimeTo:"17:00",
     notes:"STEP 1. Python·데이터분석·생성형 AI·협업도구·웹 포트폴리오 기초역량 과정. 한연동 36H, 김상영 20H, 이지우 보조 56H, 9.9~9.14 재정정보원 연계교육 16H. 팀별기획 강사·교육장소·운영주체 확인 필요." },
   { id:13, cat:"AI활용 분야", cc:"#8B5CF6", name:"AI-POT 연계 AI 활용 실무 심화과정", code:"IT-03", dateFrom:"2026-09-28", dateTo:"2026-10-16", period:"9.28~10.16", method:"대면", hours:48, tgt:25, cGoal:20, eGoal:12, schedDays:"월, 화, 수, 목, 금", schedTimeFrom:"13:00", schedTimeTo:"17:00",
@@ -1312,7 +1312,7 @@ const Dashboard = ({ students, courses }) => {
 =========================================================== */
 const CAT_COLORS = {
   "늘봄강사양성":"#EA580C","지역연계·기여":"#C2410C",
-  "사무분야":"#9A3412","식품분야":"#DC2626","IT 신직무":"#F97316",
+  "사무분야":"#9A3412","식품분야":"#DC2626","AI 신직무":"#F97316","AI활용 분야":"#2563EB",
 };
 const CAT_LIST = Object.keys(CAT_COLORS);
 

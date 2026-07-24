@@ -675,7 +675,7 @@ var GgjfEduLms = (() => {
     { id: 8, cat: "\uC0AC\uBB34\uBD84\uC57C", cc: "#9A3412", name: "\uD589\uC815\uD68C\uACC4 \uC0AC\uBB34 OA (1\uAE30)", code: "SM-01", dateFrom: "2026-03-02", dateTo: "2026-05-29", period: "3~5\uC6D4", method: "\uB300\uBA74", hours: 200, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uD654, \uC218, \uBAA9, \uAE08", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
     { id: 9, cat: "\uC0AC\uBB34\uBD84\uC57C", cc: "#BE185D", name: "\uD589\uC815\uD68C\uACC4 \uC0AC\uBB34 OA (2\uAE30)", code: "SM-02", dateFrom: "2026-07-01", dateTo: "2026-09-30", period: "7~9\uC6D4", method: "\uB300\uBA74", hours: 200, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uD654, \uC218, \uBAA9, \uAE08", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
     { id: 10, cat: "\uC2DD\uD488\uBD84\uC57C", cc: "#DC2626", name: "HACCP \uC804\uBB38\uC778\uB825 \uC591\uC131", code: "FD-01", dateFrom: "2026-04-01", dateTo: "2026-05-31", period: "4~5\uC6D4", method: "\uB300\uBA74", hours: 112, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uD654, \uC218, \uBAA9", schedTimeFrom: "09:00", schedTimeTo: "14:00" },
-    { id: 11, cat: "IT \uC2E0\uC9C1\uBB34", cc: "#F97316", name: "AI \uC2DC\uB300\uC758 \uCE90\uB9AD\uD130 \uD06C\uB9AC\uC5D0\uC774\uD130 \uC591\uC131", code: "IT-01", dateFrom: "2026-08-03", dateTo: "2026-09-30", period: "8~9\uC6D4", method: "\uBE44\uB300\uBA74", hours: 108, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uC218, \uAE08", schedTimeFrom: "10:00", schedTimeTo: "14:00" },
+    { id: 11, cat: "AI \uC2E0\uC9C1\uBB34", cc: "#F97316", name: "AI \uC2DC\uB300\uC758 \uCE90\uB9AD\uD130 \uD06C\uB9AC\uC5D0\uC774\uD130 \uC591\uC131", code: "IT-01", dateFrom: "2026-08-03", dateTo: "2026-09-30", period: "8~9\uC6D4", method: "\uBE44\uB300\uBA74", hours: 108, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uC218, \uAE08", schedTimeFrom: "10:00", schedTimeTo: "14:00" },
     {
       id: 12,
       cat: "AI\uD65C\uC6A9 \uBD84\uC57C",
@@ -1483,7 +1483,8 @@ var GgjfEduLms = (() => {
     "\uC9C0\uC5ED\uC5F0\uACC4\xB7\uAE30\uC5EC": "#C2410C",
     "\uC0AC\uBB34\uBD84\uC57C": "#9A3412",
     "\uC2DD\uD488\uBD84\uC57C": "#DC2626",
-    "IT \uC2E0\uC9C1\uBB34": "#F97316"
+    "AI \uC2E0\uC9C1\uBB34": "#F97316",
+    "AI\uD65C\uC6A9 \uBD84\uC57C": "#2563EB"
   };
   const CAT_LIST = Object.keys(CAT_COLORS);
   const CourseModal = ({ course, onSave, onClose, isNew = false }) => {

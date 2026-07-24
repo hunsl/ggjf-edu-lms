@@ -4506,6 +4506,7 @@ const CompletionMgmt = ({ students, courses }) => {
   const [threshold, setThr] = useState(80);
   const [overrides, setOvr] = useState({});
   const [confirming, setConfirming] = useState(false);
+  const [showConfirmed, setShowConfirmed] = useState(true);
 
   // courses prop 변경(실시간 업데이트/편집) 시 선택 과정 최신 데이터로 동기화
   useEffect(() => {
@@ -4518,10 +4519,15 @@ const CompletionMgmt = ({ students, courses }) => {
   }, [courses]);
 
   if (!course) return null;
+  // 이미 수료 확정된 학생 (별도 목록)
+  const confirmedList = students.filter(s => {
+    if (s.cid !== course.id) return false;
+    return s.enrollmentStatus === '수료' || s.enrollmentStatus === '조기취업 수료';
+  });
   const list = students.filter(s => {
     if (s.cid !== course.id) return false;
     if (s.enrollmentStatus === '중도탈락') return false; // 중도탈락 제외
-    if (s.enrollmentStatus === '수료' || s.enrollmentStatus === '조기취업 수료') return false; // 이미 확정된 수료자는 목록에서 제외
+    if (s.enrollmentStatus === '수료' || s.enrollmentStatus === '조기취업 수료') return false; // 확정된 수료자는 판정 목록에서 제외
     return true;
   });
   const get = s => {
@@ -4624,6 +4630,9 @@ const CompletionMgmt = ({ students, courses }) => {
           <div style={{ fontSize:11, color:T.mu }}>수료율</div>
           <div style={{ fontSize:32, fontWeight:900, color:rate>=90?T.p:T.danger, lineHeight:1.1 }}>{rate}%</div>
           <div style={{ fontSize:11, color:T.mu }}>{completed}/{list.length}명</div>
+          {confirmedList.length > 0 && (
+            <div style={{ fontSize:10, color:"#15803D", marginTop:3, fontWeight:600 }}>+{confirmedList.length}명 확정완료</div>
+          )}
           <Chip label={rate>=90?"목표달성":"목표미달"} bg={rate>=90?T.pbg:"#FEF2F2"} color={rate>=90?T.p:T.danger} size={10}/>
         </Card>
         <Card style={{ padding:"16px 22px" }}>
@@ -4661,9 +4670,87 @@ const CompletionMgmt = ({ students, courses }) => {
               <span style={{ fontSize:11, color:T.mu }}>조기취업(비례 기준)</span>
             </div>
           )}
+          {confirmedList.length > 0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginLeft:"auto" }}>
+              <span style={{ display:"inline-block", width:10, height:10, borderRadius:"50%", background:"#15803D" }}/>
+              <span style={{ fontSize:12, fontWeight:700, color:"#15803D" }}>{confirmedList.length}명</span>
+              <span style={{ fontSize:11, color:T.mu }}>이미 수료 확정됨</span>
+            </div>
+          )}
         </div>
       </Card>
 
+      {/* 이미 수료 확정된 학생 목록 */}
+      {confirmedList.length > 0 && (
+        <Card style={{ overflow:"hidden", marginBottom:14, border:`1.5px solid #BBF7D0` }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+            padding:"10px 16px", background:"#F0FDF4", borderBottom:`1px solid #BBF7D0` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:13, fontWeight:800, color:"#15803D" }}>✅ 수료 확정 완료</span>
+              <Chip label={`${confirmedList.length}명`} bg="#DCFCE7" color="#15803D"/>
+              <span style={{ fontSize:11, color:T.mu }}>DB에 저장된 최종 수료자 목록입니다</span>
+            </div>
+            <button onClick={()=>setShowConfirmed(v=>!v)} style={{
+              padding:"4px 12px", border:`1px solid #BBF7D0`, borderRadius:8,
+              background:"#fff", cursor:"pointer", fontSize:11, color:"#15803D", fontWeight:600 }}>
+              {showConfirmed ? "▲ 숨기기" : "▼ 펼치기"}
+            </button>
+          </div>
+          {showConfirmed && (
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:"#F0FDF4" }}>
+                  {["이름","누적시간","출석률","확정 상태"].map(h=>(
+                    <th key={h} style={{ padding:"8px 16px",
+                      textAlign:h==="이름"?"left":"center",
+                      fontSize:11, color:"#15803D", fontWeight:700,
+                      borderBottom:`1px solid #BBF7D0` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {confirmedList.map(s=>{
+                  const sTotal = s.enrollmentStatus === '조기취업 수료' && s.statusChangeDate
+                    ? getProportionalCourseHours(course, s.statusChangeDate)
+                    : getTotalCourseHours(course);
+                  return (
+                    <tr key={s.id} style={{ borderBottom:`1px solid #DCFCE7`, opacity:0.85 }}>
+                      <td style={{ padding:"10px 16px", fontSize:13, fontWeight:700, color:T.tx }}>
+                        {s.name}
+                        <Chip label={s.enrollmentStatus}
+                          bg={STATUS_COLORS[s.enrollmentStatus]?.bg||"#DCFCE7"}
+                          color={STATUS_COLORS[s.enrollmentStatus]?.color||"#15803D"}
+                          size={10} style={{ marginLeft:6 }}/>
+                      </td>
+                      <td style={{ padding:"10px 16px", textAlign:"center", fontSize:13, fontWeight:700, color:"#15803D" }}>
+                        {(s.accumulatedHours || 0).toFixed(1)}h
+                        <div style={{ fontSize:10, color:T.mu }}>/ {sTotal.toFixed(1)}h</div>
+                      </td>
+                      <td style={{ padding:"10px 16px", textAlign:"center", fontSize:14, fontWeight:800, color:"#15803D" }}>
+                        {s.rate}%
+                        <RBar r={s.rate} h={3}/>
+                      </td>
+                      <td style={{ padding:"10px 16px", textAlign:"center" }}>
+                        <Chip label="🔒 확정완료" bg="#DCFCE7" color="#15803D"/>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
+      {list.length === 0 && confirmedList.length > 0 && (
+        <div style={{ textAlign:"center", padding:"32px 20px", color:T.mu, fontSize:13 }}>
+          <div style={{ fontSize:32, marginBottom:8 }}>🎉</div>
+          <div style={{ fontWeight:700, color:"#15803D", fontSize:15, marginBottom:4 }}>모든 학생의 수료가 확정되었습니다!</div>
+          <div>위 목록에서 {confirmedList.length}명의 수료 결과를 확인하세요.</div>
+        </div>
+      )}
+
+      {list.length > 0 && (
       <Card style={{ overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
@@ -4742,6 +4829,7 @@ const CompletionMgmt = ({ students, courses }) => {
           </tbody>
         </table>
       </Card>
+      )}
     </div>
   );
 };
@@ -6268,32 +6356,35 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
 
   // 발급이력: localStorage에서 초기화, 이후 useState로 관리
   const [certHistory, setCertHistory] = useState(loadCertHistory);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
   // 마운트 시 Supabase에서 이력 로드 (여러 기기/사용자 간 공유)
-  useEffect(() => {
-    const loadFromDB = async () => {
-      try {
-        const { data, error } = await sbGet("cert_issuances", "select=*&order=issued_at.desc&limit=2000");
-        if (error) {
-          setCertDbStatus("error");
-          setCertDbError(error.message || JSON.stringify(error));
-          return;
-        }
-        setCertDbStatus("ok");
-        setCertDbError("");
-        if (data && data.length > 0) {
-          const hist = data.map(normalizeHistoryRecord);
-          setCertHistory(hist);
-          saveCertHistory(hist); // localStorage 동기화
-        }
-      } catch(e) {
-        console.warn("발급이력 DB 로드 오류:", e);
+  const loadFromDB = React.useCallback(async () => {
+    setCertDbStatus("loading");
+    setCertDbError("");
+    try {
+      const { data, error } = await sbGet("cert_issuances", "select=*&order=issued_at.desc&limit=2000");
+      if (error) {
         setCertDbStatus("error");
-        setCertDbError(e.message || String(e));
+        setCertDbError(error.message || JSON.stringify(error));
+        return;
       }
-    };
-    loadFromDB();
+      setCertDbStatus("ok");
+      setCertDbError("");
+      setLastSyncedAt(new Date());
+      if (data) {
+        const hist = data.map(normalizeHistoryRecord);
+        setCertHistory(hist);
+        saveCertHistory(hist); // localStorage 동기화 (빈 배열이면 기존 캐시 초기화)
+      }
+    } catch(e) {
+      console.warn("발급이력 DB 로드 오류:", e);
+      setCertDbStatus("error");
+      setCertDbError(e.message || String(e));
+    }
   }, []);
+
+  useEffect(() => { loadFromDB(); }, [loadFromDB]);
 
   useEffect(() => {
     if (!ENABLE_REALTIME) return;
@@ -6823,6 +6914,18 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
               : "발급이력 Supabase 동기화 정상"}
         </span>
         {certDbError && <span style={{ color:T.mu, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{certDbError}</span>}
+        {lastSyncedAt && certDbStatus === "ok" && (
+          <span style={{ color:T.mu, fontWeight:400, marginLeft:4 }}>
+            · 마지막 동기화: {lastSyncedAt.toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit", second:"2-digit" })}
+          </span>
+        )}
+        <button onClick={loadFromDB} disabled={certDbStatus === "loading"} style={{
+          marginLeft:"auto", padding:"4px 12px", borderRadius:8, border:`1px solid currentColor`,
+          background:"transparent", cursor: certDbStatus === "loading" ? "default" : "pointer",
+          fontSize:11, fontWeight:700, color:"inherit", opacity: certDbStatus === "loading" ? 0.5 : 1,
+          display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap" }}>
+          🔄 새로고침
+        </button>
       </div>
 
       {/* 문서 종류 선택 */}

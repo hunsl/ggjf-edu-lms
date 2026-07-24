@@ -1984,6 +1984,12 @@ var GgjfEduLms = (() => {
     const [preview, setPreview] = useState(null);
     const [tab, setTab] = useState("list");
     const fileRef = useRef();
+    const [selectedStudentId, setSelectedStudentId] = useState(null);
+    const [workspaceTab, setWorkspaceTab] = useState("profile");
+    const [workspaceForm, setWorkspaceForm] = useState(null);
+    const [workspaceSaving, setWorkspaceSaving] = useState(false);
+    const [workspaceAtt, setWorkspaceAtt] = useState([]);
+    const [workspaceAttLoading, setWorkspaceAttLoading] = useState(false);
     const [statusTarget, setStatusTarget] = useState(null);
     const [employmentTarget, setEmploymentTarget] = useState(null);
     const [attModal, setAttModal] = useState(null);
@@ -2019,6 +2025,61 @@ var GgjfEduLms = (() => {
         cancelled = true;
       };
     }, [attModal]);
+    const selectedStudent = useMemo(
+      () => students.find((s) => sameId(s.id, selectedStudentId)) || null,
+      [students, selectedStudentId]
+    );
+    const selectedCourse = selectedStudent ? courses.find((c) => sameId(c.id, selectedStudent.cid)) : null;
+    useEffect(() => {
+      if (!selectedStudent) {
+        setWorkspaceForm(null);
+        setWorkspaceAtt([]);
+        return;
+      }
+      setWorkspaceForm({
+        ...selectedStudent,
+        cid: selectedStudent.cid || courses[0]?.id || 1,
+        enrollmentStatus: selectedStudent.enrollmentStatus || "\uC7AC\uD559\uC911",
+        status: getEffectiveEmploymentStatus(selectedStudent)
+      });
+    }, [selectedStudent, courses]);
+    useEffect(() => {
+      if (!selectedStudent) return;
+      let cancelled = false;
+      setWorkspaceAttLoading(true);
+      const studentId = Number(selectedStudent.id);
+      if (!studentId) {
+        setWorkspaceAttLoading(false);
+        return;
+      }
+      (async () => {
+        try {
+          const { data, error } = await sbGet(
+            "attendance",
+            `select=date,check_in,check_out,status&student_id=eq.${studentId}&order=date.asc`
+          );
+          if (!cancelled) setWorkspaceAtt(error ? [] : data || []);
+        } catch {
+          if (!cancelled) setWorkspaceAtt([]);
+        }
+        if (!cancelled) setWorkspaceAttLoading(false);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [selectedStudent]);
+    const setWorkspace = (k, v) => setWorkspaceForm((p) => ({ ...p || selectedStudent || {}, [k]: v }));
+    const saveWorkspace = async () => {
+      if (!selectedStudent || !workspaceForm) return;
+      if (!String(workspaceForm.name || "").trim()) return alert("\uC774\uB984\uC740 \uD544\uC218 \uC785\uB825 \uD56D\uBAA9\uC785\uB2C8\uB2E4.");
+      setWorkspaceSaving(true);
+      try {
+        await onUpdate({ ...selectedStudent, ...workspaceForm, cid: Number(workspaceForm.cid) });
+        alert(`${workspaceForm.name} \uC815\uBCF4\uAC00 \uC800\uC7A5\uB418\uC5C8\uC2B5\uB2C8\uB2E4.`);
+      } finally {
+        setWorkspaceSaving(false);
+      }
+    };
     useEffect(() => {
       if (!attModal || !ENABLE_REALTIME) return;
       const studentId = Number(attModal.id);
@@ -2409,7 +2470,7 @@ var GgjfEduLms = (() => {
       cursor: "pointer",
       fontSize: 12,
       fontWeight: 700
-    } }, "\uC870\uAE30\uCDE8\uC5C5 \uCDE8\uC5C5\uC5EC\uBD80 \uBCF4\uC815 ", studentSummary.mismatch.length, "\uBA85"), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontSize: 12, color: T.mu, fontWeight: 600 } }, "\uCD1D ", filtered.length, "\uBA85")), /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 980 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: T.s2, borderBottom: `1px solid ${T.bd}` } }, [
+    } }, "\uC870\uAE30\uCDE8\uC5C5 \uCDE8\uC5C5\uC5EC\uBD80 \uBCF4\uC815 ", studentSummary.mismatch.length, "\uBA85"), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontSize: 12, color: T.mu, fontWeight: 600 } }, "\uCD1D ", filtered.length, "\uBA85")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: selectedStudent ? "minmax(0,1fr) minmax(340px,380px)" : "1fr", gap: 14, alignItems: "start" } }, /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 980 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: T.s2, borderBottom: `1px solid ${T.bd}` } }, [
       { h: "\uC774\uB984\xB7\uC131\uBCC4\xB7\uB098\uC774", align: "left" },
       { h: "\uACFC\uC815", align: "left" },
       { h: "\uAC70\uC8FC\uC9C0", align: "center" },
@@ -2447,136 +2508,220 @@ var GgjfEduLms = (() => {
         s.veteran && { l: "\uBCF4\uD6C8", bg: "#ECFDF5", c: "#059669" }
       ].filter(Boolean);
       const gradeColor = (g) => g?.startsWith("A") ? T.ok : g?.startsWith("B") ? T.warn : T.danger;
-      return /* @__PURE__ */ React.createElement("tr", { key: s.id, className: "row-hover", style: { borderBottom: `1px solid ${T.bd}` } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: {
-        width: 32,
-        height: 32,
-        borderRadius: 9,
-        flexShrink: 0,
-        background: s.gender === "\uC5EC" ? "#FDF2F8" : "#EFF6FF",
-        color: s.gender === "\uC5EC" ? "#BE185D" : "#1D4ED8",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 11,
-        fontWeight: 900
-      } }, s.name?.[0]), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, whiteSpace: "nowrap" } }, s.name, /* @__PURE__ */ React.createElement("span", { style: {
-        marginLeft: 5,
-        fontSize: 10,
-        fontWeight: 600,
-        color: s.gender === "\uC5EC" ? "#BE185D" : "#1D4ED8"
-      } }, s.gender || "")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, age, " \xB7 ", s.birth || "-")))), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", maxWidth: 150 } }, /* @__PURE__ */ React.createElement("div", { style: {
-        fontSize: 11,
-        fontWeight: 600,
-        color: T.tx,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap"
-      } }, c?.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, marginTop: 1 } }, /* @__PURE__ */ React.createElement("span", { style: { color: c?.cc, fontWeight: 700 } }, c?.code), /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, marginLeft: 4 } }, formatCoursePeriod(c)))), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: T.tx, whiteSpace: "nowrap" } }, s.addrCity || s.addr?.split(" ")[0] || "-")), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.tx, whiteSpace: "nowrap" } }, s.phone || "-")), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: T.tx } }, s.edu || "-"), s.major && s.major !== "-" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, s.major), s.career && s.career !== "\uC5C6\uC74C" && /* @__PURE__ */ React.createElement("div", { style: {
-        fontSize: 10,
-        color: T.p,
-        marginTop: 2,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-        maxWidth: 120
-      } }, s.career)), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, justifyContent: "center", flexWrap: "wrap" } }, badges.length > 0 ? badges.map((b) => /* @__PURE__ */ React.createElement(Chip, { key: b.l, label: b.l, bg: b.bg, color: b.c, size: 10 })) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.bd } }, "\u2014"))), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, s.itvScore ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("span", { style: {
-        fontSize: 13,
-        fontWeight: 800,
-        color: gradeColor(s.itvGrade)
-      } }, s.itvGrade), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, s.itvScore, "\uC810")), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } }, /* @__PURE__ */ React.createElement(
-        Chip,
+      return /* @__PURE__ */ React.createElement(
+        "tr",
         {
-          label: s.itvPass ? "\uD569\uACA9" : "\uBD88\uD569\uACA9",
-          bg: s.itvPass ? T.pbg : "#FEF2F2",
-          color: s.itvPass ? T.p : T.danger,
-          size: 10
-        }
-      ))) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.bd } }, "\uBBF8\uC785\uB825")), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
-        const es = s.enrollmentStatus || "\uC7AC\uD559\uC911";
-        const sc = STATUS_COLORS[es] || { bg: T.s3, color: T.mu };
-        return /* @__PURE__ */ React.createElement(Chip, { label: es, bg: sc.bg, color: sc.color, size: 11 });
-      })()), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
-        const emp = getEffectiveEmploymentStatus(s);
-        const ec = employmentChipStyle(emp);
-        const needsSync = (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5" && (s.status || "\uBBF8\uCDE8\uC5C5") !== "\uCDE8\uC5C5";
-        return /* @__PURE__ */ React.createElement("button", { onClick: () => setEmploymentTarget(s), title: "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815", style: {
-          border: `1px solid ${needsSync ? T.danger : "transparent"}`,
-          borderRadius: 999,
-          background: ec.bg,
-          color: ec.color,
-          padding: "3px 9px",
-          cursor: "pointer",
-          fontSize: 11,
-          fontWeight: 800
-        } }, emp, needsSync ? " \xB7 \uBCF4\uC815\uD544\uC694" : "");
-      })(), s.employerName && /* @__PURE__ */ React.createElement("div", { style: {
-        marginTop: 3,
-        fontSize: 9,
-        color: T.mu,
-        maxWidth: 90,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap"
-      } }, s.employerName)), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
-        const tc = getTotalCourseHours(c);
-        return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx } }, (s.accumulatedHours || 0).toFixed(1), "h"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, "/ ", tc > 0 ? tc + "h" : "-"));
-      })()), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center", minWidth: 80 } }, hiddenRate ? /* @__PURE__ */ React.createElement(Chip, { label: "\uC911\uB3C4\uD0C8\uB77D", bg: "#FEE2E2", color: T.danger, size: 10 }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: col } }, s.rate, "%"), /* @__PURE__ */ React.createElement(RBar, { r: s.rate, h: 4 }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: col, marginTop: 2 } }, s.rate >= 80 ? "\uC815\uC0C1" : s.rate >= 70 ? "\uC8FC\uC758" : "\uC704\uD5D8"))), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => {
-        setAttModal(s);
-        setStudentDetailTab("profile");
-      }, title: "\uD6C8\uB828\uC0DD \uC0C1\uC138 \uC870\uD68C", style: {
-        padding: "4px 8px",
-        borderRadius: 6,
-        border: `1px solid ${T.bd}`,
-        background: T.s2,
-        color: "#2563EB",
-        cursor: "pointer",
-        fontSize: 11,
-        fontWeight: 600,
-        whiteSpace: "nowrap"
-      } }, "\u{1F4CB} \uC0C1\uC138")), /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, justifyContent: "center" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => onEdit(s), title: "\uC218\uC815", style: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
-        border: "none",
-        background: T.pbg,
-        color: T.p,
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center"
-      } }, /* @__PURE__ */ React.createElement(Icon, { n: "edit", s: 13 })), /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          onClick: () => setStatusTarget({ student: s, course: c }),
-          title: "\uC0C1\uD0DC \uBCC0\uACBD",
+          key: s.id,
+          className: "row-hover",
+          onClick: () => {
+            setSelectedStudentId(s.id);
+            setWorkspaceTab("profile");
+          },
           style: {
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            border: "none",
-            background: "#F0FDF4",
-            color: "#15803D",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 13
+            borderBottom: `1px solid ${T.bd}`,
+            background: sameId(selectedStudentId, s.id) ? "#F8FAFF" : void 0,
+            cursor: "pointer"
           }
         },
-        "\u2699"
-      ), /* @__PURE__ */ React.createElement("button", { onClick: () => onDelete(s.id), title: "\uC0AD\uC81C", style: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
-        border: "none",
-        background: "#FEF2F2",
-        color: T.danger,
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: {
+          width: 32,
+          height: 32,
+          borderRadius: 9,
+          flexShrink: 0,
+          background: s.gender === "\uC5EC" ? "#FDF2F8" : "#EFF6FF",
+          color: s.gender === "\uC5EC" ? "#BE185D" : "#1D4ED8",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 11,
+          fontWeight: 900
+        } }, s.name?.[0]), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, whiteSpace: "nowrap" } }, s.name, /* @__PURE__ */ React.createElement("span", { style: {
+          marginLeft: 5,
+          fontSize: 10,
+          fontWeight: 600,
+          color: s.gender === "\uC5EC" ? "#BE185D" : "#1D4ED8"
+        } }, s.gender || "")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, age, " \xB7 ", s.birth || "-")))),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", maxWidth: 150 } }, /* @__PURE__ */ React.createElement("div", { style: {
+          fontSize: 11,
+          fontWeight: 600,
+          color: T.tx,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        } }, c?.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, marginTop: 1 } }, /* @__PURE__ */ React.createElement("span", { style: { color: c?.cc, fontWeight: 700 } }, c?.code), /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, marginLeft: 4 } }, formatCoursePeriod(c)))),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: T.tx, whiteSpace: "nowrap" } }, s.addrCity || s.addr?.split(" ")[0] || "-")),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.tx, whiteSpace: "nowrap" } }, s.phone || "-")),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: T.tx } }, s.edu || "-"), s.major && s.major !== "-" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, s.major), s.career && s.career !== "\uC5C6\uC74C" && /* @__PURE__ */ React.createElement("div", { style: {
+          fontSize: 10,
+          color: T.p,
+          marginTop: 2,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          maxWidth: 120
+        } }, s.career)),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, justifyContent: "center", flexWrap: "wrap" } }, badges.length > 0 ? badges.map((b) => /* @__PURE__ */ React.createElement(Chip, { key: b.l, label: b.l, bg: b.bg, color: b.c, size: 10 })) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.bd } }, "\u2014"))),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, s.itvScore ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("span", { style: {
+          fontSize: 13,
+          fontWeight: 800,
+          color: gradeColor(s.itvGrade)
+        } }, s.itvGrade), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, s.itvScore, "\uC810")), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } }, /* @__PURE__ */ React.createElement(
+          Chip,
+          {
+            label: s.itvPass ? "\uD569\uACA9" : "\uBD88\uD569\uACA9",
+            bg: s.itvPass ? T.pbg : "#FEF2F2",
+            color: s.itvPass ? T.p : T.danger,
+            size: 10
+          }
+        ))) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.bd } }, "\uBBF8\uC785\uB825")),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
+          const es = s.enrollmentStatus || "\uC7AC\uD559\uC911";
+          const sc = STATUS_COLORS[es] || { bg: T.s3, color: T.mu };
+          return /* @__PURE__ */ React.createElement(Chip, { label: es, bg: sc.bg, color: sc.color, size: 11 });
+        })()),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
+          const emp = getEffectiveEmploymentStatus(s);
+          const ec = employmentChipStyle(emp);
+          const needsSync = (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5" && (s.status || "\uBBF8\uCDE8\uC5C5") !== "\uCDE8\uC5C5";
+          return /* @__PURE__ */ React.createElement("button", { onClick: (e) => {
+            e.stopPropagation();
+            setEmploymentTarget(s);
+          }, title: "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815", style: {
+            border: `1px solid ${needsSync ? T.danger : "transparent"}`,
+            borderRadius: 999,
+            background: ec.bg,
+            color: ec.color,
+            padding: "3px 9px",
+            cursor: "pointer",
+            fontSize: 11,
+            fontWeight: 800
+          } }, emp, needsSync ? " \xB7 \uBCF4\uC815\uD544\uC694" : "");
+        })(), s.employerName && /* @__PURE__ */ React.createElement("div", { style: {
+          marginTop: 3,
+          fontSize: 9,
+          color: T.mu,
+          maxWidth: 90,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        } }, s.employerName)),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
+          const tc = getTotalCourseHours(c);
+          return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx } }, (s.accumulatedHours || 0).toFixed(1), "h"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, "/ ", tc > 0 ? tc + "h" : "-"));
+        })()),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center", minWidth: 80 } }, hiddenRate ? /* @__PURE__ */ React.createElement(Chip, { label: "\uC911\uB3C4\uD0C8\uB77D", bg: "#FEE2E2", color: T.danger, size: 10 }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: col } }, s.rate, "%"), /* @__PURE__ */ React.createElement(RBar, { r: s.rate, h: 4 }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: col, marginTop: 2 } }, s.rate >= 80 ? "\uC815\uC0C1" : s.rate >= 70 ? "\uC8FC\uC758" : "\uC704\uD5D8"))),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("button", { onClick: (e) => {
+          e.stopPropagation();
+          setSelectedStudentId(s.id);
+          setWorkspaceTab("profile");
+        }, title: "\uD6C8\uB828\uC0DD \uC5C5\uBB34 \uD328\uB110 \uC5F4\uAE30", style: {
+          padding: "4px 8px",
+          borderRadius: 6,
+          border: `1px solid ${T.bd}`,
+          background: T.s2,
+          color: "#2563EB",
+          cursor: "pointer",
+          fontSize: 11,
+          fontWeight: 600,
+          whiteSpace: "nowrap"
+        } }, "\uC5C5\uBB34")),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, justifyContent: "center" } }, /* @__PURE__ */ React.createElement("button", { onClick: (e) => {
+          e.stopPropagation();
+          setSelectedStudentId(s.id);
+          setWorkspaceTab("profile");
+        }, title: "\uC218\uC815", style: {
+          width: 28,
+          height: 28,
+          borderRadius: 6,
+          border: "none",
+          background: T.pbg,
+          color: T.p,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        } }, /* @__PURE__ */ React.createElement(Icon, { n: "edit", s: 13 })), /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            onClick: (e) => {
+              e.stopPropagation();
+              setSelectedStudentId(s.id);
+              setWorkspaceTab("status");
+            },
+            title: "\uC0C1\uD0DC \uBCC0\uACBD",
+            style: {
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: "none",
+              background: "#F0FDF4",
+              color: "#15803D",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 13
+            }
+          },
+          "\u2699"
+        ), /* @__PURE__ */ React.createElement("button", { onClick: (e) => {
+          e.stopPropagation();
+          onDelete(s.id);
+        }, title: "\uC0AD\uC81C", style: {
+          width: 28,
+          height: 28,
+          borderRadius: 6,
+          border: "none",
+          background: "#FEF2F2",
+          color: T.danger,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        } }, /* @__PURE__ */ React.createElement(Icon, { n: "x", s: 13 }))))
+      );
+    })))), filtered.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4")), selectedStudent && workspaceForm && /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden", position: "sticky", top: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "14px 16px", background: `linear-gradient(135deg,${T.sb},${T.p})`, color: "#fff" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, selectedStudent.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, opacity: 0.72, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, selectedCourse?.code || "-", " \xB7 ", selectedCourse?.name || "\uACFC\uC815 \uC5C6\uC74C")), /* @__PURE__ */ React.createElement("button", { onClick: () => setSelectedStudentId(null), title: "\uD328\uB110 \uB2EB\uAE30", style: {
+      width: 28,
+      height: 28,
+      borderRadius: 7,
+      border: "none",
+      background: "rgba(255,255,255,.16)",
+      color: "#fff",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    } }, /* @__PURE__ */ React.createElement(Icon, { n: "x", s: 13 })))), /* @__PURE__ */ React.createElement("div", { style: { padding: "10px 12px", borderBottom: `1px solid ${T.bd}`, display: "flex", gap: 6, flexWrap: "wrap", background: T.s2 } }, [
+      ["profile", "\uAE30\uBCF8\xB7\uC218\uC815"],
+      ["status", "\uB4F1\uB85D\uC0C1\uD0DC"],
+      ["after", "\uC0AC\uD6C4\uAD00\uB9AC"],
+      ["attendance", `\uCD9C\uACB0 ${workspaceAtt.length ? workspaceAtt.length : ""}`]
+    ].map(([id, label]) => {
+      const active = workspaceTab === id;
+      return /* @__PURE__ */ React.createElement("button", { key: id, onClick: () => setWorkspaceTab(id), style: {
+        padding: "6px 10px",
+        borderRadius: 999,
+        border: `1px solid ${active ? T.p : T.bd}`,
+        background: active ? T.p : "#fff",
+        color: active ? "#fff" : T.mu,
         cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center"
-      } }, /* @__PURE__ */ React.createElement(Icon, { n: "x", s: 13 })))));
-    })))), filtered.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4"))), attModal && (() => {
+        fontSize: 11,
+        fontWeight: 800
+      } }, label);
+    })), /* @__PURE__ */ React.createElement("div", { style: { padding: 14, maxHeight: "calc(100vh - 260px)", overflowY: "auto" } }, workspaceTab === "profile" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uC774\uB984", required: true }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.name || "", onChange: (e) => setWorkspace("name", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC131\uBCC4" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.gender || "\uB0A8", onChange: (e) => setWorkspace("gender", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, /* @__PURE__ */ React.createElement("option", null, "\uB0A8"), /* @__PURE__ */ React.createElement("option", null, "\uC5EC")))), /* @__PURE__ */ React.createElement(FLD, { label: "\uACFC\uC815" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.cid || "", onChange: (e) => setWorkspace("cid", +e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, courses.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.code, " \xB7 ", c.name)))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uC5F0\uB77D\uCC98" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.phone || "", onChange: (e) => setWorkspace("phone", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uBE44\uC0C1\uC5F0\uB77D\uCC98" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.phone2 || "", onChange: (e) => setWorkspace("phone2", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uAC70\uC8FC \uC2DC\xB7\uAD70" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.addrCity || "", onChange: (e) => setWorkspace("addrCity", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC0DD\uB144\uC6D4\uC77C" }, /* @__PURE__ */ React.createElement("input", { type: "date", value: workspaceForm.birth || "", onChange: (e) => setWorkspace("birth", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uCD5C\uC885\uD559\uB825" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.edu || "", onChange: (e) => setWorkspace("edu", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC804\uACF5" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.major || "", onChange: (e) => setWorkspace("major", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement(FLD, { label: "\uACBD\uB825" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.career || "", onChange: (e) => setWorkspace("career", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uD2B9\uC774\uC0AC\uD56D \xB7 \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement("textarea", { value: workspaceForm.memo || "", onChange: (e) => setWorkspace("memo", e.target.value), rows: 4, style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2, resize: "vertical", fontFamily: "inherit" } }))), workspaceTab === "status" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 } }, [["\uB4F1\uB85D\uC0C1\uD0DC", workspaceForm.enrollmentStatus || "\uC7AC\uD559\uC911"], ["\uCD9C\uC11D\uB960", isDropoutStudent(workspaceForm) ? "\uC911\uB3C4\uD0C8\uB77D" : `${workspaceForm.rate || 0}%`], ["\uB204\uC801\uC2DC\uAC04", `${(workspaceForm.accumulatedHours || 0).toFixed(1)}h`]].map(([k, v]) => /* @__PURE__ */ React.createElement("div", { key: k, style: { border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 9px", background: T.s2 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, k), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx, fontWeight: 850, marginTop: 3 } }, v)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uB4F1\uB85D\uC0C1\uD0DC \uC9C1\uC811 \uC218\uC815" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.enrollmentStatus || "\uC7AC\uD559\uC911", onChange: (e) => setWorkspace("enrollmentStatus", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, ENROLLMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement("button", { onClick: () => setStatusTarget({ student: selectedStudent, course: selectedCourse }), disabled: !selectedCourse, style: {
+      padding: "8px 12px",
+      borderRadius: 8,
+      border: `1px solid #15803D`,
+      background: "#F0FDF4",
+      color: "#15803D",
+      cursor: selectedCourse ? "pointer" : "not-allowed",
+      opacity: selectedCourse ? 1 : 0.55,
+      fontSize: 12,
+      fontWeight: 850
+    } }, "\uC774\uB825 \uB0A8\uAE30\uBA70 \uC0C1\uD0DC\uBCC0\uACBD"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.6 } }, "\uC911\uB3C4\uD0C8\uB77D \uC0AC\uC720\uB098 \uC870\uAE30\uCDE8\uC5C5 \uAE30\uC5C5\uBA85\uCC98\uB7FC \uC774\uB825\uC774 \uD544\uC694\uD55C \uBCC0\uACBD\uC740 \uC0C1\uD0DC\uBCC0\uACBD \uC808\uCC28 \uBC84\uD2BC\uC744 \uC0AC\uC6A9\uD558\uBA74 \uB429\uB2C8\uB2E4.")), workspaceTab === "after" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5\uC5EC\uBD80" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.status || "\uBBF8\uCDE8\uC5C5", onChange: (e) => setWorkspace("status", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, EMPLOYMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5 \uAE30\uC5C5\uBA85" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.employerName || "", onChange: (e) => setWorkspace("employerName", e.target.value), placeholder: "\uCDE8\uC5C5\uCC98 \uB610\uB294 \uC608\uC815 \uAE30\uC5C5", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC790\uACA9\uC99D" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.cert || "", onChange: (e) => setWorkspace("cert", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC0AC\uD6C4\uAD00\uB9AC \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement("textarea", { value: workspaceForm.memo || "", onChange: (e) => setWorkspace("memo", e.target.value), rows: 5, placeholder: "\uCDE8\uC5C5\uC0C1\uB2F4, \uC5F0\uB77D \uACB0\uACFC, \uC99D\uBE59 \uC694\uCCAD \uB4F1", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2, resize: "vertical", fontFamily: "inherit" } })), /* @__PURE__ */ React.createElement("button", { onClick: () => setEmploymentTarget(selectedStudent), style: { padding: "8px 12px", borderRadius: 8, border: `1px solid #0F766E`, background: "#F0FDFA", color: "#0F766E", cursor: "pointer", fontSize: 12, fontWeight: 850 } }, "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815 \uCC3D \uC5F4\uAE30")), workspaceTab === "attendance" && /* @__PURE__ */ React.createElement("div", null, workspaceAttLoading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911...") : workspaceAtt.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, workspaceAtt.slice(-12).reverse().map((r, i) => /* @__PURE__ */ React.createElement("div", { key: `${r.date}-${i}`, style: { display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center", border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 10px", background: T.s2 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx, fontWeight: 800 } }, r.date), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, r.check_in ? r.check_in.slice(0, 5) : "--:--", " / ", r.check_out ? r.check_out.slice(0, 5) : "--:--")), /* @__PURE__ */ React.createElement(Chip, { label: { O: "\uCD9C\uC11D", A: "\uACB0\uC11D", L: "\uC9C0\uAC01", U: "\uBBF8\uD655\uC778" }[r.status || "U"] || r.status, bg: r.status === "O" ? "#DCFCE7" : r.status === "A" ? "#FEE2E2" : T.s3, color: r.status === "O" ? "#15803D" : r.status === "A" ? T.danger : T.mu, size: 10 })))))), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 14px", borderTop: `1px solid ${T.bd}`, background: T.s2, display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => {
+      setAttModal(selectedStudent);
+      setStudentDetailTab("attendance");
+    }, style: { padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.bd}`, background: "#fff", color: T.mu, cursor: "pointer", fontSize: 11, fontWeight: 750 } }, "\uCD9C\uACB0 \uC0C1\uC138"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => onEdit(selectedStudent), style: { padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.bd}`, background: "#fff", color: T.mu, cursor: "pointer", fontSize: 11, fontWeight: 750 } }, "\uC804\uCCB4 \uC591\uC2DD"), /* @__PURE__ */ React.createElement(Btn, { size: "sm", onClick: saveWorkspace, disabled: workspaceSaving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 12 }), " ", workspaceSaving ? "\uC800\uC7A5 \uC911..." : "\uC800\uC7A5")))))), attModal && (() => {
       const modalCourse = courses.find((x) => x.id === attModal.cid);
       const STATUS_LABEL = { O: "\uCD9C\uC11D", A: "\uACB0\uC11D", L: "\uC9C0\uAC01", U: "\uBBF8\uD655\uC778" };
       const STATUS_COLOR = { O: T.ok, A: T.danger, L: T.warn, U: T.mu };

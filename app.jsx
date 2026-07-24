@@ -1805,6 +1805,12 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
   const [preview, setPreview] = useState(null);   // parsed excel rows
   const [tab, setTab] = useState("list");          // "list" | "import"
   const fileRef = useRef();
+  const [selectedStudentId, setSelectedStudentId] = useState(null);
+  const [workspaceTab, setWorkspaceTab] = useState("profile");
+  const [workspaceForm, setWorkspaceForm] = useState(null);
+  const [workspaceSaving, setWorkspaceSaving] = useState(false);
+  const [workspaceAtt, setWorkspaceAtt] = useState([]);
+  const [workspaceAttLoading, setWorkspaceAttLoading] = useState(false);
 
   // ── 상태 변경 다이얼로그 ──
   const [statusTarget, setStatusTarget] = useState(null); // { student, course }
@@ -1836,6 +1842,57 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
     load();
     return () => { cancelled = true; };
   }, [attModal]);
+
+  const selectedStudent = useMemo(
+    () => students.find(s => sameId(s.id, selectedStudentId)) || null,
+    [students, selectedStudentId]
+  );
+  const selectedCourse = selectedStudent ? courses.find(c => sameId(c.id, selectedStudent.cid)) : null;
+
+  useEffect(() => {
+    if (!selectedStudent) { setWorkspaceForm(null); setWorkspaceAtt([]); return; }
+    setWorkspaceForm({
+      ...selectedStudent,
+      cid: selectedStudent.cid || courses[0]?.id || 1,
+      enrollmentStatus: selectedStudent.enrollmentStatus || "재학중",
+      status: getEffectiveEmploymentStatus(selectedStudent),
+    });
+  }, [selectedStudent, courses]);
+
+  useEffect(() => {
+    if (!selectedStudent) return;
+    let cancelled = false;
+    setWorkspaceAttLoading(true);
+    const studentId = Number(selectedStudent.id);
+    if (!studentId) { setWorkspaceAttLoading(false); return; }
+    (async () => {
+      try {
+        const { data, error } = await sbGet(
+          "attendance",
+          `select=date,check_in,check_out,status&student_id=eq.${studentId}&order=date.asc`
+        );
+        if (!cancelled) setWorkspaceAtt(error ? [] : (data || []));
+      } catch {
+        if (!cancelled) setWorkspaceAtt([]);
+      }
+      if (!cancelled) setWorkspaceAttLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [selectedStudent]);
+
+  const setWorkspace = (k, v) => setWorkspaceForm(p => ({ ...(p || selectedStudent || {}), [k]: v }));
+
+  const saveWorkspace = async () => {
+    if (!selectedStudent || !workspaceForm) return;
+    if (!String(workspaceForm.name || "").trim()) return alert("이름은 필수 입력 항목입니다.");
+    setWorkspaceSaving(true);
+    try {
+      await onUpdate({ ...selectedStudent, ...workspaceForm, cid: Number(workspaceForm.cid) });
+      alert(`${workspaceForm.name} 정보가 저장되었습니다.`);
+    } finally {
+      setWorkspaceSaving(false);
+    }
+  };
 
   // 모달이 열린 동안 Realtime 구독 (해당 학생 출결 실시간 갱신)
   useEffect(() => {
@@ -2225,6 +2282,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
             </div>
           </Card>
 
+          <div style={{ display:"grid", gridTemplateColumns:selectedStudent ? "minmax(0,1fr) minmax(340px,380px)" : "1fr", gap:14, alignItems:"start" }}>
           {/* 훈련생 테이블 */}
           <Card style={{ overflow:"hidden" }}>
             <div style={{ overflowX:"auto" }}>
@@ -2272,7 +2330,12 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                   ].filter(Boolean);
                   const gradeColor = g => g?.startsWith("A")?T.ok:g?.startsWith("B")?T.warn:T.danger;
                   return (
-                    <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
+                    <tr key={s.id} className="row-hover" onClick={()=>{ setSelectedStudentId(s.id); setWorkspaceTab("profile"); }}
+                      style={{
+                        borderBottom:`1px solid ${T.bd}`,
+                        background:sameId(selectedStudentId, s.id) ? "#F8FAFF" : undefined,
+                        cursor:"pointer"
+                      }}>
 
                       {/* 이름·성별·나이 */}
                       <td style={{ padding:"11px 12px" }}>
@@ -2386,7 +2449,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                           const ec = employmentChipStyle(emp);
                           const needsSync = (s.enrollmentStatus || "") === "조기취업" && (s.status || "미취업") !== "취업";
                           return (
-                            <button onClick={()=>setEmploymentTarget(s)} title="취업정보 빠른 수정" style={{
+                            <button onClick={(e)=>{ e.stopPropagation(); setEmploymentTarget(s); }} title="취업정보 빠른 수정" style={{
                               border:`1px solid ${needsSync ? T.danger : "transparent"}`,
                               borderRadius:999, background:ec.bg, color:ec.color,
                               padding:"3px 9px", cursor:"pointer", fontSize:11, fontWeight:800 }}>
@@ -2436,24 +2499,24 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
 
                       {/* 상세 */}
                       <td style={{ padding:"11px 12px", textAlign:"center" }}>
-                        <button onClick={()=>{ setAttModal(s); setStudentDetailTab("profile"); }} title="훈련생 상세 조회" style={{
+                        <button onClick={(e)=>{ e.stopPropagation(); setSelectedStudentId(s.id); setWorkspaceTab("profile"); }} title="훈련생 업무 패널 열기" style={{
                           padding:"4px 8px", borderRadius:6, border:`1px solid ${T.bd}`,
                           background:T.s2, color:"#2563EB", cursor:"pointer",
                           fontSize:11, fontWeight:600, whiteSpace:"nowrap" }}>
-                          📋 상세
+                          업무
                         </button>
                       </td>
 
                       {/* 수정·삭제·상태변경 */}
                       <td style={{ padding:"11px 12px", textAlign:"center" }}>
                         <div style={{ display:"flex", gap:4, justifyContent:"center" }}>
-                          <button onClick={()=>onEdit(s)} title="수정" style={{
+                          <button onClick={(e)=>{ e.stopPropagation(); setSelectedStudentId(s.id); setWorkspaceTab("profile"); }} title="수정" style={{
                             width:28, height:28, borderRadius:6, border:"none",
                             background:T.pbg, color:T.p, cursor:"pointer",
                             display:"flex", alignItems:"center", justifyContent:"center" }}>
                             <Icon n="edit" s={13}/>
                           </button>
-                          <button onClick={()=>setStatusTarget({ student:s, course:c })}
+                          <button onClick={(e)=>{ e.stopPropagation(); setSelectedStudentId(s.id); setWorkspaceTab("status"); }}
                             title="상태 변경" style={{
                             width:28, height:28, borderRadius:6, border:"none",
                             background:"#F0FDF4", color:"#15803D", cursor:"pointer",
@@ -2461,7 +2524,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                             fontSize:13 }}>
                             ⚙
                           </button>
-                          <button onClick={()=>onDelete(s.id)} title="삭제" style={{
+                          <button onClick={(e)=>{ e.stopPropagation(); onDelete(s.id); }} title="삭제" style={{
                             width:28, height:28, borderRadius:6, border:"none",
                             background:"#FEF2F2", color:T.danger, cursor:"pointer",
                             display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -2479,6 +2542,150 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
               <div style={{ padding:40, textAlign:"center", color:T.mu, fontSize:13 }}>검색 결과가 없습니다</div>
             )}
           </Card>
+          {selectedStudent && workspaceForm && (
+            <Card style={{ overflow:"hidden", position:"sticky", top:10 }}>
+              <div style={{ padding:"14px 16px", background:`linear-gradient(135deg,${T.sb},${T.p})`, color:"#fff" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:15, fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {selectedStudent.name}
+                    </div>
+                    <div style={{ fontSize:11, opacity:.72, marginTop:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {selectedCourse?.code || "-"} · {selectedCourse?.name || "과정 없음"}
+                    </div>
+                  </div>
+                  <button onClick={()=>setSelectedStudentId(null)} title="패널 닫기" style={{
+                    width:28, height:28, borderRadius:7, border:"none", background:"rgba(255,255,255,.16)",
+                    color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <Icon n="x" s={13}/>
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ padding:"10px 12px", borderBottom:`1px solid ${T.bd}`, display:"flex", gap:6, flexWrap:"wrap", background:T.s2 }}>
+                {[
+                  ["profile", "기본·수정"],
+                  ["status", "등록상태"],
+                  ["after", "사후관리"],
+                  ["attendance", `출결 ${workspaceAtt.length ? workspaceAtt.length : ""}`],
+                ].map(([id, label]) => {
+                  const active = workspaceTab === id;
+                  return (
+                    <button key={id} onClick={()=>setWorkspaceTab(id)} style={{
+                      padding:"6px 10px", borderRadius:999, border:`1px solid ${active ? T.p : T.bd}`,
+                      background:active ? T.p : "#fff", color:active ? "#fff" : T.mu,
+                      cursor:"pointer", fontSize:11, fontWeight:800 }}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ padding:14, maxHeight:"calc(100vh - 260px)", overflowY:"auto" }}>
+                {workspaceTab === "profile" && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      <FLD label="이름" required><input value={workspaceForm.name||""} onChange={e=>setWorkspace("name", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                      <FLD label="성별"><select value={workspaceForm.gender||"남"} onChange={e=>setWorkspace("gender", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}><option>남</option><option>여</option></select></FLD>
+                    </div>
+                    <FLD label="과정"><select value={workspaceForm.cid||""} onChange={e=>setWorkspace("cid", +e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}>{courses.map(c=><option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select></FLD>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      <FLD label="연락처"><input value={workspaceForm.phone||""} onChange={e=>setWorkspace("phone", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                      <FLD label="비상연락처"><input value={workspaceForm.phone2||""} onChange={e=>setWorkspace("phone2", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      <FLD label="거주 시·군"><input value={workspaceForm.addrCity||""} onChange={e=>setWorkspace("addrCity", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                      <FLD label="생년월일"><input type="date" value={workspaceForm.birth||""} onChange={e=>setWorkspace("birth", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      <FLD label="최종학력"><input value={workspaceForm.edu||""} onChange={e=>setWorkspace("edu", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                      <FLD label="전공"><input value={workspaceForm.major||""} onChange={e=>setWorkspace("major", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                    </div>
+                    <FLD label="경력"><input value={workspaceForm.career||""} onChange={e=>setWorkspace("career", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                    <FLD label="특이사항 · 메모"><textarea value={workspaceForm.memo||""} onChange={e=>setWorkspace("memo", e.target.value)} rows={4} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2, resize:"vertical", fontFamily:"inherit" }}/></FLD>
+                  </div>
+                )}
+
+                {workspaceTab === "status" && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+                      {[["등록상태", workspaceForm.enrollmentStatus || "재학중"], ["출석률", isDropoutStudent(workspaceForm) ? "중도탈락" : `${workspaceForm.rate || 0}%`], ["누적시간", `${(workspaceForm.accumulatedHours || 0).toFixed(1)}h`]].map(([k,v])=>(
+                        <div key={k} style={{ border:`1px solid ${T.bd}`, borderRadius:8, padding:"8px 9px", background:T.s2 }}>
+                          <div style={{ fontSize:10, color:T.mu }}>{k}</div>
+                          <div style={{ fontSize:12, color:T.tx, fontWeight:850, marginTop:3 }}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <FLD label="등록상태 직접 수정">
+                      <select value={workspaceForm.enrollmentStatus || "재학중"} onChange={e=>setWorkspace("enrollmentStatus", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}>
+                        {ENROLLMENT_STATUSES.map(v=><option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </FLD>
+                    <button onClick={()=>setStatusTarget({ student:selectedStudent, course:selectedCourse })} disabled={!selectedCourse} style={{
+                      padding:"8px 12px", borderRadius:8, border:`1px solid #15803D`,
+                      background:"#F0FDF4", color:"#15803D", cursor:selectedCourse ? "pointer" : "not-allowed",
+                      opacity:selectedCourse ? 1 : .55, fontSize:12, fontWeight:850 }}>
+                      이력 남기며 상태변경
+                    </button>
+                    <div style={{ fontSize:11, color:T.mu, lineHeight:1.6 }}>중도탈락 사유나 조기취업 기업명처럼 이력이 필요한 변경은 상태변경 절차 버튼을 사용하면 됩니다.</div>
+                  </div>
+                )}
+
+                {workspaceTab === "after" && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                    <FLD label="취업여부">
+                      <select value={workspaceForm.status || "미취업"} onChange={e=>setWorkspace("status", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}>
+                        {EMPLOYMENT_STATUSES.map(v=><option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </FLD>
+                    <FLD label="취업 기업명"><input value={workspaceForm.employerName||""} onChange={e=>setWorkspace("employerName", e.target.value)} placeholder="취업처 또는 예정 기업" style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                    <FLD label="자격증"><input value={workspaceForm.cert||""} onChange={e=>setWorkspace("cert", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}/></FLD>
+                    <FLD label="사후관리 메모"><textarea value={workspaceForm.memo||""} onChange={e=>setWorkspace("memo", e.target.value)} rows={5} placeholder="취업상담, 연락 결과, 증빙 요청 등" style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2, resize:"vertical", fontFamily:"inherit" }}/></FLD>
+                    <button onClick={()=>setEmploymentTarget(selectedStudent)} style={{ padding:"8px 12px", borderRadius:8, border:`1px solid #0F766E`, background:"#F0FDFA", color:"#0F766E", cursor:"pointer", fontSize:12, fontWeight:850 }}>
+                      취업정보 빠른 수정 창 열기
+                    </button>
+                  </div>
+                )}
+
+                {workspaceTab === "attendance" && (
+                  <div>
+                    {workspaceAttLoading ? (
+                      <div style={{ padding:24, textAlign:"center", color:T.mu, fontSize:12 }}>출결 데이터를 불러오는 중...</div>
+                    ) : workspaceAtt.length === 0 ? (
+                      <div style={{ padding:24, textAlign:"center", color:T.mu, fontSize:12 }}>출결 기록이 없습니다.</div>
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                        {workspaceAtt.slice(-12).reverse().map((r,i)=>(
+                          <div key={`${r.date}-${i}`} style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:8, alignItems:"center", border:`1px solid ${T.bd}`, borderRadius:8, padding:"8px 10px", background:T.s2 }}>
+                            <div>
+                              <div style={{ fontSize:12, color:T.tx, fontWeight:800 }}>{r.date}</div>
+                              <div style={{ fontSize:10, color:T.mu }}>{r.check_in ? r.check_in.slice(0,5) : "--:--"} / {r.check_out ? r.check_out.slice(0,5) : "--:--"}</div>
+                            </div>
+                            <Chip label={({O:"출석",A:"결석",L:"지각",U:"미확인"})[r.status || "U"] || r.status} bg={r.status==="O" ? "#DCFCE7" : r.status==="A" ? "#FEE2E2" : T.s3} color={r.status==="O" ? "#15803D" : r.status==="A" ? T.danger : T.mu} size={10}/>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding:"12px 14px", borderTop:`1px solid ${T.bd}`, background:T.s2, display:"flex", gap:8, justifyContent:"space-between", alignItems:"center" }}>
+                <button onClick={()=>{ setAttModal(selectedStudent); setStudentDetailTab("attendance"); }} style={{ padding:"7px 10px", borderRadius:8, border:`1px solid ${T.bd}`, background:"#fff", color:T.mu, cursor:"pointer", fontSize:11, fontWeight:750 }}>
+                  출결 상세
+                </button>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={()=>onEdit(selectedStudent)} style={{ padding:"7px 10px", borderRadius:8, border:`1px solid ${T.bd}`, background:"#fff", color:T.mu, cursor:"pointer", fontSize:11, fontWeight:750 }}>
+                    전체 양식
+                  </button>
+                  <Btn size="sm" onClick={saveWorkspace} disabled={workspaceSaving}>
+                    <Icon n="check" s={12}/> {workspaceSaving ? "저장 중..." : "저장"}
+                  </Btn>
+                </div>
+              </div>
+            </Card>
+          )}
+          </div>
         </>
       )}
 

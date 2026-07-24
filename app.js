@@ -1,7 +1,8 @@
 var GgjfEduLms = (() => {
-  const { useState, useMemo, useEffect, useRef, useCallback } = React;
-  const _mem = {};
-  const _probe = (storage) => {
+  // app.jsx
+  var { useState, useMemo, useEffect, useRef, useCallback } = React;
+  var _mem = {};
+  var _probe = (storage) => {
     if (!storage || typeof storage.setItem !== "function") return false;
     try {
       const k = "__tp_probe__";
@@ -13,10 +14,10 @@ var GgjfEduLms = (() => {
       return false;
     }
   };
-  const _sessionOk = typeof sessionStorage !== "undefined" ? _probe(sessionStorage) : false;
-  const _localOk = typeof localStorage !== "undefined" ? _probe(localStorage) : false;
-  const storageBlocked = !_sessionOk || !_localOk;
-  const safeSession = {
+  var _sessionOk = typeof sessionStorage !== "undefined" ? _probe(sessionStorage) : false;
+  var _localOk = typeof localStorage !== "undefined" ? _probe(localStorage) : false;
+  var storageBlocked = !_sessionOk || !_localOk;
+  var safeSession = {
     get: (k) => {
       if (!_sessionOk) return _mem["s_" + k] || null;
       try {
@@ -48,7 +49,7 @@ var GgjfEduLms = (() => {
       }
     }
   };
-  const safeLocal = {
+  var safeLocal = {
     get: (k) => {
       if (!_localOk) return _mem["l_" + k] || null;
       try {
@@ -88,10 +89,10 @@ var GgjfEduLms = (() => {
       "\uB85C\uADF8\uC778 \uC138\uC158\uACFC \uAC10\uC0AC \uB85C\uADF8\uB294 \uD398\uC774\uC9C0 \uC0C8\uB85C\uACE0\uCE68 \uC2DC \uCD08\uAE30\uD654\uB429\uB2C8\uB2E4."
     );
   }
-  const SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";
-  const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";
-  const API = `${SB_URL}/rest/v1`;
-  const COURSE_LIST_SELECT = [
+  var SB_URL = "https://vqkjakgbrsnsererwmma.supabase.co";
+  var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa2pha2dicnNuc2VyZXJ3bW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNDA2MjIsImV4cCI6MjA4ODkxNjYyMn0.caGpzJdTcfT3CZTkJi2Mctte3nNvh3e6xTtFVaCfkiM";
+  var API = `${SB_URL}/rest/v1`;
+  var COURSE_LIST_SELECT = [
     "id",
     "cat",
     "cc",
@@ -114,21 +115,21 @@ var GgjfEduLms = (() => {
     "pdf_name",
     "links"
   ].join(",");
-  const ENABLE_REALTIME = false;
-  const H = {
+  var ENABLE_REALTIME = false;
+  var H = {
     "apikey": SB_KEY,
     "Authorization": `Bearer ${SB_KEY}`,
     "Content-Type": "application/json",
     "Prefer": "return=representation"
   };
-  const QR_TOKEN_SUFFIX = "2026GJF";
-  const sbGet = async (table, params = "") => {
+  var QR_TOKEN_SUFFIX = "2026GJF";
+  var sbGet = async (table, params = "") => {
     const res = await fetch(`${API}/${table}?${params}`, { headers: H });
     const data = await res.json();
     if (!res.ok) return { data: null, error: data };
     return { data, error: null };
   };
-  const sbInsert = async (table, body) => {
+  var sbInsert = async (table, body) => {
     const res = await fetch(`${API}/${table}`, {
       method: "POST",
       headers: H,
@@ -138,7 +139,7 @@ var GgjfEduLms = (() => {
     if (!res.ok) return { data: null, error: data };
     return { data: Array.isArray(body) ? data : data[0], error: null };
   };
-  const sbUpsert = async (table, body, conflictCols = "") => {
+  var sbUpsert = async (table, body, conflictCols = "") => {
     const H2 = { ...H, "Prefer": "resolution=merge-duplicates,return=minimal" };
     const qp = conflictCols ? `?on_conflict=${encodeURIComponent(conflictCols)}` : "";
     const res = await fetch(`${API}/${table}${qp}`, {
@@ -152,7 +153,7 @@ var GgjfEduLms = (() => {
     }
     return { data: null, error: null };
   };
-  const fmtSaveError = (err) => {
+  var fmtSaveError = (err) => {
     const msg = err?.message || JSON.stringify(err);
     if (msg.includes("schema cache") || msg.includes("Could not find")) {
       return `${msg}
@@ -163,7 +164,7 @@ var GgjfEduLms = (() => {
     }
     return msg;
   };
-  const sbUpdate = async (table, filter, body) => {
+  var sbUpdate = async (table, filter, body) => {
     const res = await fetch(`${API}/${table}?${filter}`, {
       method: "PATCH",
       headers: H,
@@ -173,7 +174,7 @@ var GgjfEduLms = (() => {
     if (!res.ok) return { data: null, error: data };
     return { data, error: null };
   };
-  const sbDelete = async (table, filter) => {
+  var sbDelete = async (table, filter) => {
     const res = await fetch(`${API}/${table}?${filter}`, {
       method: "DELETE",
       headers: H
@@ -184,7 +185,7 @@ var GgjfEduLms = (() => {
     }
     return { error: null };
   };
-  const sbStorageUpload = async (bucket, path, file) => {
+  var sbStorageUpload = async (bucket, path, file) => {
     const res = await fetch(`${SB_URL}/storage/v1/object/${bucket}/${path}`, {
       method: "POST",
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` },
@@ -197,11 +198,11 @@ var GgjfEduLms = (() => {
     const publicUrl = `${SB_URL}/storage/v1/object/public/${bucket}/${path}`;
     return { url: publicUrl, error: null };
   };
-  const toNum = (v) => {
+  var toNum = (v) => {
     const n = parseFloat(v);
     return isFinite(n) ? n : null;
   };
-  const toStudent = (r) => r ? {
+  var toStudent = (r) => r ? {
     id: Number(r.id),
     cid: Number(r.cid),
     name: r.name,
@@ -232,7 +233,7 @@ var GgjfEduLms = (() => {
     dropoutReason: r.dropout_reason || null,
     employerName: r.employer_name || null
   } : null;
-  const excelDateToISO = (v) => {
+  var excelDateToISO = (v) => {
     if (!v && v !== 0) return null;
     if (typeof v === "number") {
       const d = new Date(Math.round((v - 25569) * 86400 * 1e3));
@@ -242,7 +243,7 @@ var GgjfEduLms = (() => {
     if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
     return s || null;
   };
-  const fromStudent = (s) => {
+  var fromStudent = (s) => {
     return {
       cid: s.cid ? Number(s.cid) : null,
       name: s.name,
@@ -274,7 +275,7 @@ var GgjfEduLms = (() => {
       employer_name: s.employerName || null
     };
   };
-  const toCourse = (r) => r ? {
+  var toCourse = (r) => r ? {
     id: Number(r.id),
     cat: r.cat,
     cc: r.cc,
@@ -298,7 +299,7 @@ var GgjfEduLms = (() => {
     pdfData: r.pdf_data || "",
     links: r.links || []
   } : null;
-  const fromCourse = (c) => ({
+  var fromCourse = (c) => ({
     cat: c.cat,
     cc: c.cc,
     name: c.name,
@@ -321,18 +322,18 @@ var GgjfEduLms = (() => {
     pdf_data: c.pdfData || "",
     links: c.links || []
   });
-  const toAccount = (r) => r ? {
+  var toAccount = (r) => r ? {
     id: r.id,
     name: r.name || "",
     role: r.role || "staff",
     pw: r.pw || ""
   } : null;
-  const fromAccount = (a) => ({
+  var fromAccount = (a) => ({
     name: a.name || "",
     role: a.role || "staff",
     pw: a.pw || ""
   });
-  const toInstructor = (r) => r ? {
+  var toInstructor = (r) => r ? {
     id: r.id,
     name: r.name || "",
     type: r.type || "\uC8FC\uAC15\uC0AC",
@@ -347,7 +348,7 @@ var GgjfEduLms = (() => {
     hourlyRate: r.hourly_rate || r.hourlyRate || 0,
     customDates: r.custom_dates || r.customDates || {}
   } : null;
-  const fromInstructor = (i) => ({
+  var fromInstructor = (i) => ({
     name: i.name || "",
     type: i.type || "\uC8FC\uAC15\uC0AC",
     category: i.category || "\uACBD\uAE30\uB3C4 \uAC15\uC0AC",
@@ -361,7 +362,7 @@ var GgjfEduLms = (() => {
     hourly_rate: i.hourlyRate || 0,
     custom_dates: i.customDates || {}
   });
-  const toRoom = (r) => r ? {
+  var toRoom = (r) => r ? {
     id: r.id,
     floor: r.floor || 0,
     name: r.name || "",
@@ -369,14 +370,14 @@ var GgjfEduLms = (() => {
     capacity: r.capacity || 20,
     equip: r.equip || ""
   } : null;
-  const fromRoom = (r) => ({
+  var fromRoom = (r) => ({
     floor: r.floor || 0,
     name: r.name || "",
     addr: r.addr || "",
     capacity: r.capacity || 20,
     equip: r.equip || ""
   });
-  const toBooking = (r) => r ? {
+  var toBooking = (r) => r ? {
     id: r.id,
     roomId: Number(r.room_id),
     // ← Number() 추가 (Gantt 타입 불일치 버그 수정)
@@ -387,7 +388,7 @@ var GgjfEduLms = (() => {
     end: r.end_date || "",
     color: r.color || "#EA580C"
   } : null;
-  const fromBooking = (b) => ({
+  var fromBooking = (b) => ({
     room_id: b.roomId,
     course_id: b.courseId,
     label: b.label || "",
@@ -395,7 +396,7 @@ var GgjfEduLms = (() => {
     end_date: b.end || "",
     color: b.color || "#EA580C"
   });
-  const toOverride = (r) => r ? {
+  var toOverride = (r) => r ? {
     id: r.id,
     courseId: Number(r.course_id),
     date: r.date,
@@ -405,7 +406,7 @@ var GgjfEduLms = (() => {
     hours: parseFloat(r.hours) || 0,
     reason: r.reason || ""
   } : null;
-  const fromOverride = (o) => ({
+  var fromOverride = (o) => ({
     course_id: o.courseId,
     date: o.date,
     type: o.type,
@@ -414,7 +415,7 @@ var GgjfEduLms = (() => {
     hours: o.hours || 0,
     reason: o.reason || ""
   });
-  const GStyle = () => /* @__PURE__ */ React.createElement("style", null, `
+  var GStyle = () => /* @__PURE__ */ React.createElement("style", null, `
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
     body, #root { font-family:'Pretendard',-apple-system,sans-serif; }
@@ -542,7 +543,7 @@ var GgjfEduLms = (() => {
     /* \u2500\u2500 \uBC84\uD2BC \uD638\uBC84 \u2500\u2500 */
     button:active { transform: scale(.97); }
   `);
-  const QRCanvas = ({ data, size = 200, color = "#000000", bgColor = "#ffffff", style = {} }) => {
+  var QRCanvas = ({ data, size = 200, color = "#000000", bgColor = "#ffffff", style = {} }) => {
     const canvasRef = useRef(null);
     const [libMissing, setLibMissing] = useState(false);
     useEffect(() => {
@@ -596,7 +597,7 @@ var GgjfEduLms = (() => {
     } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, marginBottom: 4 } }, "\u26A0\uFE0F"), "QR \uB77C\uC774\uBE0C\uB7EC\uB9AC \uB85C\uB4DC \uC2E4\uD328", /* @__PURE__ */ React.createElement("br", null), "\uD398\uC774\uC9C0\uB97C \uC0C8\uB85C\uACE0\uCE68 \uD558\uC138\uC694");
     return /* @__PURE__ */ React.createElement("canvas", { ref: canvasRef, style: { display: "block", borderRadius: 8, ...style } });
   };
-  const T = {
+  var T = {
     p: "#EA580C",
     pm: "#F97316",
     pl: "#FB923C",
@@ -613,8 +614,8 @@ var GgjfEduLms = (() => {
     tx: "#1E293B",
     mu: "#64748B"
   };
-  let _holidaySet = /* @__PURE__ */ new Set();
-  const loadHolidays = async () => {
+  var _holidaySet = /* @__PURE__ */ new Set();
+  var loadHolidays = async () => {
     try {
       const cached = safeLocal.get("gjf_holidays");
       if (cached) {
@@ -640,13 +641,13 @@ var GgjfEduLms = (() => {
       console.warn("\uACF5\uD734\uC77C \uB85C\uB4DC \uC2E4\uD328:", e);
     }
   };
-  const isHoliday = (dateStr) => _holidaySet.has(dateStr);
-  const isCancelledOverride = (courseId, dateStr) => {
+  var isHoliday = (dateStr) => _holidaySet.has(dateStr);
+  var isCancelledOverride = (courseId, dateStr) => {
     const ovs = window._overridesRef?.current || [];
     if (!courseId || !dateStr) return false;
     return ovs.some((o) => o.courseId === Number(courseId) && o.date === dateStr && o.type === "cancelled");
   };
-  const COURSES = [
+  var COURSES = [
     { id: 1, cat: "\uB298\uBD04\uAC15\uC0AC\uC591\uC131", cc: "#EA580C", name: "\uCD08\uB4F1 \uD53C\uC9C0\uCEEC \uCF54\uB529\uAC15\uC0AC \uC591\uC131", code: "NB-01", dateFrom: "2026-06-01", dateTo: "2026-07-31", period: "6~7\uC6D4", method: "\uBE14\uB80C\uB514\uB4DC", hours: 92, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uD654, \uBAA9", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
     { id: 2, cat: "\uB298\uBD04\uAC15\uC0AC\uC591\uC131", cc: "#D97706", name: "AI \uB525\uB7EC\uB2DD \uC804\uBB38\uAC15\uC0AC \uC591\uC131", code: "NB-02", dateFrom: "2026-06-01", dateTo: "2026-08-31", period: "6~8\uC6D4", method: "\uBE14\uB80C\uB514\uB4DC", hours: 104, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uC218, \uAE08", schedTimeFrom: "09:00", schedTimeTo: "13:00" },
     { id: 3, cat: "\uB298\uBD04\uAC15\uC0AC\uC591\uC131", cc: "#16A34A", name: "\uB298\uBD04\uD559\uAD50 \uCC3D\uC758\uC735\uD569\uAD50\uC721\uAC15\uC0AC \uC591\uC131", code: "NB-03", dateFrom: "2026-04-01", dateTo: "2026-06-30", period: "4~6\uC6D4", method: "\uB300\uBA74", hours: 140, tgt: 20, cGoal: 18, eGoal: 12, schedDays: "\uC6D4, \uD654, \uBAA9", schedTimeFrom: "09:00", schedTimeTo: "14:00" },
@@ -715,7 +716,7 @@ var GgjfEduLms = (() => {
       notes: "STEP 3. AI-POT 2\uAE09 \uB300\uBE44 40H+\uCDE8\uC5C5\xB7\uD3EC\uD2B8\uD3F4\uB9AC\uC624 \uD2B9\uAC15 8H, \uC784\uC7AC\uC5F0 \uAC15\uC0AC \uCC38\uC5EC \uD68C\uC2E0. \uC815\uC6D0 20/25\uBA85, \uAD50\uC7AC ISBN\xB7\uB2E8\uAC00\xB7\uC218\uB7C9, \uC2DC\uD5D8\uC751\uC2DC\uB8CC\xB7\uC811\uC218\xB7\uC0AC\uD6C4\uAD00\uB9AC \uAE30\uC900 \uD655\uC815 \uD544\uC694. \uAD6C\uAE00 \uACC4\uC815 \uBE44\uBC00\uBC88\uD638\uB294 \uC218\uC9D1\uD558\uC9C0 \uC54A\uC74C."
     }
   ];
-  const SEED_STUDENTS = [
+  var SEED_STUDENTS = [
     {
       id: 1,
       cid: 4,
@@ -977,7 +978,7 @@ var GgjfEduLms = (() => {
       rate: 55
     }
   ];
-  const buildCourseDates = (course) => {
+  var buildCourseDates = (course) => {
     const getLocalStr = (d) => {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -1009,7 +1010,7 @@ var GgjfEduLms = (() => {
     }
     return out.length ? out : [getLocalStr(today)];
   };
-  const formatCoursePeriod = (c) => {
+  var formatCoursePeriod = (c) => {
     if (!c?.dateFrom) return "\uAE30\uAC04 \uBBF8\uC815";
     const fmt = (d) => {
       const [y, m, day] = (d || "").split("-");
@@ -1017,7 +1018,7 @@ var GgjfEduLms = (() => {
     };
     return c.dateTo ? `${fmt(c.dateFrom)} ~ ${fmt(c.dateTo)}` : `${fmt(c.dateFrom)} ~`;
   };
-  const shortCourseName = (name = "", maxLen = 13) => {
+  var shortCourseName = (name = "", maxLen = 13) => {
     if (!name) return "";
     const kiMatch = name.match(/\((\d+기)\)/);
     const ki = kiMatch ? ` (${kiMatch[1]})` : "";
@@ -1025,7 +1026,7 @@ var GgjfEduLms = (() => {
     if (short.length > maxLen) short = short.slice(0, maxLen) + "\u2026";
     return short + ki;
   };
-  const Chip = ({ label, bg, color, size = 11 }) => /* @__PURE__ */ React.createElement("span", { style: {
+  var Chip = ({ label, bg, color, size = 11 }) => /* @__PURE__ */ React.createElement("span", { style: {
     background: bg,
     color,
     fontSize: size,
@@ -1035,29 +1036,29 @@ var GgjfEduLms = (() => {
     whiteSpace: "nowrap",
     letterSpacing: ".2px"
   } }, label);
-  const CertChips = ({ text = "", maxShow = 0 }) => {
+  var CertChips = ({ text = "", maxShow = 0 }) => {
     const items = String(text).split(",").map((v) => v.trim()).filter(Boolean);
     if (items.length === 0) return /* @__PURE__ */ React.createElement("span", { style: { color: T.mu } }, "\u2014");
     const visible = maxShow > 0 ? items.slice(0, maxShow) : items;
     const extra = maxShow > 0 ? items.length - maxShow : 0;
     return /* @__PURE__ */ React.createElement("span", { style: { display: "inline-flex", flexWrap: "wrap", gap: 3 } }, visible.map((c) => /* @__PURE__ */ React.createElement(Chip, { key: c, label: c, bg: T.s3, color: T.mu, size: 10 })), extra > 0 && /* @__PURE__ */ React.createElement(Chip, { label: `+${extra}\uAC1C \uB354`, bg: T.pbg, color: T.p, size: 10 }));
   };
-  const rateColor = (r) => r >= 80 ? T.ok : r >= 70 ? T.warn : T.danger;
-  const RBar = ({ r, h = 5 }) => /* @__PURE__ */ React.createElement("div", { style: { width: "100%", height: h, background: T.bd, borderRadius: h, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: {
+  var rateColor = (r) => r >= 80 ? T.ok : r >= 70 ? T.warn : T.danger;
+  var RBar = ({ r, h = 5 }) => /* @__PURE__ */ React.createElement("div", { style: { width: "100%", height: h, background: T.bd, borderRadius: h, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: {
     height: "100%",
     width: `${Math.min(r, 100)}%`,
     background: rateColor(r),
     borderRadius: h,
     transition: "width 1s ease"
   } }));
-  const Card = ({ children, style = {} }) => /* @__PURE__ */ React.createElement("div", { style: {
+  var Card = ({ children, style = {} }) => /* @__PURE__ */ React.createElement("div", { style: {
     background: T.s,
     borderRadius: 14,
     border: `1px solid ${T.bd}`,
     boxShadow: "0 1px 3px rgba(0,0,0,.04),0 4px 16px rgba(15,118,110,.05)",
     ...style
   } }, children);
-  const Btn = ({ children, onClick, variant = "primary", size = "md", style = {}, disabled = false }) => {
+  var Btn = ({ children, onClick, variant = "primary", size = "md", style = {}, disabled = false }) => {
     const base = {
       border: "none",
       borderRadius: 9,
@@ -1085,7 +1086,7 @@ var GgjfEduLms = (() => {
       cursor: disabled ? "not-allowed" : base.cursor
     } }, children);
   };
-  const Icon = ({ n, s = 16 }) => {
+  var Icon = ({ n, s = 16 }) => {
     const d = {
       dash: /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "7", height: "7", rx: "1.5" }), /* @__PURE__ */ React.createElement("rect", { x: "14", y: "3", width: "7", height: "7", rx: "1.5" }), /* @__PURE__ */ React.createElement("rect", { x: "3", y: "14", width: "7", height: "7", rx: "1.5" }), /* @__PURE__ */ React.createElement("rect", { x: "14", y: "14", width: "7", height: "7", rx: "1.5" })),
       book: /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("path", { d: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20" }), /* @__PURE__ */ React.createElement("path", { d: "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" })),
@@ -1127,8 +1128,8 @@ var GgjfEduLms = (() => {
       d[n] || null
     );
   };
-  const SectionHead = ({ title, sub, right }) => /* @__PURE__ */ React.createElement("div", { className: "section-head-wrap", style: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { borderLeft: `4px solid ${T.p}`, paddingLeft: 12, borderRadius: 1 } }, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, color: T.tx, letterSpacing: "-.3px" } }, title), sub && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: T.mu, marginTop: 3 } }, sub)), right && /* @__PURE__ */ React.createElement("div", { className: "section-head-right", style: { display: "flex", gap: 8 } }, right));
-  const TEMPLATE_HEADERS = [
+  var SectionHead = ({ title, sub, right }) => /* @__PURE__ */ React.createElement("div", { className: "section-head-wrap", style: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { borderLeft: `4px solid ${T.p}`, paddingLeft: 12, borderRadius: 1 } }, /* @__PURE__ */ React.createElement("h2", { style: { fontSize: 20, fontWeight: 800, color: T.tx, letterSpacing: "-.3px" } }, title), sub && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: T.mu, marginTop: 3 } }, sub)), right && /* @__PURE__ */ React.createElement("div", { className: "section-head-right", style: { display: "flex", gap: 8 } }, right));
+  var TEMPLATE_HEADERS = [
     "\uC774\uB984",
     "\uC131\uBCC4",
     "\uC8FC\uBBFC\uB4F1\uB85D\uBC88\uD638",
@@ -1149,11 +1150,11 @@ var GgjfEduLms = (() => {
     "\uD2B9\uC774\uC0AC\uD56D",
     "\uACFC\uC815\uCF54\uB4DC"
   ];
-  const TEMPLATE_EXAMPLE = [
+  var TEMPLATE_EXAMPLE = [
     ["\uD64D\uAE38\uB3D9", "\uB0A8", "900101-1234567", "010-1234-5678", "\uC758\uC815\uBD80\uC2DC", "\uB300\uC878", "\uAE30\uACC4\uACF5\uD559", "\uBB3C\uB958\uCC3D\uACE0 2\uB144", "\uC9C0\uAC8C\uCC281\uC885", "\uBBF8\uCDE8\uC5C5", "Y", "N", "N", "2026-02-14", "88", "A", "Y", "\uCDE8\uC5C5\uC758\uC9C0 \uAC15\uD568", "JY-01"],
     ["\uAE40\uC601\uD76C", "\uC5EC", "950515-2345678", "010-9876-5432", "\uC591\uC8FC\uC2DC", "\uACE0\uC878", "-", "\uC5C6\uC74C", "\uC5C6\uC74C", "\uBBF8\uCDE8\uC5C5", "N", "N", "N", "2026-02-14", "75", "B", "Y", "\uC131\uC2E4\uD568", "SM-01"]
   ];
-  const downloadTemplate = (courses) => {
+  var downloadTemplate = (courses) => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...TEMPLATE_EXAMPLE]);
     ws["!cols"] = [6, 4, 11, 10, 13, 13, 8, 8, 7, 10, 14, 14, 7, 7, 5, 5, 11, 6, 5, 5, 20, 8].map((w) => ({ wch: w }));
@@ -1183,8 +1184,8 @@ var GgjfEduLms = (() => {
     a.download = "\uD6C8\uB828\uC0DD_\uB4F1\uB85D\uC591\uC2DD_2026.xlsx";
     a.click();
   };
-  const isDropoutStudent = (s) => (s?.enrollmentStatus || "") === "\uC911\uB3C4\uD0C8\uB77D";
-  const Dashboard = ({ students, courses }) => {
+  var isDropoutStudent = (s) => (s?.enrollmentStatus || "") === "\uC911\uB3C4\uD0C8\uB77D";
+  var Dashboard = ({ students, courses }) => {
     const today = /* @__PURE__ */ new Date();
     const todayStr = today.toISOString().slice(0, 10);
     const tomorrowStr = new Date(today.getTime() + 864e5).toISOString().slice(0, 10);
@@ -1478,7 +1479,7 @@ var GgjfEduLms = (() => {
       } }, c.status)));
     }))))));
   };
-  const CAT_COLORS = {
+  var CAT_COLORS = {
     "\uB298\uBD04\uAC15\uC0AC\uC591\uC131": "#EA580C",
     "\uC9C0\uC5ED\uC5F0\uACC4\xB7\uAE30\uC5EC": "#C2410C",
     "\uC0AC\uBB34\uBD84\uC57C": "#9A3412",
@@ -1486,8 +1487,8 @@ var GgjfEduLms = (() => {
     "AI \uC2E0\uC9C1\uBB34": "#F97316",
     "AI\uD65C\uC6A9 \uBD84\uC57C": "#2563EB"
   };
-  const CAT_LIST = Object.keys(CAT_COLORS);
-  const CourseModal = ({ course, onSave, onClose, isNew = false }) => {
+  var CAT_LIST = Object.keys(CAT_COLORS);
+  var CourseModal = ({ course, onSave, onClose, isNew = false }) => {
     const empty = {
       cat: "\uB298\uBD04\uAC15\uC0AC\uC591\uC131",
       cc: "#EA580C",
@@ -1826,7 +1827,7 @@ var GgjfEduLms = (() => {
       } }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " ", isNew ? "\uCD94\uAC00" : "\uC800\uC7A5")))
     );
   };
-  const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
+  var CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
     const [cat, setCat] = useState("\uC804\uCCB4");
     const [editCourse, setEdit] = useState(null);
     const [isNew, setIsNew] = useState(false);
@@ -1973,7 +1974,7 @@ var GgjfEduLms = (() => {
       justifyContent: "center"
     } }, /* @__PURE__ */ React.createElement(Icon, { n: "plus", s: 20 })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.mu } }, "\uC0C8 \uACFC\uC815 \uCD94\uAC00"))));
   };
-  const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew, currentUser }) => {
+  var StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew, currentUser }) => {
     const [search, setSearch] = useState("");
     const [cFilter, setCFilter] = useState(0);
     const [enrollFilter, setEnrollFilter] = useState("all");
@@ -2746,7 +2747,7 @@ var GgjfEduLms = (() => {
       }
     ));
   };
-  const AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRatesUpdated }) => {
+  var AttendanceMgmt = ({ students, courses, overrides = [], setOverrides, onRatesUpdated }) => {
     const initCourse = courses[3] || courses[0];
     const initDates = buildCourseDates(initCourse);
     const [course, setCourse] = useState(initCourse);
@@ -3953,7 +3954,7 @@ var GgjfEduLms = (() => {
       /* @__PURE__ */ React.createElement(AttendanceSheet, { course, courses, students })
     ));
   };
-  const ScheduleOverridePanel = ({ course, overrides, onAdd, onDelete }) => {
+  var ScheduleOverridePanel = ({ course, overrides, onAdd, onDelete }) => {
     const [showModal, setShowModal] = useState(false);
     const [form, setForm] = useState({ date: "", type: "cancelled", timeFrom: "", timeTo: "", hours: 0, reason: "" });
     const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -4052,7 +4053,7 @@ var GgjfEduLms = (() => {
       }
     )), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setShowModal(false), style: { padding: "6px 14px", borderRadius: 7, border: `1px solid ${T.bd}`, background: T.s2, color: T.mu, cursor: "pointer", fontSize: 11 } }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement("button", { onClick: handleSave, style: { padding: "6px 14px", borderRadius: 7, border: "none", background: T.p, color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 700 } }, "\uC800\uC7A5"))));
   };
-  const buildCourseDatesAll = (course) => {
+  var buildCourseDatesAll = (course) => {
     const getLocalStr = (d) => {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -4081,17 +4082,17 @@ var GgjfEduLms = (() => {
     }
     return out;
   };
-  const formatHourText = (hours) => {
+  var formatHourText = (hours) => {
     const n = Number(hours) || 0;
     return Number.isInteger(n) ? `${n}` : n.toFixed(1);
   };
-  const isAttendanceCutoffStatus = (status) => status === "\uC911\uB3C4\uD0C8\uB77D" || status === "\uC870\uAE30\uCDE8\uC5C5";
-  const isAttendanceDateLocked = (student, date) => {
+  var isAttendanceCutoffStatus = (status) => status === "\uC911\uB3C4\uD0C8\uB77D" || status === "\uC870\uAE30\uCDE8\uC5C5";
+  var isAttendanceDateLocked = (student, date) => {
     const status = student?.enrollmentStatus || "\uC7AC\uD559\uC911";
     const cutoffDate = student?.statusChangeDate || "";
     return !!(date && cutoffDate && isAttendanceCutoffStatus(status) && date > cutoffDate);
   };
-  const getAttendanceStatusMeta = (student) => {
+  var getAttendanceStatusMeta = (student) => {
     const status = student?.enrollmentStatus || "\uC7AC\uD559\uC911";
     if (!status || status === "\uC7AC\uD559\uC911") return null;
     const cutoffDate = student?.statusChangeDate || "";
@@ -4100,13 +4101,13 @@ var GgjfEduLms = (() => {
     const label = cutoffLabel && isAttendanceCutoffStatus(status) ? `${status} ${cutoffLabel}` : status;
     return { status, cutoffDate, cutoffLabel, label, shortLabel: status, colors: sc };
   };
-  const getAttendanceSheetTotalHours = (course, student) => {
+  var getAttendanceSheetTotalHours = (course, student) => {
     if (student?.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" && student?.statusChangeDate) {
       return getProportionalCourseHours(course, student.statusChangeDate);
     }
     return getTotalCourseHours(course);
   };
-  const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorName) => {
+  var printAttendanceSheet = (course, courseStudents, dates, attMap, instructorName) => {
     const today = /* @__PURE__ */ new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const period = formatCoursePeriod(course);
@@ -4297,7 +4298,7 @@ var GgjfEduLms = (() => {
       }
     }
   };
-  const AttendanceSheet = ({ course, courses, students }) => {
+  var AttendanceSheet = ({ course, courses, students }) => {
     const [sheetCourse, setSheetCourse] = useState(course);
     const [attData, setAttData] = useState({});
     const [loadingSheet, setLoadingSheet] = useState(false);
@@ -4540,22 +4541,62 @@ var GgjfEduLms = (() => {
       }), /* @__PURE__ */ React.createElement("td", { style: { padding: "6px 4px", textAlign: "center", fontSize: 13, fontWeight: 800, color: T.p, background: T.s2 } }, presentDays));
     }))))));
   };
-  const CompletionMgmt = ({ students, courses }) => {
-    const [course, setCourse] = useState(courses[3] || courses[0]);
+  var CompletionMgmt = ({ students, courses }) => {
+    const [course, setCourse] = useState(courses[0]);
     const [threshold, setThr] = useState(80);
     const [overrides, setOvr] = useState({});
     const [confirming, setConfirming] = useState(false);
+    const [showConfirmed, setShowConfirmed] = useState(true);
+    const courseStats = useMemo(() => courses.map((c) => {
+      const all = students.filter((s) => sameId(s.cid, c.id));
+      const confirmed = all.filter((s) => ["\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC"].includes(s.enrollmentStatus || ""));
+      const dropout = all.filter((s) => (s.enrollmentStatus || "") === "\uC911\uB3C4\uD0C8\uB77D");
+      const pending = all.filter((s) => !["\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC", "\uC911\uB3C4\uD0C8\uB77D"].includes(s.enrollmentStatus || ""));
+      const autoComplete = pending.filter((s) => {
+        if ((s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5" && s.rate >= threshold) return true;
+        return Number(s.rate || 0) >= threshold;
+      });
+      return {
+        course: c,
+        total: all.length,
+        confirmed: confirmed.length,
+        pending: pending.length,
+        dropout: dropout.length,
+        autoComplete: autoComplete.length,
+        incomplete: Math.max(0, pending.length - autoComplete.length)
+      };
+    }), [courses, students, threshold]);
+    const totalSummary = courseStats.reduce((acc, s) => ({
+      total: acc.total + s.total,
+      confirmed: acc.confirmed + s.confirmed,
+      pending: acc.pending + s.pending,
+      dropout: acc.dropout + s.dropout,
+      autoComplete: acc.autoComplete + s.autoComplete,
+      incomplete: acc.incomplete + s.incomplete
+    }), { total: 0, confirmed: 0, pending: 0, dropout: 0, autoComplete: 0, incomplete: 0 });
+    const preferredCourse = () => {
+      const withConfirmed = courseStats.find((s) => s.confirmed > 0)?.course;
+      const withStudents = courseStats.find((s) => s.total > 0)?.course;
+      return withConfirmed || withStudents || courses[0];
+    };
     useEffect(() => {
       if (!courses.length) return;
       setCourse((prev) => {
-        if (!prev) return courses[0];
+        if (!prev) return preferredCourse();
         const updated = courses.find((c) => c.id === prev.id);
-        return updated || courses[0];
+        if (!updated) return preferredCourse();
+        const selectedStats = courseStats.find((s) => sameId(s.course.id, updated.id));
+        if (selectedStats && selectedStats.total > 0) return updated;
+        return preferredCourse() || updated;
       });
-    }, [courses]);
+    }, [courses, students, threshold]);
     if (!course) return null;
+    const confirmedList = students.filter((s) => {
+      if (!sameId(s.cid, course.id)) return false;
+      return s.enrollmentStatus === "\uC218\uB8CC" || s.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC";
+    });
     const list = students.filter((s) => {
-      if (s.cid !== course.id) return false;
+      if (!sameId(s.cid, course.id)) return false;
       if (s.enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D") return false;
       if (s.enrollmentStatus === "\uC218\uB8CC" || s.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC") return false;
       return true;
@@ -4566,7 +4607,9 @@ var GgjfEduLms = (() => {
       return s.rate >= threshold ? "\uC218\uB8CC" : "\uBBF8\uC218\uB8CC";
     };
     const completed = list.filter((s) => get(s) === "\uC218\uB8CC" || get(s) === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC").length;
-    const rate = list.length ? Math.round(completed / list.length * 100) : 0;
+    const visibleDenom = list.length + confirmedList.length;
+    const visibleCompleted = completed + confirmedList.length;
+    const rate = visibleDenom ? Math.round(visibleCompleted / visibleDenom * 100) : 0;
     const getStudentTotalHours = (s) => {
       if (s.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" && s.statusChangeDate) {
         return getProportionalCourseHours(course, s.statusChangeDate);
@@ -4610,17 +4653,40 @@ var GgjfEduLms = (() => {
         setConfirming(false);
       }
     };
-    return /* @__PURE__ */ React.createElement("div", { className: "page" }, /* @__PURE__ */ React.createElement(SectionHead, { title: "\uC218\uB8CC \uAD00\uB9AC", sub: "\uCD9C\uC11D\uB960 \uAE30\uC900 \uC790\uB3D9 \uD310\uC815 \xB7 \uB2F4\uB2F9\uC790 \uC218\uB3D9 \uC870\uC815 \uAC00\uB2A5" }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" } }, courses.map((c) => /* @__PURE__ */ React.createElement("button", { key: c.id, onClick: () => setCourse(c), style: {
-      padding: "6px 13px",
-      borderRadius: 20,
-      border: "none",
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 600,
-      whiteSpace: "nowrap",
-      background: course.id === c.id ? c.cc : T.s3,
-      color: course.id === c.id ? "#fff" : T.mu
-    } }, shortCourseName(c.name)))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, marginBottom: 18 } }, /* @__PURE__ */ React.createElement(Card, { style: { padding: "16px 20px", display: "flex", gap: 20, alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 6, fontWeight: 600 } }, "\uC218\uB8CC \uAE30\uC900 \uCD9C\uC11D\uB960"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "page" }, /* @__PURE__ */ React.createElement(SectionHead, { title: "\uC218\uB8CC \uAD00\uB9AC", sub: "\uCD9C\uC11D\uB960 \uAE30\uC900 \uC790\uB3D9 \uD310\uC815 \xB7 \uB2F4\uB2F9\uC790 \uC218\uB3D9 \uC870\uC815 \uAC00\uB2A5" }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" } }, courses.map((c) => (() => {
+      const st = courseStats.find((s) => sameId(s.course.id, c.id)) || {};
+      return /* @__PURE__ */ React.createElement("button", { key: c.id, onClick: () => setCourse(c), style: {
+        padding: "6px 13px",
+        borderRadius: 20,
+        border: "none",
+        cursor: "pointer",
+        fontSize: 11,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        background: course.id === c.id ? c.cc : T.s3,
+        color: course.id === c.id ? "#fff" : T.mu
+      } }, shortCourseName(c.name), st.total > 0 && /* @__PURE__ */ React.createElement("span", { style: {
+        marginLeft: 6,
+        padding: "1px 6px",
+        borderRadius: 999,
+        background: course.id === c.id ? "rgba(255,255,255,.2)" : "#fff",
+        color: course.id === c.id ? "#fff" : T.mu,
+        fontSize: 10
+      } }, st.confirmed || 0, "/", st.total));
+    })())), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10, marginBottom: 14 } }, [
+      { label: "\uC804\uCCB4 \uD6C8\uB828\uC0DD", value: totalSummary.total, sub: "\uC218\uB8CC\uAD00\uB9AC \uB300\uC0C1 \uACFC\uC815 \uD569\uACC4", color: T.tx },
+      { label: "\uC218\uB8CC \uD655\uC815", value: totalSummary.confirmed, sub: "DB \uC800\uC7A5 \uC644\uB8CC", color: "#15803D" },
+      { label: "\uD310\uC815 \uB300\uAE30", value: totalSummary.pending, sub: `\uC790\uB3D9 \uC218\uB8CC\uAD8C ${totalSummary.autoComplete}\uBA85`, color: T.p },
+      { label: "\uBBF8\uC218\uB8CC \uC608\uC0C1", value: totalSummary.incomplete, sub: `\uAE30\uC900 ${threshold}% \uBBF8\uB9CC`, color: T.danger },
+      { label: "\uC911\uB3C4\uD0C8\uB77D", value: totalSummary.dropout, sub: "\uD310\uC815 \uC81C\uC678", color: T.mu }
+    ].map((x) => /* @__PURE__ */ React.createElement(Card, { key: x.label, style: { padding: "13px 16px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, fontWeight: 700 } }, x.label), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: x.color, lineHeight: 1.1, marginTop: 4 } }, x.value, "\uBA85"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, marginTop: 4 } }, x.sub)))), /* @__PURE__ */ React.createElement(Card, { style: { padding: "14px 16px", marginBottom: 14, background: "#FAFCFF" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 850, color: T.tx } }, "\uC218\uB8CC \uACFC\uC815 \uD604\uD669"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uC218\uB8CC \uD655\uC815 \uC778\uC6D0\uC774 \uC788\uB294 \uACFC\uC815\uACFC \uD310\uC815 \uB300\uAE30 \uC778\uC6D0\uC744 \uD55C \uBC88\uC5D0 \uD655\uC778\uD569\uB2C8\uB2E4.")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 8 } }, courseStats.filter((s) => s.total > 0).map((s) => /* @__PURE__ */ React.createElement("button", { key: s.course.id, onClick: () => setCourse(s.course), style: {
+      textAlign: "left",
+      border: `1px solid ${sameId(course.id, s.course.id) ? s.course.cc : T.bd}`,
+      background: sameId(course.id, s.course.id) ? `${s.course.cc}12` : "#fff",
+      borderRadius: 10,
+      padding: "10px 12px",
+      cursor: "pointer"
+    } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 7 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: s.course.cc, flex: "0 0 auto" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 800, color: T.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, s.course.name)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Chip, { label: `\uD655\uC815 ${s.confirmed}\uBA85`, bg: "#DCFCE7", color: "#15803D", size: 10 }), /* @__PURE__ */ React.createElement(Chip, { label: `\uB300\uAE30 ${s.pending}\uBA85`, bg: T.pbg, color: T.p, size: 10 }), s.dropout > 0 && /* @__PURE__ */ React.createElement(Chip, { label: `\uD0C8\uB77D ${s.dropout}\uBA85`, bg: "#F1F5F9", color: T.mu, size: 10 })))))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, marginBottom: 18 } }, /* @__PURE__ */ React.createElement(Card, { style: { padding: "16px 20px", display: "flex", gap: 20, alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 6, fontWeight: 600 } }, "\uC218\uB8CC \uAE30\uC900 \uCD9C\uC11D\uB960"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(
       "input",
       {
         type: "range",
@@ -4642,7 +4708,42 @@ var GgjfEduLms = (() => {
       background: confirming ? T.s3 : "#16A34A",
       color: confirming ? T.mu : "#fff",
       marginLeft: 4
-    } }, confirming ? "\uC800\uC7A5 \uC911\u2026" : "\u2705 \uC218\uB8CC \uD655\uC815")), /* @__PURE__ */ React.createElement(Card, { style: { padding: "16px 22px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, "\uC218\uB8CC\uC728"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: rate >= 90 ? T.p : T.danger, lineHeight: 1.1 } }, rate, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, completed, "/", list.length, "\uBA85"), /* @__PURE__ */ React.createElement(Chip, { label: rate >= 90 ? "\uBAA9\uD45C\uB2EC\uC131" : "\uBAA9\uD45C\uBBF8\uB2EC", bg: rate >= 90 ? T.pbg : "#FEF2F2", color: rate >= 90 ? T.p : T.danger, size: 10 })), /* @__PURE__ */ React.createElement(Card, { style: { padding: "16px 22px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, "\uACFC\uC815 \uBAA9\uD45C"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: T.tx, marginTop: 4 } }, course.cGoal, "\uBA85 \uC218\uB8CC"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 2 } }, course.eGoal, "\uBA85 \uCDE8\uC5C5 \uBAA9\uD45C"))), /* @__PURE__ */ React.createElement(Card, { style: { padding: "12px 18px", marginBottom: 14, background: "#F8FAFF", border: `1px solid ${T.bd}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, fontWeight: 700, marginBottom: 8 } }, "\u{1F4CA} \uD310\uC815 \uADFC\uAC70 \uC694\uC57D \u2014 ", course.name, " \xB7 \uCD1D ", courseTotalHours, "\uC2DC\uAC04 \xB7 \uAE30\uC900 ", threshold, "%"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: T.ok } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: T.ok } }, atOrAbove, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uAE30\uC900 \uC774\uC0C1")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#D97706" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#D97706" } }, nearMiss, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uACBD\uACC4(", threshold - 10, "~", threshold, "% \uBBF8\uB9CC)")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: T.danger } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: T.danger } }, atRisk, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, threshold - 10, "% \uBBF8\uB9CC")), earlyEmp > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#7E22CE" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#7E22CE" } }, earlyEmp, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uC870\uAE30\uCDE8\uC5C5(\uBE44\uB840 \uAE30\uC900)")))), /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: T.s2 } }, ["\uC774\uB984", "\uB204\uC801\uC2DC\uAC04", "\uCD9C\uC11D\uB960", "\uC790\uB3D9\uD310\uC815", "\uCD5C\uC885\uACB0\uACFC", "\uBE44\uACE0"].map((h) => /* @__PURE__ */ React.createElement("th", { key: h, style: {
+    } }, confirming ? "\uC800\uC7A5 \uC911\u2026" : "\u2705 \uC218\uB8CC \uD655\uC815")), /* @__PURE__ */ React.createElement(Card, { style: { padding: "16px 22px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, "\uC218\uB8CC\uC728"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: rate >= 90 ? T.p : T.danger, lineHeight: 1.1 } }, rate, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, visibleCompleted, "/", visibleDenom, "\uBA85"), confirmedList.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#15803D", marginTop: 3, fontWeight: 600 } }, "+", confirmedList.length, "\uBA85 \uD655\uC815\uC644\uB8CC"), /* @__PURE__ */ React.createElement(Chip, { label: rate >= 90 ? "\uBAA9\uD45C\uB2EC\uC131" : "\uBAA9\uD45C\uBBF8\uB2EC", bg: rate >= 90 ? T.pbg : "#FEF2F2", color: rate >= 90 ? T.p : T.danger, size: 10 })), /* @__PURE__ */ React.createElement(Card, { style: { padding: "16px 22px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, "\uACFC\uC815 \uBAA9\uD45C"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: T.tx, marginTop: 4 } }, course.cGoal, "\uBA85 \uC218\uB8CC"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 2 } }, course.eGoal, "\uBA85 \uCDE8\uC5C5 \uBAA9\uD45C"))), /* @__PURE__ */ React.createElement(Card, { style: { padding: "12px 18px", marginBottom: 14, background: "#F8FAFF", border: `1px solid ${T.bd}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, fontWeight: 700, marginBottom: 8 } }, "\u{1F4CA} \uD310\uC815 \uADFC\uAC70 \uC694\uC57D \u2014 ", course.name, " \xB7 \uCD1D ", courseTotalHours, "\uC2DC\uAC04 \xB7 \uAE30\uC900 ", threshold, "%"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: T.ok } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: T.ok } }, atOrAbove, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uAE30\uC900 \uC774\uC0C1")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#D97706" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#D97706" } }, nearMiss, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uACBD\uACC4(", threshold - 10, "~", threshold, "% \uBBF8\uB9CC)")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: T.danger } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: T.danger } }, atRisk, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, threshold - 10, "% \uBBF8\uB9CC")), earlyEmp > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#7E22CE" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#7E22CE" } }, earlyEmp, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uC870\uAE30\uCDE8\uC5C5(\uBE44\uB840 \uAE30\uC900)")), confirmedList.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" } }, /* @__PURE__ */ React.createElement("span", { style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#15803D" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#15803D" } }, confirmedList.length, "\uBA85"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uC774\uBBF8 \uC218\uB8CC \uD655\uC815\uB428")))), confirmedList.length > 0 && /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden", marginBottom: 14, border: `1.5px solid #BBF7D0` } }, /* @__PURE__ */ React.createElement("div", { style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "10px 16px",
+      background: "#F0FDF4",
+      borderBottom: `1px solid #BBF7D0`
+    } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 800, color: "#15803D" } }, "\u2705 \uC218\uB8CC \uD655\uC815 \uC644\uB8CC"), /* @__PURE__ */ React.createElement(Chip, { label: `${confirmedList.length}\uBA85`, bg: "#DCFCE7", color: "#15803D" }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "DB\uC5D0 \uC800\uC7A5\uB41C \uCD5C\uC885 \uC218\uB8CC\uC790 \uBAA9\uB85D\uC785\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowConfirmed((v) => !v), style: {
+      padding: "4px 12px",
+      border: `1px solid #BBF7D0`,
+      borderRadius: 8,
+      background: "#fff",
+      cursor: "pointer",
+      fontSize: 11,
+      color: "#15803D",
+      fontWeight: 600
+    } }, showConfirmed ? "\u25B2 \uC228\uAE30\uAE30" : "\u25BC \uD3BC\uCE58\uAE30")), showConfirmed && /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: "#F0FDF4" } }, ["\uC774\uB984", "\uB204\uC801\uC2DC\uAC04", "\uCD9C\uC11D\uB960", "\uD655\uC815 \uC0C1\uD0DC"].map((h) => /* @__PURE__ */ React.createElement("th", { key: h, style: {
+      padding: "8px 16px",
+      textAlign: h === "\uC774\uB984" ? "left" : "center",
+      fontSize: 11,
+      color: "#15803D",
+      fontWeight: 700,
+      borderBottom: `1px solid #BBF7D0`
+    } }, h)))), /* @__PURE__ */ React.createElement("tbody", null, confirmedList.map((s) => {
+      const sTotal = s.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC" && s.statusChangeDate ? getProportionalCourseHours(course, s.statusChangeDate) : getTotalCourseHours(course);
+      return /* @__PURE__ */ React.createElement("tr", { key: s.id, style: { borderBottom: `1px solid #DCFCE7`, opacity: 0.85 } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 16px", fontSize: 13, fontWeight: 700, color: T.tx } }, s.name, /* @__PURE__ */ React.createElement(
+        Chip,
+        {
+          label: s.enrollmentStatus,
+          bg: STATUS_COLORS[s.enrollmentStatus]?.bg || "#DCFCE7",
+          color: STATUS_COLORS[s.enrollmentStatus]?.color || "#15803D",
+          size: 10,
+          style: { marginLeft: 6 }
+        }
+      )), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#15803D" } }, (s.accumulatedHours || 0).toFixed(1), "h", /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, "/ ", sTotal.toFixed(1), "h")), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 800, color: "#15803D" } }, s.rate, "%", /* @__PURE__ */ React.createElement(RBar, { r: s.rate, h: 3 })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 16px", textAlign: "center" } }, /* @__PURE__ */ React.createElement(Chip, { label: "\u{1F512} \uD655\uC815\uC644\uB8CC", bg: "#DCFCE7", color: "#15803D" })));
+    })))), list.length === 0 && confirmedList.length === 0 && /* @__PURE__ */ React.createElement(Card, { style: { padding: "30px 20px", textAlign: "center", color: T.mu } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 30, marginBottom: 8 } }, "\u{1F4ED}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: T.tx, marginBottom: 4 } }, "\uC120\uD0DD \uACFC\uC815\uC758 \uC218\uB8CC\uAD00\uB9AC \uB300\uC0C1\uC790\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4."), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12 } }, "\uC0C1\uB2E8\uC758 \uACFC\uC815\uBCC4 \uD604\uD669\uC5D0\uC11C \uC218\uB8CC \uD655\uC815 \uB610\uB294 \uD310\uC815 \uB300\uAE30 \uC778\uC6D0\uC774 \uC788\uB294 \uACFC\uC815\uC744 \uC120\uD0DD\uD558\uC138\uC694.")), list.length === 0 && confirmedList.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: "32px 20px", color: T.mu, fontSize: 13 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 8 } }, "\u{1F389}"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#15803D", fontSize: 15, marginBottom: 4 } }, "\uBAA8\uB4E0 \uD559\uC0DD\uC758 \uC218\uB8CC\uAC00 \uD655\uC815\uB418\uC5C8\uC2B5\uB2C8\uB2E4!"), /* @__PURE__ */ React.createElement("div", null, "\uC704 \uBAA9\uB85D\uC5D0\uC11C ", confirmedList.length, "\uBA85\uC758 \uC218\uB8CC \uACB0\uACFC\uB97C \uD655\uC778\uD558\uC138\uC694.")), list.length > 0 && /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: T.s2 } }, ["\uC774\uB984", "\uB204\uC801\uC2DC\uAC04", "\uCD9C\uC11D\uB960", "\uC790\uB3D9\uD310\uC815", "\uCD5C\uC885\uACB0\uACFC", "\uBE44\uACE0"].map((h) => /* @__PURE__ */ React.createElement("th", { key: h, style: {
       padding: "10px 16px",
       textAlign: h === "\uC774\uB984" ? "left" : "center",
       fontSize: 11,
@@ -4680,12 +4781,12 @@ var GgjfEduLms = (() => {
       } }, v))), final === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC" && /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginTop: 4 } }, /* @__PURE__ */ React.createElement(Chip, { label: "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC", bg: "#F3E8FF", color: "#7E22CE", size: 10 }))), /* @__PURE__ */ React.createElement("td", { style: { padding: "12px 16px", textAlign: "center", fontSize: 11 } }, changed && /* @__PURE__ */ React.createElement(Chip, { label: "\uC218\uB3D9\uC870\uC815", bg: "#FFFBEB", color: T.warn }), s.rate < 60 && /* @__PURE__ */ React.createElement(Chip, { label: "1\uB144 \uC81C\uD55C \uAC80\uD1A0", bg: "#FEF2F2", color: T.danger, size: 10 })));
     })))));
   };
-  const MIN_ZOOM = 50;
-  const MAX_ZOOM = 200;
-  const ZOOM_STEP = 10;
-  const MM_TO_PX = 3.78;
-  const clampZoom = (value) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(value)));
-  const DOC_TYPE_NAMES = {
+  var MIN_ZOOM = 50;
+  var MAX_ZOOM = 200;
+  var ZOOM_STEP = 10;
+  var MM_TO_PX = 3.78;
+  var clampZoom = (value) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(value)));
+  var DOC_TYPE_NAMES = {
     certificate: "\uC218\uB8CC\uC99D",
     attendCert83: "\uC218\uAC15\uC99D\uBA85\uC11C_\uBCC4\uC9C083\uD638",
     attendCertSelf: "\uC218\uAC15\uC99D\uBA85\uC11C_\uC790\uCCB4",
@@ -4694,13 +4795,13 @@ var GgjfEduLms = (() => {
     attendConfirm: "\uCD9C\uACB0\uD655\uC778\uC11C",
     gradeCert: "\uC131\uC801\uC99D\uBA85\uC11C"
   };
-  const generatePrintFilename = (docType, courseName, date, extension) => {
+  var generatePrintFilename = (docType, courseName, date, extension) => {
     const typeName = DOC_TYPE_NAMES[docType] || docType;
     const safeCourse = (courseName || "").replace(/[/\\?%*:|"<>]/g, "_");
     const safeDate = date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     return `${typeName}_${safeCourse}_${safeDate}.${extension}`;
   };
-  const generatePDF = async (element, options = {}) => {
+  var generatePDF = async (element, options = {}) => {
     const { orientation = "portrait", filename = "document.pdf" } = options;
     const A4 = orientation === "portrait" ? { width: 210, height: 297 } : { width: 297, height: 210 };
     const canvas = await html2canvas(element, {
@@ -4716,11 +4817,11 @@ var GgjfEduLms = (() => {
     pdf.save(filename);
     return pdf;
   };
-  const DEFAULT_DAILY_HOURS = 4;
-  const DEFAULT_BREAK_MINUTES = 60;
-  const sameId = (a, b) => Number(a) === Number(b);
-  const normalizeDateStr = (v) => v ? String(v).slice(0, 10) : "";
-  const parseTimeToMinutes = (timeStr) => {
+  var DEFAULT_DAILY_HOURS = 4;
+  var DEFAULT_BREAK_MINUTES = 60;
+  var sameId = (a, b) => Number(a) === Number(b);
+  var normalizeDateStr = (v) => v ? String(v).slice(0, 10) : "";
+  var parseTimeToMinutes = (timeStr) => {
     if (!timeStr || typeof timeStr !== "string") return null;
     const parts = timeStr.split(":");
     if (parts.length < 2) return null;
@@ -4729,14 +4830,14 @@ var GgjfEduLms = (() => {
     if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
     return h * 60 + m;
   };
-  const normalizeBreakMinutes = (breakMinutes) => {
+  var normalizeBreakMinutes = (breakMinutes) => {
     const n = Number(breakMinutes);
     return Number.isFinite(n) && n >= 0 ? n : DEFAULT_BREAK_MINUTES;
   };
-  const getCourseBreakMinutes = (course) => {
+  var getCourseBreakMinutes = (course) => {
     return normalizeBreakMinutes(course?.breakMinutes ?? course?.break_minutes);
   };
-  const shouldIncludeBreakInHours = (course) => {
+  var shouldIncludeBreakInHours = (course) => {
     const raw = course?.includeBreakInHours ?? course?.include_break_in_hours;
     if (typeof raw === "boolean") return raw;
     if (typeof raw === "string") {
@@ -4747,26 +4848,26 @@ var GgjfEduLms = (() => {
     if (typeof raw === "number") return raw !== 0;
     return false;
   };
-  const getCourseScheduleMinutes = (course) => {
+  var getCourseScheduleMinutes = (course) => {
     const schedStart = parseTimeToMinutes(course?.schedTimeFrom);
     const schedEnd = parseTimeToMinutes(course?.schedTimeTo);
     if (schedStart === null || schedEnd === null || schedEnd <= schedStart) return null;
     return { schedStart, schedEnd };
   };
-  const getOverrideScheduleMinutes = (override, fallbackScheduleMinutes = null) => {
+  var getOverrideScheduleMinutes = (override, fallbackScheduleMinutes = null) => {
     if (!override || override.type === "cancelled") return fallbackScheduleMinutes;
     const schedStart = parseTimeToMinutes(override.timeFrom);
     const schedEnd = parseTimeToMinutes(override.timeTo);
     if (schedStart === null || schedEnd === null || schedEnd <= schedStart) return fallbackScheduleMinutes;
     return { schedStart, schedEnd };
   };
-  const getHoursFromScheduleRange = (fromMin, toMin, breakMinutesValue = DEFAULT_BREAK_MINUTES, includeBreakInHours = true) => {
+  var getHoursFromScheduleRange = (fromMin, toMin, breakMinutesValue = DEFAULT_BREAK_MINUTES, includeBreakInHours = true) => {
     if (fromMin === null || toMin === null || toMin <= fromMin) return 0;
     const spanMinutes = toMin - fromMin;
     const appliedBreak = includeBreakInHours ? 0 : Math.min(normalizeBreakMinutes(breakMinutesValue), spanMinutes);
     return Math.round(Math.max(0, spanMinutes - appliedBreak) / 60 * 100) / 100;
   };
-  const getScheduledDailyHours = (course, includeBreakInHours = true) => {
+  var getScheduledDailyHours = (course, includeBreakInHours = true) => {
     return getHoursFromScheduleRange(
       parseTimeToMinutes(course?.schedTimeFrom),
       parseTimeToMinutes(course?.schedTimeTo),
@@ -4774,7 +4875,7 @@ var GgjfEduLms = (() => {
       includeBreakInHours
     );
   };
-  const getOverrideHours = (override, course = null, fallbackDailyHours = DEFAULT_DAILY_HOURS) => {
+  var getOverrideHours = (override, course = null, fallbackDailyHours = DEFAULT_DAILY_HOURS) => {
     if (!override) return fallbackDailyHours;
     if (override.type === "cancelled") return 0;
     const fromMin = parseTimeToMinutes(override.timeFrom);
@@ -4790,16 +4891,16 @@ var GgjfEduLms = (() => {
     const h = Number(override.hours);
     return Number.isFinite(h) && h > 0 ? h : fallbackDailyHours;
   };
-  const normalizeManualHours = (value) => {
+  var normalizeManualHours = (value) => {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? n : 0;
   };
-  const applyManualHoursAdjustment = (baseHours, record = {}) => {
+  var applyManualHoursAdjustment = (baseHours, record = {}) => {
     const add = normalizeManualHours(record.manual_add_hours ?? record.manualAddHours);
     const deduct = normalizeManualHours(record.manual_deduct_hours ?? record.manualDeductHours);
     return Math.round(Math.max(0, baseHours + add - deduct) * 100) / 100;
   };
-  const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
+  var calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
     if (record.status === "A") return applyManualHoursAdjustment(0, record);
     let checkInMin = parseTimeToMinutes(record.check_in);
     let checkOutMin = parseTimeToMinutes(record.check_out);
@@ -4828,7 +4929,7 @@ var GgjfEduLms = (() => {
     const autoHours = Math.round(diffMinutes / 60 * 100) / 100;
     return applyManualHoursAdjustment(autoHours, record);
   };
-  const calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true, overridesByDate = null) => {
+  var calculateAccumulatedHours = (attendanceRecords, cutoffDate = null, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true, overridesByDate = null) => {
     const invalidRecords = [];
     const details = [];
     let totalHours = 0;
@@ -4863,11 +4964,11 @@ var GgjfEduLms = (() => {
     }
     return { accumulatedHours: Math.round(totalHours * 100) / 100, invalidRecords, details };
   };
-  const getCourseOverrideMap = (course) => {
+  var getCourseOverrideMap = (course) => {
     const ovs = (window._overridesRef?.current || []).filter((o) => sameId(o.courseId, course?.id));
     return new Map(ovs.map((o) => [normalizeDateStr(o.date), o]));
   };
-  const getTotalCourseHours = (course, cutoffDate = null, overrideMapArg = null) => {
+  var getTotalCourseHours = (course, cutoffDate = null, overrideMapArg = null) => {
     if (!course) return 0;
     const includeBreakInHours = shouldIncludeBreakInHours(course);
     const allDates = buildCourseDatesAll(course);
@@ -4889,16 +4990,16 @@ var GgjfEduLms = (() => {
     }
     return Math.round(total * 100) / 100;
   };
-  const getProportionalCourseHours = (course, cutoffDate, overrideMapArg = null) => {
+  var getProportionalCourseHours = (course, cutoffDate, overrideMapArg = null) => {
     return getTotalCourseHours(course, cutoffDate, overrideMapArg);
   };
-  const calculateHoursBasedRate = (accumulatedHours, totalCourseHours) => {
+  var calculateHoursBasedRate = (accumulatedHours, totalCourseHours) => {
     if (!totalCourseHours || totalCourseHours <= 0) return 0;
     const rate = accumulatedHours / totalCourseHours * 100;
     const rounded = Math.round(rate * 10) / 10;
     return Math.min(rounded, 100);
   };
-  const recalculateHoursAndRate = async (studentId, courseId) => {
+  var recalculateHoursAndRate = async (studentId, courseId) => {
     try {
       const student = window._studentsRef?.current?.find((s) => sameId(s.id, studentId));
       const course = window._coursesRef?.current?.find((c) => sameId(c.id, courseId));
@@ -4937,7 +5038,7 @@ var GgjfEduLms = (() => {
       console.error("\uC2DC\uAC04 \uC7AC\uACC4\uC0B0 \uC624\uB958:", err);
     }
   };
-  const showAttendanceHourBasis = async (student, course) => {
+  var showAttendanceHourBasis = async (student, course) => {
     try {
       if (!student || !course) return;
       const { data: attRecords, error } = await sbGet(
@@ -4984,7 +5085,7 @@ ${invalidLines.join("\n")}` : null
       alert("\uC0B0\uCD9C \uADFC\uAC70\uB97C \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4: " + fmtSaveError(err));
     }
   };
-  const batchRecalculateAllHours = async (students, courses, overridesArg = null) => {
+  var batchRecalculateAllHours = async (students, courses, overridesArg = null) => {
     if (!students || students.length === 0) return 0;
     if (!courses || courses.length === 0) return 0;
     const allOverrides = overridesArg || window._overridesRef?.current || [];
@@ -5054,24 +5155,24 @@ ${invalidLines.join("\n")}` : null
     console.log(`[\uB204\uC801\uC2DC\uAC04 \uC77C\uAD04 \uC7AC\uACC4\uC0B0] ${updates.length}\uBA85 \uC5C5\uB370\uC774\uD2B8 \uC644\uB8CC`);
     return updates.length;
   };
-  const ENROLLMENT_STATUSES = ["\uC7AC\uD559\uC911", "\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5", "\uC911\uB3C4\uD0C8\uB77D", "\uC218\uB8CC\uC608\uC815"];
-  const DROPOUT_REASONS = ["\uAC1C\uC778\uC0AC\uC720", "\uCDE8\uC5C5", "\uAC74\uAC15", "\uAE30\uD0C0"];
-  const VALID_TRANSITIONS = {
+  var ENROLLMENT_STATUSES = ["\uC7AC\uD559\uC911", "\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5", "\uC911\uB3C4\uD0C8\uB77D", "\uC218\uB8CC\uC608\uC815"];
+  var DROPOUT_REASONS = ["\uAC1C\uC778\uC0AC\uC720", "\uCDE8\uC5C5", "\uAC74\uAC15", "\uAE30\uD0C0"];
+  var VALID_TRANSITIONS = {
     "\uC7AC\uD559\uC911": ["\uC218\uB8CC\uC608\uC815", "\uC870\uAE30\uCDE8\uC5C5", "\uC911\uB3C4\uD0C8\uB77D"],
     "\uC218\uB8CC\uC608\uC815": ["\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5", "\uC911\uB3C4\uD0C8\uB77D"],
     "\uC218\uB8CC": [],
     "\uC870\uAE30\uCDE8\uC5C5": [],
     "\uC911\uB3C4\uD0C8\uB77D": []
   };
-  const STATUS_COLORS = {
+  var STATUS_COLORS = {
     "\uC7AC\uD559\uC911": { bg: "#DBEAFE", color: "#1D4ED8" },
     "\uC218\uB8CC": { bg: "#DCFCE7", color: "#15803D" },
     "\uC870\uAE30\uCDE8\uC5C5": { bg: "#F3E8FF", color: "#7E22CE" },
     "\uC911\uB3C4\uD0C8\uB77D": { bg: "#FEE2E2", color: "#DC2626" },
     "\uC218\uB8CC\uC608\uC815": { bg: "#FFF7ED", color: "#C2410C" }
   };
-  const EMPLOYMENT_STATUSES = ["\uBBF8\uCDE8\uC5C5", "\uCDE8\uC5C5", "\uCDE8\uC5C5\uC608\uC815", "\uCC3D\uC5C5", "\uC9C4\uD559", "\uAE30\uD0C0"];
-  const EMPLOYMENT_COLORS = {
+  var EMPLOYMENT_STATUSES = ["\uBBF8\uCDE8\uC5C5", "\uCDE8\uC5C5", "\uCDE8\uC5C5\uC608\uC815", "\uCC3D\uC5C5", "\uC9C4\uD559", "\uAE30\uD0C0"];
+  var EMPLOYMENT_COLORS = {
     "\uCDE8\uC5C5": { bg: "#DCFCE7", color: "#15803D" },
     "\uCDE8\uC5C5\uC608\uC815": { bg: "#E0F2FE", color: "#0369A1" },
     "\uCC3D\uC5C5": { bg: "#F3E8FF", color: "#7E22CE" },
@@ -5079,17 +5180,17 @@ ${invalidLines.join("\n")}` : null
     "\uBBF8\uCDE8\uC5C5": { bg: "#F1F5F9", color: "#64748B" },
     "\uAE30\uD0C0": { bg: "#E5E7EB", color: "#374151" }
   };
-  const employmentChipStyle = (status) => EMPLOYMENT_COLORS[status || "\uBBF8\uCDE8\uC5C5"] || EMPLOYMENT_COLORS["\uAE30\uD0C0"];
-  const getEffectiveEmploymentStatus = (s) => {
+  var employmentChipStyle = (status) => EMPLOYMENT_COLORS[status || "\uBBF8\uCDE8\uC5C5"] || EMPLOYMENT_COLORS["\uAE30\uD0C0"];
+  var getEffectiveEmploymentStatus = (s) => {
     if (!s) return "\uBBF8\uCDE8\uC5C5";
     if ((s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5" && (!s.status || s.status === "\uBBF8\uCDE8\uC5C5")) return "\uCDE8\uC5C5";
     return s.status || "\uBBF8\uCDE8\uC5C5";
   };
-  const isValidTransition = (fromStatus, toStatus) => {
+  var isValidTransition = (fromStatus, toStatus) => {
     const allowed = VALID_TRANSITIONS[fromStatus];
     return allowed ? allowed.includes(toStatus) : false;
   };
-  const changeEnrollmentStatus = async (params) => {
+  var changeEnrollmentStatus = async (params) => {
     const { studentId, courseId, newStatus, changeDate, dropoutReason, reasonDetail, employerName, changedBy } = params;
     const student = window._studentsRef?.current?.find((s) => sameId(s.id, studentId));
     if (!student) throw new Error("\uD559\uC0DD\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
@@ -5141,7 +5242,7 @@ ${invalidLines.join("\n")}` : null
     await recalculateHoursAndRate(studentId, courseId);
     return { success: true, warning };
   };
-  const getCertificateMarkup = (s, c, certNo, issueDate) => {
+  var getCertificateMarkup = (s, c, certNo, issueDate) => {
     const formatCertificateCourseName = (name) => {
       const text = String(name || "");
       if (!text || /과정\s*$/.test(text)) return text;
@@ -5186,7 +5287,7 @@ ${invalidLines.join("\n")}` : null
   </div>
 </div>`;
   };
-  const CERTIFICATE_PRINT_STYLE = `
+  var CERTIFICATE_PRINT_STYLE = `
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Pretendard','\uB9D1\uC740 \uACE0\uB515','Malgun Gothic',sans-serif;background:#E8E8E8;
@@ -5221,7 +5322,7 @@ ${invalidLines.join("\n")}` : null
     @page{size:A4 portrait;margin:0;}
   }
 `;
-  const printCertificate = (s, c, certNo, issueDate) => {
+  var printCertificate = (s, c, certNo, issueDate) => {
     const doc = getCertificateMarkup(s, c, certNo, issueDate);
     const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
 <title>\uC218\uB8CC\uC99D - ${s.name}</title>
@@ -5252,7 +5353,7 @@ function attachStamp(e){
       w.document.close();
     }
   };
-  const printCertificateBatch = (items, c, issueDate) => {
+  var printCertificateBatch = (items, c, issueDate) => {
     if (!items || items.length === 0) return;
     const docs = items.map(
       ({ student, certNo }) => getCertificateMarkup(student, c, certNo, issueDate)
@@ -5272,7 +5373,7 @@ ${docs}
     w.document.write(html);
     w.document.close();
   };
-  const printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate = null, certEndDate = null) => {
+  var printAttendCert = (s, c, certNo, issueDate, absences = [], certStartDate = null, certEndDate = null) => {
     const b = (s.birth || "").replace(/-/g, "");
     const front6 = b.length >= 8 ? b.slice(2, 4) + b.slice(4, 6) + b.slice(6, 8) : "";
     const idFront = front6 || "\u3000\u3000\u3000\u3000\u3000\u3000";
@@ -5626,7 +5727,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       w.document.close();
     }
   };
-  const printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
+  var printParticipationCert = (s, c, certNo, issueDate, roomName = "") => {
     const birthFmt = s.birth ? s.birth.replace(/(\d{4})-(\d{2})-(\d{2})/, "$1\uB144 $2\uC6D4 $3\uC77C") : "\u3000\u3000\u3000\u3000\uB144\u3000\u3000\uC6D4\u3000\u3000\uC77C";
     const fmtD = (d) => d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, dd) => `${y}\uB144 ${String(+m)}\uC6D4 ${String(+dd)}\uC77C`) : "\u3000\u3000\u3000\u3000";
     const eduPeriod = c.dateFrom && c.dateTo ? `${fmtD(c.dateFrom)} ~ ${fmtD(c.dateTo)}` : "\u3000\u3000\u3000\u3000\u3000\u3000";
@@ -5788,21 +5889,21 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       }
     }
   };
-  const CERT_HIST_KEY = "gjf_issued_certs";
-  const loadCertHistory = () => {
+  var CERT_HIST_KEY = "gjf_issued_certs";
+  var loadCertHistory = () => {
     try {
       return JSON.parse(safeLocal.get(CERT_HIST_KEY) || "[]");
     } catch {
       return [];
     }
   };
-  const saveCertHistory = (hist) => {
+  var saveCertHistory = (hist) => {
     try {
       safeLocal.set(CERT_HIST_KEY, JSON.stringify(hist));
     } catch {
     }
   };
-  const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
+  var CertMgmt = ({ students, courses, currentUser, addAudit }) => {
     const [course, setCourse] = useState(courses[3] || courses[0]);
     const [docType, setDocType] = useState("cert");
     const [issueDate, setIssueDate] = useState("2026\uB144\u3000\u3000\uC6D4\u3000\u3000\uC77C");
@@ -5853,30 +5954,34 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       lastOutputAt: (r.last_output_at ?? r.lastOutputAt) || ""
     });
     const [certHistory, setCertHistory] = useState(loadCertHistory);
-    useEffect(() => {
-      const loadFromDB = async () => {
-        try {
-          const { data, error } = await sbGet("cert_issuances", "select=*&order=issued_at.desc&limit=2000");
-          if (error) {
-            setCertDbStatus("error");
-            setCertDbError(error.message || JSON.stringify(error));
-            return;
-          }
-          setCertDbStatus("ok");
-          setCertDbError("");
-          if (data && data.length > 0) {
-            const hist = data.map(normalizeHistoryRecord);
-            setCertHistory(hist);
-            saveCertHistory(hist);
-          }
-        } catch (e) {
-          console.warn("\uBC1C\uAE09\uC774\uB825 DB \uB85C\uB4DC \uC624\uB958:", e);
+    const [lastSyncedAt, setLastSyncedAt] = useState(null);
+    const loadFromDB = React.useCallback(async () => {
+      setCertDbStatus("loading");
+      setCertDbError("");
+      try {
+        const { data, error } = await sbGet("cert_issuances", "select=*&order=issued_at.desc&limit=2000");
+        if (error) {
           setCertDbStatus("error");
-          setCertDbError(e.message || String(e));
+          setCertDbError(error.message || JSON.stringify(error));
+          return;
         }
-      };
-      loadFromDB();
+        setCertDbStatus("ok");
+        setCertDbError("");
+        setLastSyncedAt(/* @__PURE__ */ new Date());
+        if (data) {
+          const hist = data.map(normalizeHistoryRecord);
+          setCertHistory(hist);
+          saveCertHistory(hist);
+        }
+      } catch (e) {
+        console.warn("\uBC1C\uAE09\uC774\uB825 DB \uB85C\uB4DC \uC624\uB958:", e);
+        setCertDbStatus("error");
+        setCertDbError(e.message || String(e));
+      }
     }, []);
+    useEffect(() => {
+      loadFromDB();
+    }, [loadFromDB]);
     useEffect(() => {
       if (!ENABLE_REALTIME) return;
       realtimeManager.subscribe("cert_issuances", {
@@ -6333,7 +6438,22 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       color: certDbStatus === "error" ? T.danger : certDbStatus === "loading" ? "#B45309" : "#15803D",
       fontSize: 11,
       fontWeight: 700
-    } }, /* @__PURE__ */ React.createElement("span", null, certDbStatus === "error" ? "\u26A0" : certDbStatus === "loading" ? "\u23F3" : "\u25CF"), /* @__PURE__ */ React.createElement("span", null, certDbStatus === "error" ? "\uBC1C\uAE09\uC774\uB825 DB \uB3D9\uAE30\uD654 \uC2E4\uD328" : certDbStatus === "loading" ? "\uBC1C\uAE09\uC774\uB825 DB \uD655\uC778 \uC911" : "\uBC1C\uAE09\uC774\uB825 Supabase \uB3D9\uAE30\uD654 \uC815\uC0C1"), certDbError && /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, certDbError)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } }, [
+    } }, /* @__PURE__ */ React.createElement("span", null, certDbStatus === "error" ? "\u26A0" : certDbStatus === "loading" ? "\u23F3" : "\u25CF"), /* @__PURE__ */ React.createElement("span", null, certDbStatus === "error" ? "\uBC1C\uAE09\uC774\uB825 DB \uB3D9\uAE30\uD654 \uC2E4\uD328" : certDbStatus === "loading" ? "\uBC1C\uAE09\uC774\uB825 DB \uD655\uC778 \uC911" : "\uBC1C\uAE09\uC774\uB825 Supabase \uB3D9\uAE30\uD654 \uC815\uC0C1"), certDbError && /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, certDbError), lastSyncedAt && certDbStatus === "ok" && /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, fontWeight: 400, marginLeft: 4 } }, "\xB7 \uB9C8\uC9C0\uB9C9 \uB3D9\uAE30\uD654: ", lastSyncedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })), /* @__PURE__ */ React.createElement("button", { onClick: loadFromDB, disabled: certDbStatus === "loading", style: {
+      marginLeft: "auto",
+      padding: "4px 12px",
+      borderRadius: 8,
+      border: `1px solid currentColor`,
+      background: "transparent",
+      cursor: certDbStatus === "loading" ? "default" : "pointer",
+      fontSize: 11,
+      fontWeight: 700,
+      color: "inherit",
+      opacity: certDbStatus === "loading" ? 0.5 : 1,
+      display: "flex",
+      alignItems: "center",
+      gap: 4,
+      whiteSpace: "nowrap"
+    } }, "\u{1F504} \uC0C8\uB85C\uACE0\uCE68")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } }, [
       { id: "cert", label: "\u{1F4CB} \uC218 \uB8CC \uC99D", sub: "\uCD9C\uC11D\uB960 80% \uC774\uC0C1" },
       { id: "attend", label: "\u{1F4C4} \uC218\uAC15\uC99D\uBA85\uC11C(\uACE0\uC6A9\uB178\uB3D9\uBD80)", sub: "\uC218\uAC15\uC790 \uC804\uCCB4" },
       { id: "parti", label: "\u{1F4C3} \uC218\uAC15\uC99D\uBA85\uC11C(\uC790\uCCB4)", sub: "\uCD5C\uC885 \uC120\uBC1C \uCC38\uC5EC\uC790" }
@@ -6715,8 +6835,8 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       } }, s.rate, "%")), /* @__PURE__ */ React.createElement("td", { style: { padding: "12px 14px", textAlign: "center", fontSize: 11, fontFamily: "monospace" } }, cert ? /* @__PURE__ */ React.createElement("span", { style: { color: T.p, fontWeight: 700 } }, fullNo) : /* @__PURE__ */ React.createElement("span", { style: { color: T.bd } }, "\uBBF8\uBC1C\uAE09 (\uC608\uC815: ", fullNo, ")")), /* @__PURE__ */ React.createElement("td", { style: { padding: "12px 14px", textAlign: "center" } }, /* @__PURE__ */ React.createElement(Chip, { label: cert ? "\uBC1C\uAE09\uC644\uB8CC" : "\uBBF8\uBC1C\uAE09", bg: cert ? T.pbg : T.s3, color: cert ? T.p : T.mu }), cert && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: T.mu, marginTop: 2 } }, cert.date)), /* @__PURE__ */ React.createElement("td", { style: { padding: "12px 14px", textAlign: "center" } }, /* @__PURE__ */ React.createElement(Btn, { size: "sm", variant: cert ? "ghost" : "primary", onClick: () => handleIssue(s) }, /* @__PURE__ */ React.createElement(Icon, { n: "dl", s: 12 }), cert ? "\uC7AC\uCD9C\uB825" : "PDF \uBC1C\uAE09")));
     })))));
   };
-  const FLD = ({ label, required, children }) => /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, label, required && /* @__PURE__ */ React.createElement("span", { style: { color: T.danger, marginLeft: 2 } }, "*")), children);
-  const PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = "portrait", meta = {} }) => {
+  var FLD = ({ label, required, children }) => /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, label, required && /* @__PURE__ */ React.createElement("span", { style: { color: T.danger, marginLeft: 2 } }, "*")), children);
+  var PrintPreviewModal = ({ isOpen, onClose, docHtml, docType, orientation = "portrait", meta = {} }) => {
     const [zoom, setZoom] = useState(100);
     const [exporting, setExporting] = useState(false);
     const iframeRef = useRef(null);
@@ -6876,7 +6996,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       }
     ))));
   };
-  const StatusChangeDialog = ({ student, course, onStatusChanged, onClose, currentUser }) => {
+  var StatusChangeDialog = ({ student, course, onStatusChanged, onClose, currentUser }) => {
     const currentStatus = student.enrollmentStatus || "\uC7AC\uD559\uC911";
     const allowedStatuses = VALID_TRANSITIONS[currentStatus] || [];
     const [newStatus, setNewStatus] = useState(allowedStatuses[0] || "");
@@ -7042,7 +7162,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       } }, saving ? "\uC800\uC7A5 \uC911\u2026" : "\uC0C1\uD0DC \uBCC0\uACBD")))))
     );
   };
-  const EmploymentQuickDialog = ({ student, onSave, onClose }) => {
+  var EmploymentQuickDialog = ({ student, onSave, onClose }) => {
     const initialStatus = getEffectiveEmploymentStatus(student);
     const [status, setStatus] = useState(initialStatus);
     const [employerName, setEmployerName] = useState(student.employerName || "");
@@ -7159,7 +7279,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { onClick: submit, disabled: saving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " ", saving ? "\uC800\uC7A5 \uC911\u2026" : "\uC800\uC7A5")))
     );
   };
-  const EditModal = ({ student, onSave, onClose, isNew = false, courses = COURSES }) => {
+  var EditModal = ({ student, onSave, onClose, isNew = false, courses = COURSES }) => {
     const empty = {
       cid: courses[0]?.id || 1,
       name: "",
@@ -7374,7 +7494,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       } }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " ", isNew ? "\uB4F1\uB85D" : "\uC800\uC7A5")))
     );
   };
-  const SEED_INSTRUCTORS = [
+  var SEED_INSTRUCTORS = [
     {
       id: 1,
       name: "\uAE40\uBBFC\uC900",
@@ -7530,7 +7650,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       hourlyRate: 0
     }
   ];
-  const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
+  var InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
     const empty = { name: "", type: "\uC8FC\uAC15\uC0AC", category: "\uACBD\uAE30\uB3C4 \uAC15\uC0AC", subject: "", phone: "", email: "", career: "", cert: "", cids: [], note: "", hourlyRate: 0, customDates: {} };
     const [form, setForm] = useState(inst ? { ...inst, cids: inst.cids || [], customDates: inst.customDates || {} } : empty);
     const [isSaving, setIsSaving] = useState(false);
@@ -7654,7 +7774,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       }, disabled: isSaving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), isSaving ? "\uC800\uC7A5 \uC911..." : isNew ? "\uCD94\uAC00" : "\uC800\uC7A5")))
     );
   };
-  const InstructorMgmt = ({ courses, onUpdateCourse }) => {
+  var InstructorMgmt = ({ courses, onUpdateCourse }) => {
     const [instructors, setInst] = useState(SEED_INSTRUCTORS);
     const [editTarget, setEdit] = useState(null);
     const [isNew, setIsNew] = useState(false);
@@ -8415,7 +8535,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       justifyContent: "center"
     } }, /* @__PURE__ */ React.createElement(Icon, { n: "plus", s: 20 })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.mu } }, "\uAC15\uC0AC \uCD94\uAC00"))));
   };
-  const SEED_ROOMS = [
+  var SEED_ROOMS = [
     // 1층
     { id: 1, floor: 1, name: "\uB4DC\uB9BC\uC2A4\uD29C\uB514\uC624", addr: "1\uCE35", capacity: 2, equip: "\uAC1C\uC778 \uC791\uC5C5 \uACF5\uAC04 (1/2\uC778\uC2E4)" },
     { id: 2, floor: 1, name: "\uC5B4\uC6B8\uB9BC\uD640", addr: "1\uCE35", capacity: 25, equip: "\uBE54\uD504\uB85C\uC81D\uD130\xB7\uAC15\uC758\uB300\xB7\uC74C\uD5A5" },
@@ -8436,7 +8556,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
     { id: 15, floor: 3, name: "\uC77C\uBC18\uAD50\uC721\uC7A5 306\uD638", addr: "3\uCE35 306\uD638", capacity: 25, equip: "\uBE54\uD504\uB85C\uC81D\uD130\xB7\uD654\uC774\uD2B8\uBCF4\uB4DC" },
     { id: 16, floor: 3, name: "\uBD84\uC784\uD1A0\uC758\uC2E4", addr: "3\uCE35", capacity: 15, equip: "\uC6D0\uD615 \uD14C\uC774\uBE14\xB7\uD654\uC774\uD2B8\uBCF4\uB4DC" }
   ];
-  const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSave, onDelete }) => {
+  var BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSave, onDelete }) => {
     const inp = {
       width: "100%",
       padding: "8px 10px",
@@ -8625,7 +8745,7 @@ ${conflicts.map((b) => `\u2022 ${b.label} (${b.start}~${b.end})`).join("\n")}
       } }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), hasConflict ? "\u26A0\uFE0F \uAC15\uD589 \uC800\uC7A5" : isEdit ? "\uC800\uC7A5" : "\uCD94\uAC00"))))
     );
   };
-  const RoomModal = ({ room, onClose, setRooms, onSave }) => {
+  var RoomModal = ({ room, onClose, setRooms, onSave }) => {
     const inp = {
       width: "100%",
       padding: "8px 10px",
@@ -8711,8 +8831,8 @@ ${conflicts.map((b) => `\u2022 ${b.label} (${b.start}~${b.end})`).join("\n")}
       } }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), isEdit ? "\uC800\uC7A5" : "\uCD94\uAC00"))))
     );
   };
-  const BOOKING_COLORS = ["#EA580C", "#C2410C", "#7C2D12", "#9A3412", "#DC2626", "#2563EB", "#7C3AED", "#059669"];
-  const COURSE_PALETTE = [
+  var BOOKING_COLORS = ["#EA580C", "#C2410C", "#7C2D12", "#9A3412", "#DC2626", "#2563EB", "#7C3AED", "#059669"];
+  var COURSE_PALETTE = [
     "#2563EB",
     "#7C3AED",
     "#059669",
@@ -8729,13 +8849,13 @@ ${conflicts.map((b) => `\u2022 ${b.label} (${b.start}~${b.end})`).join("\n")}
     "#B45309",
     "#6D28D9"
   ];
-  const getCourseColor = (courseId, courses) => {
+  var getCourseColor = (courseId, courses) => {
     const idx = courses.findIndex((c) => c.id === courseId);
     return COURSE_PALETTE[(idx >= 0 ? idx : 0) % COURSE_PALETTE.length];
   };
-  const TAB_PILL_SHADOW = `0 1px 6px rgba(0,0,0,.10),0 0 0 1px rgba(234,88,12,.18)`;
-  let _idCounter = Date.now();
-  const RoomGanttChart = ({ rooms, bookings, courses, onEditBook, year, month, prevMonth, nextMonth, goToday }) => {
+  var TAB_PILL_SHADOW = `0 1px 6px rgba(0,0,0,.10),0 0 0 1px rgba(234,88,12,.18)`;
+  var _idCounter = Date.now();
+  var RoomGanttChart = ({ rooms, bookings, courses, onEditBook, year, month, prevMonth, nextMonth, goToday }) => {
     const today = /* @__PURE__ */ new Date();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const MONTH_KR = ["1\uC6D4", "2\uC6D4", "3\uC6D4", "4\uC6D4", "5\uC6D4", "6\uC6D4", "7\uC6D4", "8\uC6D4", "9\uC6D4", "10\uC6D4", "11\uC6D4", "12\uC6D4"];
@@ -8851,7 +8971,7 @@ ${conflicts.map((b) => `\u2022 ${b.label} (${b.start}~${b.end})`).join("\n")}
       );
     }))), bookings.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 } }, [...new Map(bookings.map((b) => [b.label, b])).values()].map((b) => /* @__PURE__ */ React.createElement("div", { key: b.label, style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: 3, background: b.color, flexShrink: 0 } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu } }, b.label))))));
   };
-  const RoomMgmt = ({ courses }) => {
+  var RoomMgmt = ({ courses }) => {
     const today = /* @__PURE__ */ new Date();
     const [year, setYear] = useState(today.getFullYear());
     const [month, setMonth] = useState(today.getMonth());
@@ -9370,7 +9490,7 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
       }
     ));
   };
-  const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) => {
+  var DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) => {
     const [tab, setTab] = useState("status");
     const [selCid, setSelCid] = useState(courses[0]?.id || 0);
     const [confirmAll, setConfirmAll] = useState(false);
@@ -9746,12 +9866,12 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
       } }, "\uB124, \uC804\uCCB4 \uC0AD\uC81C\uD569\uB2C8\uB2E4")))))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, textAlign: "center", padding: "4px 0" } }, "\u{1F4A1} \uCD08\uAE30\uD654 \uC804\uC5D0 \uBC18\uB4DC\uC2DC \uBC31\uC5C5\uC744 \uBA3C\uC800 \uBC1B\uC544\uB450\uC138\uC694"))))
     );
   };
-  const INIT_ACCOUNTS = [
+  var INIT_ACCOUNTS = [
     { id: 1, name: "\uAD00\uB9AC\uC790", role: "admin", pw: "admin1234" },
     { id: 2, name: "\uAE40\uB2F4\uB2F9", role: "staff", pw: "gjf2026" },
     { id: 3, name: "\uC774\uB2F4\uB2F9", role: "staff", pw: "gjf2026" }
   ];
-  const LoginScreen = ({ onLogin, accounts }) => {
+  var LoginScreen = ({ onLogin, accounts }) => {
     const [selId, setSelId] = useState(accounts[0]?.id || 1);
     const [pw, setPw] = useState("");
     const [showPw, setShowPw] = useState(false);
@@ -9937,8 +10057,8 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
       letterSpacing: "1px"
     } }, "\uB85C\uADF8\uC778"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, fontSize: 10, color: T.mu, textAlign: "center" } }, "\uBE44\uBC00\uBC88\uD638 \uBD84\uC2E4 \uC2DC \uAD00\uB9AC\uC790\uC5D0\uAC8C \uBB38\uC758\uD558\uC138\uC694 \xB7 \uCD08\uAE30 \uBE44\uBC00\uBC88\uD638: ", /* @__PURE__ */ React.createElement("code", { style: { background: T.s3, padding: "1px 5px", borderRadius: 4 } }, "gjf2026"))), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginTop: 16, fontSize: 10, color: "rgba(255,255,255,.4)" } }, "\xA9 2026 \uACBD\uAE30\uB3C4\uC77C\uC790\uB9AC\uC7AC\uB2E8 \uBD81\uBD80\uC0AC\uC5C5\uBCF8\uBD80 \xB7 \uAC1C\uC778\uC815\uBCF4\uBCF4\uD638 \uC2DC\uC2A4\uD15C")));
   };
-  const MAX_VISIBLE_LOGS = 100;
-  const AuditLogTab = ({ auditLog }) => {
+  var MAX_VISIBLE_LOGS = 100;
+  var AuditLogTab = ({ auditLog }) => {
     const [logFilter, setLogFilter] = useState({ who: "all", days: 30, q: "" });
     const [detailLog, setDetailLog] = useState(null);
     const cutoff = new Date(Date.now() - logFilter.days * 864e5).toISOString().slice(0, 16).replace("T", " ");
@@ -10114,7 +10234,7 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
       )
     )), visible.length > MAX_VISIBLE_LOGS && /* @__PURE__ */ React.createElement("div", { style: { padding: "10px 12px", textAlign: "center", fontSize: 11, color: T.mu, background: T.s2 } }, "\uCD5C\uADFC ", MAX_VISIBLE_LOGS, "\uAC74\uB9CC \uD45C\uC2DC (\uC804\uCCB4 ", visible.length, "\uAC74)")));
   };
-  const AccountMgmt = ({ accounts, onSave, onClose, currentUser, auditLog = [] }) => {
+  var AccountMgmt = ({ accounts, onSave, onClose, currentUser, auditLog = [] }) => {
     const [list, setList] = useState(accounts.map((a) => ({ ...a })));
     const [editIdx, setEditIdx] = useState(null);
     const [newPw, setNewPw] = useState("");
@@ -10450,7 +10570,7 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
       } }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " \uBCC0\uACBD\uC0AC\uD56D \uC800\uC7A5") : /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uB2EB\uAE30")))
     );
   };
-  const ProgressMgmt = ({ students, courses }) => {
+  var ProgressMgmt = ({ students, courses }) => {
     const today = /* @__PURE__ */ new Date();
     const todayStr = today.toISOString().slice(0, 10);
     const [filterStatus, setFilterStatus] = useState("\uC804\uCCB4");
@@ -10681,7 +10801,7 @@ ${formatCoursePeriod(c)}
       } }, c.status)));
     })))));
   };
-  const NAV_ITEMS = [
+  var NAV_ITEMS = [
     { id: "dash", label: "\uB300\uC2DC\uBCF4\uB4DC", icon: "dash" },
     { id: "courses", label: "\uACFC\uC815 \uD604\uD669", icon: "book" },
     { id: "progress", label: "\uC9C4\uD589\uACBD\uACFC", icon: "cal" },
@@ -10692,7 +10812,7 @@ ${formatCoursePeriod(c)}
     { id: "completion", label: "\uC218\uB8CC \uAD00\uB9AC", icon: "check" },
     { id: "cert", label: "\uC99D\uBA85\uC11C \uBC1C\uAE09", icon: "dl" }
   ];
-  const MobileCheckin = () => {
+  var MobileCheckin = () => {
     const params = new URLSearchParams(window.location.search);
     const cidParam = params.get("cid");
     const cidNum = Number(cidParam);
@@ -11157,7 +11277,7 @@ ${formatCoursePeriod(c)}
     )));
     return null;
   };
-  class RealtimeManager {
+  var RealtimeManager = class {
     constructor() {
       this.subscriptions = /* @__PURE__ */ new Map();
       this._refCount = 0;
@@ -11282,9 +11402,9 @@ ${formatCoursePeriod(c)}
       });
       this.subscriptions.clear();
     }
-  }
-  const realtimeManager = new RealtimeManager();
-  const SyncPanel = ({ dbStatus = "loading", rtStatus = "pending", lastOp = null, count = 0 }) => {
+  };
+  var realtimeManager = new RealtimeManager();
+  var SyncPanel = ({ dbStatus = "loading", rtStatus = "pending", lastOp = null, count = 0 }) => {
     const row = (icon, label, ok, pending, msg) => {
       const color = ok ? "#16A34A" : pending ? "#F59E0B" : "#DC2626";
       const bg = ok ? "#F0FDF4" : pending ? "#FFFBEB" : "#FEF2F2";
@@ -12149,6 +12269,6 @@ ${msg}`;
       whiteSpace: "nowrap"
     } }, "\uAD00\uB9AC\uC790")))), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "18px 20px" } }, renderPage())))));
   }
-  const root = ReactDOM.createRoot(document.getElementById("root"));
+  var root = ReactDOM.createRoot(document.getElementById("root"));
   root.render(/* @__PURE__ */ React.createElement(App, null));
 })();

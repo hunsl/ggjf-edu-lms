@@ -4502,30 +4502,68 @@ const AttendanceSheet = ({ course, courses, students }) => {
    COMPLETION
 =========================================================== */
 const CompletionMgmt = ({ students, courses }) => {
-  const [course, setCourse] = useState(courses[3] || courses[0]);
+  const [course, setCourse] = useState(courses[0]);
   const [threshold, setThr] = useState(80);
   const [overrides, setOvr] = useState({});
   const [confirming, setConfirming] = useState(false);
   const [showConfirmed, setShowConfirmed] = useState(true);
 
+  const courseStats = useMemo(() => courses.map(c => {
+    const all = students.filter(s => sameId(s.cid, c.id));
+    const confirmed = all.filter(s => ['수료', '조기취업 수료'].includes(s.enrollmentStatus || ''));
+    const dropout = all.filter(s => (s.enrollmentStatus || '') === '중도탈락');
+    const pending = all.filter(s => !['수료', '조기취업 수료', '중도탈락'].includes(s.enrollmentStatus || ''));
+    const autoComplete = pending.filter(s => {
+      if ((s.enrollmentStatus || '') === '조기취업' && s.rate >= threshold) return true;
+      return Number(s.rate || 0) >= threshold;
+    });
+    return {
+      course: c,
+      total: all.length,
+      confirmed: confirmed.length,
+      pending: pending.length,
+      dropout: dropout.length,
+      autoComplete: autoComplete.length,
+      incomplete: Math.max(0, pending.length - autoComplete.length),
+    };
+  }), [courses, students, threshold]);
+
+  const totalSummary = courseStats.reduce((acc, s) => ({
+    total: acc.total + s.total,
+    confirmed: acc.confirmed + s.confirmed,
+    pending: acc.pending + s.pending,
+    dropout: acc.dropout + s.dropout,
+    autoComplete: acc.autoComplete + s.autoComplete,
+    incomplete: acc.incomplete + s.incomplete,
+  }), { total:0, confirmed:0, pending:0, dropout:0, autoComplete:0, incomplete:0 });
+
+  const preferredCourse = () => {
+    const withConfirmed = courseStats.find(s => s.confirmed > 0)?.course;
+    const withStudents = courseStats.find(s => s.total > 0)?.course;
+    return withConfirmed || withStudents || courses[0];
+  };
+
   // courses prop 변경(실시간 업데이트/편집) 시 선택 과정 최신 데이터로 동기화
   useEffect(() => {
     if (!courses.length) return;
     setCourse(prev => {
-      if (!prev) return courses[0];
+      if (!prev) return preferredCourse();
       const updated = courses.find(c => c.id === prev.id);
-      return updated || courses[0];
+      if (!updated) return preferredCourse();
+      const selectedStats = courseStats.find(s => sameId(s.course.id, updated.id));
+      if (selectedStats && selectedStats.total > 0) return updated;
+      return preferredCourse() || updated;
     });
-  }, [courses]);
+  }, [courses, students, threshold]);
 
   if (!course) return null;
   // 이미 수료 확정된 학생 (별도 목록)
   const confirmedList = students.filter(s => {
-    if (s.cid !== course.id) return false;
+    if (!sameId(s.cid, course.id)) return false;
     return s.enrollmentStatus === '수료' || s.enrollmentStatus === '조기취업 수료';
   });
   const list = students.filter(s => {
-    if (s.cid !== course.id) return false;
+    if (!sameId(s.cid, course.id)) return false;
     if (s.enrollmentStatus === '중도탈락') return false; // 중도탈락 제외
     if (s.enrollmentStatus === '수료' || s.enrollmentStatus === '조기취업 수료') return false; // 확정된 수료자는 판정 목록에서 제외
     return true;
@@ -4536,7 +4574,9 @@ const CompletionMgmt = ({ students, courses }) => {
     return s.rate >= threshold ? '수료' : '미수료';
   };
   const completed = list.filter(s => get(s) === '수료' || get(s) === '조기취업 수료').length;
-  const rate = list.length ? Math.round(completed/list.length*100) : 0;
+  const visibleDenom = list.length + confirmedList.length;
+  const visibleCompleted = completed + confirmedList.length;
+  const rate = visibleDenom ? Math.round(visibleCompleted/visibleDenom*100) : 0;
 
   // 학생별 총 예정시간 계산 (조기취업은 비례 시간)
   const getStudentTotalHours = s => {
@@ -4588,15 +4628,71 @@ const CompletionMgmt = ({ students, courses }) => {
 
       <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
         {courses.map(c=>(
+          (() => {
+            const st = courseStats.find(s => sameId(s.course.id, c.id)) || {};
+            return (
           <button key={c.id} onClick={()=>setCourse(c)} style={{
             padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer",
             fontSize:11, fontWeight:600, whiteSpace:"nowrap",
             background: course.id===c.id ? c.cc : T.s3,
             color: course.id===c.id ? "#fff" : T.mu }}>
             {shortCourseName(c.name)}
+            {st.total > 0 && (
+              <span style={{
+                marginLeft:6, padding:"1px 6px", borderRadius:999,
+                background:course.id===c.id ? "rgba(255,255,255,.2)" : "#fff",
+                color:course.id===c.id ? "#fff" : T.mu, fontSize:10 }}>
+                {st.confirmed || 0}/{st.total}
+              </span>
+            )}
           </button>
+            );
+          })()
         ))}
       </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:10, marginBottom:14 }}>
+        {[
+          { label:"전체 훈련생", value:totalSummary.total, sub:"수료관리 대상 과정 합계", color:T.tx },
+          { label:"수료 확정", value:totalSummary.confirmed, sub:"DB 저장 완료", color:"#15803D" },
+          { label:"판정 대기", value:totalSummary.pending, sub:`자동 수료권 ${totalSummary.autoComplete}명`, color:T.p },
+          { label:"미수료 예상", value:totalSummary.incomplete, sub:`기준 ${threshold}% 미만`, color:T.danger },
+          { label:"중도탈락", value:totalSummary.dropout, sub:"판정 제외", color:T.mu },
+        ].map(x=>(
+          <Card key={x.label} style={{ padding:"13px 16px" }}>
+            <div style={{ fontSize:11, color:T.mu, fontWeight:700 }}>{x.label}</div>
+            <div style={{ fontSize:24, fontWeight:900, color:x.color, lineHeight:1.1, marginTop:4 }}>{x.value}명</div>
+            <div style={{ fontSize:10, color:T.mu, marginTop:4 }}>{x.sub}</div>
+          </Card>
+        ))}
+      </div>
+
+      <Card style={{ padding:"14px 16px", marginBottom:14, background:"#FAFCFF" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+          <span style={{ fontSize:13, fontWeight:850, color:T.tx }}>수료 과정 현황</span>
+          <span style={{ fontSize:11, color:T.mu }}>수료 확정 인원이 있는 과정과 판정 대기 인원을 한 번에 확인합니다.</span>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:8 }}>
+          {courseStats.filter(s => s.total > 0).map(s=>(
+            <button key={s.course.id} onClick={()=>setCourse(s.course)} style={{
+              textAlign:"left", border:`1px solid ${sameId(course.id, s.course.id) ? s.course.cc : T.bd}`,
+              background:sameId(course.id, s.course.id) ? `${s.course.cc}12` : "#fff",
+              borderRadius:10, padding:"10px 12px", cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}>
+                <span style={{ width:8, height:8, borderRadius:"50%", background:s.course.cc, flex:"0 0 auto" }}/>
+                <span style={{ fontSize:12, fontWeight:800, color:T.tx, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {s.course.name}
+                </span>
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                <Chip label={`확정 ${s.confirmed}명`} bg="#DCFCE7" color="#15803D" size={10}/>
+                <Chip label={`대기 ${s.pending}명`} bg={T.pbg} color={T.p} size={10}/>
+                {s.dropout > 0 && <Chip label={`탈락 ${s.dropout}명`} bg="#F1F5F9" color={T.mu} size={10}/>}
+              </div>
+            </button>
+          ))}
+        </div>
+      </Card>
 
       {/* 컨트롤 */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto", gap:12, marginBottom:18 }}>
@@ -4629,7 +4725,7 @@ const CompletionMgmt = ({ students, courses }) => {
         <Card style={{ padding:"16px 22px", textAlign:"center" }}>
           <div style={{ fontSize:11, color:T.mu }}>수료율</div>
           <div style={{ fontSize:32, fontWeight:900, color:rate>=90?T.p:T.danger, lineHeight:1.1 }}>{rate}%</div>
-          <div style={{ fontSize:11, color:T.mu }}>{completed}/{list.length}명</div>
+          <div style={{ fontSize:11, color:T.mu }}>{visibleCompleted}/{visibleDenom}명</div>
           {confirmedList.length > 0 && (
             <div style={{ fontSize:10, color:"#15803D", marginTop:3, fontWeight:600 }}>+{confirmedList.length}명 확정완료</div>
           )}
@@ -4739,6 +4835,14 @@ const CompletionMgmt = ({ students, courses }) => {
               </tbody>
             </table>
           )}
+        </Card>
+      )}
+
+      {list.length === 0 && confirmedList.length === 0 && (
+        <Card style={{ padding:"30px 20px", textAlign:"center", color:T.mu }}>
+          <div style={{ fontSize:30, marginBottom:8 }}>📭</div>
+          <div style={{ fontSize:15, fontWeight:800, color:T.tx, marginBottom:4 }}>선택 과정의 수료관리 대상자가 없습니다.</div>
+          <div style={{ fontSize:12 }}>상단의 과정별 현황에서 수료 확정 또는 판정 대기 인원이 있는 과정을 선택하세요.</div>
         </Card>
       )}
 

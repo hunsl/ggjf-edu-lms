@@ -1185,15 +1185,27 @@ var GgjfEduLms = (() => {
     a.click();
   };
   var isDropoutStudent = (s) => (s?.enrollmentStatus || "") === "\uC911\uB3C4\uD0C8\uB77D";
+  var localDateStr = (d = /* @__PURE__ */ new Date()) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   var Dashboard = ({ students, courses }) => {
-    const today = /* @__PURE__ */ new Date();
-    const todayStr = today.toISOString().slice(0, 10);
-    const tomorrowStr = new Date(today.getTime() + 864e5).toISOString().slice(0, 10);
+    const [clock, setClock] = useState(/* @__PURE__ */ new Date());
+    const today = clock;
+    const todayStr = localDateStr(today);
+    const tomorrowStr = localDateStr(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
     const [instructors, setInstructors] = useState(SEED_INSTRUCTORS);
     const [dashRooms, setDashRooms] = useState(SEED_ROOMS);
     const [bookings, setBookings2] = useState([]);
     const [todayAtt, setTodayAtt] = useState({});
     const [loadTick, setLoadTick] = useState(0);
+    const [lastLiveLoad, setLastLiveLoad] = useState(null);
+    useEffect(() => {
+      const timer = setInterval(() => setClock(/* @__PURE__ */ new Date()), 3e4);
+      return () => clearInterval(timer);
+    }, []);
     useEffect(() => {
       let cancelled = false;
       const load = async () => {
@@ -1221,11 +1233,16 @@ var GgjfEduLms = (() => {
             attRes.data.forEach((r) => {
               const cid = sidToCid[r.student_id];
               if (!cid) return;
-              if (!map[cid]) map[cid] = { present: 0, absent: 0 };
+              if (!map[cid]) map[cid] = { present: 0, late: 0, absent: 0, unknown: 0 };
               if (r.status === "O") map[cid].present++;
+              else if (r.status === "L") map[cid].late++;
               else if (r.status === "A") map[cid].absent++;
+              else map[cid].unknown++;
             });
-            if (!cancelled) setTodayAtt(map);
+            if (!cancelled) {
+              setTodayAtt(map);
+              setLastLiveLoad(/* @__PURE__ */ new Date());
+            }
           }
         } catch {
         }
@@ -1236,7 +1253,64 @@ var GgjfEduLms = (() => {
         cancelled = true;
         clearInterval(timer);
       };
-    }, [loadTick, students]);
+    }, [loadTick, students, todayStr]);
+    useEffect(() => {
+      if (!ENABLE_REALTIME) return;
+      let intentionallyClosed = false;
+      let heartbeatId = null;
+      let ws = null;
+      let retryDelay = 2e3;
+      let ref = 0;
+      const joinRef = String(++ref);
+      const send = (obj) => {
+        if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+      };
+      const connect = () => {
+        if (intentionallyClosed) return;
+        ws = new WebSocket(
+          `wss://${SB_URL.replace("https://", "")}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+        );
+        ws.onopen = () => {
+          retryDelay = 2e3;
+          send({
+            topic: "realtime:public:attendance",
+            event: "phx_join",
+            payload: {
+              config: {
+                broadcast: { self: false },
+                presence: { key: "" },
+                postgres_changes: [{ event: "*", schema: "public", table: "attendance", filter: `date=eq.${todayStr}` }]
+              },
+              access_token: SB_KEY
+            },
+            ref: joinRef,
+            join_ref: joinRef
+          });
+          heartbeatId = setInterval(() => send({ topic: "phoenix", event: "heartbeat", payload: {}, ref: String(++ref) }), 25e3);
+        };
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.event === "postgres_changes") setLoadTick((t) => t + 1);
+          } catch {
+          }
+        };
+        ws.onclose = () => {
+          clearInterval(heartbeatId);
+          heartbeatId = null;
+          if (!intentionallyClosed) {
+            setTimeout(connect, retryDelay);
+            retryDelay = Math.min(retryDelay * 2, 3e4);
+          }
+        };
+      };
+      connect();
+      return () => {
+        intentionallyClosed = true;
+        clearInterval(heartbeatId);
+        ws?.close();
+      };
+    }, [todayStr]);
     const DAY_MAP2 = { \uC77C: 0, \uC6D4: 1, \uD654: 2, \uC218: 3, \uBAA9: 4, \uAE08: 5, \uD1A0: 6 };
     const isTodayClass = (c) => {
       if (!c.dateFrom) return false;
@@ -1283,11 +1357,11 @@ var GgjfEduLms = (() => {
     liveCourses.forEach((c) => {
       const cs = students.filter((s) => s.cid === c.id && !isDropoutStudent(s));
       const att = todayAtt[c.id] || {};
-      const confirmed = (att.present || 0) + (att.absent || 0);
+      const confirmed = (att.present || 0) + (att.late || 0) + (att.absent || 0) + (att.unknown || 0);
       if (confirmed > 0 && cs.length > 0) {
-        const presentPct = Math.round((att.present || 0) / cs.length * 100);
+        const presentPct = Math.round(((att.present || 0) + (att.late || 0)) / cs.length * 100);
         if (presentPct < 50) {
-          alerts.push({ level: "danger", msg: `[${c.name}] \uC624\uB298 \uCD9C\uC11D\uB960 \uBBF8\uB2EC(${presentPct}%) \u2014 \uBBF8\uCD9C\uC11D ${cs.length - (att.present || 0)}\uBA85` });
+          alerts.push({ level: "danger", msg: `[${c.name}] \uC624\uB298 \uCD9C\uC11D\uB960 \uBBF8\uB2EC(${presentPct}%) \u2014 \uBBF8\uD655\uC778/\uACB0\uC11D ${Math.max(0, cs.length - ((att.present || 0) + (att.late || 0)))}\uBA85` });
         }
       }
     });
@@ -1304,50 +1378,100 @@ var GgjfEduLms = (() => {
       color: "#fff",
       boxShadow: "0 8px 32px rgba(234,88,12,.35)",
       animation: "heroGlow 4s ease-in-out infinite"
-    } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", background: "rgba(255,255,255,.07)", pointerEvents: "none" } }), /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", bottom: -50, right: 100, width: 120, height: 120, borderRadius: "50%", background: "rgba(255,255,255,.05)", pointerEvents: "none" } }), /* @__PURE__ */ React.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, letterSpacing: 2.5, opacity: 0.7, marginBottom: 5, textTransform: "uppercase" } }, "\uACBD\uAE30\uB3C4\uC77C\uC790\uB9AC\uC7AC\uB2E8 \uBD81\uBD80\uC0AC\uC5C5\uBCF8\uBD80 \uBD81\uBD80\uAD50\uC721\uD300"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, letterSpacing: "-.5px" } }, "\uC77C\uC77C \uC6B4\uC601 \uCEE8\uD2B8\uB864 \uD0C0\uC6CC"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, opacity: 0.8 } }, "\u{1F4C5} ", todayStr, " \uAE30\uC900"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, opacity: 0.8 } }, "\u{1F4DA} ", courses.length, "\uAC1C \uACFC\uC815 \uC6B4\uC601"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, opacity: 0.8 } }, "\u{1F465} \uD6C8\uB828\uC0DD ", students.length, "\uBA85"), liveCourses.length > 0 && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, background: "rgba(255,255,255,.2)", borderRadius: 20, padding: "1px 10px", fontWeight: 700 } }, "\uC624\uB298 ", liveCourses.length, "\uAC1C \uAC15\uC758 \uC9C4\uD589\uC911")))), /* @__PURE__ */ React.createElement(Card, { style: { padding: 22, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, marginBottom: 14, display: "flex", gap: 8, alignItems: "center" } }, /* @__PURE__ */ React.createElement("span", { style: {
+    } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", background: "rgba(255,255,255,.07)", pointerEvents: "none" } }), /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", bottom: -50, right: 100, width: 120, height: 120, borderRadius: "50%", background: "rgba(255,255,255,.05)", pointerEvents: "none" } }), /* @__PURE__ */ React.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, letterSpacing: 2.5, opacity: 0.7, marginBottom: 5, textTransform: "uppercase" } }, "\uACBD\uAE30\uB3C4\uC77C\uC790\uB9AC\uC7AC\uB2E8 \uBD81\uBD80\uC0AC\uC5C5\uBCF8\uBD80 \uBD81\uBD80\uAD50\uC721\uD300"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, letterSpacing: "-.5px" } }, "\uC77C\uC77C \uC6B4\uC601 \uCEE8\uD2B8\uB864 \uD0C0\uC6CC"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, opacity: 0.8 } }, "\u{1F4C5} ", todayStr, " \uAE30\uC900"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, opacity: 0.8 } }, "\u{1F4DA} ", courses.length, "\uAC1C \uACFC\uC815 \uC6B4\uC601"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, opacity: 0.8 } }, "\u{1F465} \uD6C8\uB828\uC0DD ", students.length, "\uBA85"), liveCourses.length > 0 && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, background: "rgba(255,255,255,.2)", borderRadius: 20, padding: "1px 10px", fontWeight: 700 } }, "\uC624\uB298 ", liveCourses.length, "\uAC1C \uAC15\uC758 \uC9C4\uD589\uC911")))), /* @__PURE__ */ React.createElement(Card, { style: { padding: 0, marginBottom: 16, overflow: "hidden", border: "1px solid #DDE7F3" } }, /* @__PURE__ */ React.createElement("div", { style: {
+      padding: "16px 20px",
+      borderBottom: "1px solid #E2E8F0",
+      background: "linear-gradient(135deg,#F8FAFC,#EEF6FF)",
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      flexWrap: "wrap"
+    } }, /* @__PURE__ */ React.createElement("div", { style: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      background: "#DCFCE7",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "#15803D"
+    } }, /* @__PURE__ */ React.createElement("span", { style: {
       width: 10,
       height: 10,
       borderRadius: "50%",
       background: "#22C55E",
-      boxShadow: "0 0 0 3px #22C55E40",
+      boxShadow: "0 0 0 5px #22C55E2E",
       display: "inline-block",
       animation: "heroGlow 2s infinite"
-    } }), "\uC624\uB298\uC758 \uB77C\uC774\uBE0C \uAC15\uC758 \uD604\uD669", /* @__PURE__ */ React.createElement("span", { style: { marginLeft: "auto", fontSize: 10, color: T.mu } }, "\uC2E4\uC2DC\uAC04 \xB7 1\uBD84\uB9C8\uB2E4 \uAC31\uC2E0")), liveCourses.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: T.mu, padding: "32px 0", fontSize: 13 } }, "\uC624\uB298(", todayStr, ") \uC9C4\uD589 \uC911\uC778 \uAC15\uC758\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 14 } }, liveCourses.map((c) => {
+    } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 900, color: T.tx } }, "\uC624\uB298\uC758 \uB77C\uC774\uBE0C \uAC15\uC758 \uD604\uD669"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 2 } }, todayStr, " \xB7 ", today.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }), " \uAE30\uC900", lastLiveLoad && ` \xB7 \uB9C8\uC9C0\uB9C9 \uAC31\uC2E0 ${lastLiveLoad.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`)), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Chip, { label: `${liveCourses.length}\uAC1C \uC9C4\uD589`, bg: "#DCFCE7", color: "#15803D" }), /* @__PURE__ */ React.createElement("button", { onClick: () => setLoadTick((t) => t + 1), style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 5,
+      padding: "7px 11px",
+      border: `1px solid ${T.bd}`,
+      borderRadius: 8,
+      background: "#fff",
+      color: T.mu,
+      cursor: "pointer",
+      fontSize: 11,
+      fontWeight: 800
+    } }, /* @__PURE__ */ React.createElement(Icon, { n: "refresh", s: 12 }), " \uC0C8\uB85C\uACE0\uCE68"))), liveCourses.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: T.mu, padding: "34px 20px", fontSize: 13, background: "#fff" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, marginBottom: 8 } }, "\u{1F4ED}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: T.tx, marginBottom: 4 } }, "\uC624\uB298 \uC9C4\uD589 \uC911\uC778 \uAC15\uC758\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4."), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11 } }, "\uACFC\uC815 \uAE30\uAC04, \uC694\uC77C, \uC77C\uC815 \uC608\uC678 \uC124\uC815\uC744 \uAE30\uC900\uC73C\uB85C \uD45C\uC2DC\uD569\uB2C8\uB2E4.")) : /* @__PURE__ */ React.createElement("div", { style: { padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(310px,1fr))", gap: 12, background: "#fff" } }, liveCourses.map((c) => {
       const cs = students.filter((s) => s.cid === c.id && !isDropoutStudent(s));
       const total = cs.length;
       const att = todayAtt[c.id] || {};
       const present = att.present || 0;
+      const late = att.late || 0;
       const absent = att.absent || 0;
-      const unconfirmed = Math.max(0, total - present - absent);
-      const pPct = total > 0 ? Math.round(present / total * 100) : 0;
+      const unknown = att.unknown || 0;
+      const attended = present + late;
+      const checked = present + late + absent + unknown;
+      const unconfirmed = Math.max(0, total - checked);
+      const pPct = total > 0 ? Math.round(attended / total * 100) : 0;
+      const checkedPct = total > 0 ? Math.round(checked / total * 100) : 0;
+      const statusTone = pPct >= 80 ? { bg: "#DCFCE7", color: "#15803D", label: "\uC6D0\uD65C" } : checked === 0 ? { bg: "#F1F5F9", color: T.mu, label: "\uCD9C\uACB0 \uB300\uAE30" } : pPct >= 60 ? { bg: "#FEF3C7", color: "#B45309", label: "\uD655\uC778 \uD544\uC694" } : { bg: "#FEE2E2", color: T.danger, label: "\uC8FC\uC758" };
       const courseInst = instructors.filter((i) => (i.cids || []).includes(c.id));
       const booking = bookings.find((b) => b.courseId === c.id && b.start <= todayStr && b.end >= todayStr);
       const room = booking ? dashRooms.find((r) => r.id === booking.roomId) : null;
       return /* @__PURE__ */ React.createElement("div", { key: c.id, style: {
-        border: `1.5px solid ${c.cc}30`,
-        borderRadius: 14,
-        background: `linear-gradient(145deg,#fff,${c.cc}08)`,
-        padding: "16px 18px",
+        border: `1px solid ${c.cc}35`,
+        borderRadius: 12,
+        background: `linear-gradient(145deg,#FFFFFF,${c.cc}0A)`,
+        boxShadow: "0 6px 18px rgba(15,23,42,.06)",
+        padding: 14,
         position: "relative",
         overflow: "hidden"
-      } }, /* @__PURE__ */ React.createElement("div", { style: {
-        position: "absolute",
-        top: 0,
-        left: 0,
-        width: 4,
-        height: "100%",
-        background: c.cc,
-        borderRadius: "14px 0 0 14px"
-      } }), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: T.tx } }, c.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 1 } }, c.code)), c.schedTimeFrom && /* @__PURE__ */ React.createElement("span", { style: {
-        fontSize: 11,
-        fontWeight: 700,
+      } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", inset: "0 auto 0 0", width: 5, background: c.cc } }), /* @__PURE__ */ React.createElement("div", { style: { paddingLeft: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: {
+        width: 42,
+        height: 42,
+        borderRadius: 10,
+        background: `${c.cc}16`,
         color: c.cc,
-        background: `${c.cc}15`,
-        borderRadius: 8,
-        padding: "3px 9px",
-        whiteSpace: "nowrap",
-        marginLeft: 8
-      } }, c.schedTimeFrom, " ~ ", c.schedTimeTo || "")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu, display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ React.createElement(Icon, { n: "people", s: 11 }), courseInst.length > 0 ? courseInst.map((i) => `${i.name} ${i.type}`).join(", ") : "\uAC15\uC0AC \uBBF8\uBC30\uC815"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu, display: "flex", alignItems: "center", gap: 3 } }, /* @__PURE__ */ React.createElement(Icon, { n: "book", s: 11 }), room ? room.name : "\uAC15\uC758\uC2E4 \uBBF8\uBC30\uC815")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, marginBottom: 5, display: "flex", justifyContent: "space-between" } }, /* @__PURE__ */ React.createElement("span", null, "\uC624\uB298 \uCD9C\uACB0 \uD604\uD669 (", total, "\uBA85)"), /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: pPct >= 80 ? T.ok : pPct >= 60 ? T.warn : T.danger } }, pPct, "% \uCD9C\uC11D")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", height: 8, borderRadius: 6, overflow: "hidden", background: T.bd, marginBottom: 6 } }, present > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: `${present / total * 100}%`, background: T.ok, transition: "width .4s" }, title: `\uCD9C\uC11D ${present}\uBA85` }), absent > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: `${absent / total * 100}%`, background: T.danger, transition: "width .4s" }, title: `\uACB0\uC11D ${absent}\uBA85` }), unconfirmed > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: `${unconfirmed / total * 100}%`, background: T.bd, transition: "width .4s" }, title: `\uBBF8\uD655\uC778 ${unconfirmed}\uBA85` })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, fontSize: 10 } }, [{ l: "\uCD9C\uC11D", v: present, c: T.ok }, { l: "\uACB0\uC11D", v: absent, c: T.danger }, { l: "\uBBF8\uD655\uC778", v: unconfirmed, c: T.mu }].map(({ l, v, c: col }) => /* @__PURE__ */ React.createElement("span", { key: l, style: { color: col, fontWeight: 700 } }, l, " ", v)))));
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 13,
+        fontWeight: 900,
+        flex: "0 0 auto"
+      } }, c.code || "LIVE"), /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0, flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: {
+        fontSize: 13,
+        fontWeight: 900,
+        color: T.tx,
+        lineHeight: 1.35,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        display: "-webkit-box",
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: "vertical"
+      } }, c.name), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 } }, c.schedTimeFrom && /* @__PURE__ */ React.createElement(Chip, { label: `${c.schedTimeFrom}~${c.schedTimeTo || ""}`, bg: `${c.cc}14`, color: c.cc, size: 10 }), /* @__PURE__ */ React.createElement(Chip, { label: statusTone.label, bg: statusTone.bg, color: statusTone.color, size: 10 })))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 } }, [
+        { icon: "people", label: "\uAC15\uC0AC", value: courseInst.length > 0 ? courseInst.map((i) => `${i.name} ${i.type}`).join(", ") : "\uBBF8\uBC30\uC815" },
+        { icon: "book", label: "\uAC15\uC758\uC2E4", value: room ? room.name : c.method === "\uBE44\uB300\uBA74" ? "\uBE44\uB300\uBA74" : "\uBBF8\uBC30\uC815" }
+      ].map((x) => /* @__PURE__ */ React.createElement("div", { key: x.label, style: { border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 9px", background: "#fff" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: T.mu, marginBottom: 3 } }, /* @__PURE__ */ React.createElement(Icon, { n: x.icon, s: 11 }), " ", x.label), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.tx, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, x.value)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 7 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, fontWeight: 700 } }, "\uCD9C\uC11D \uD604\uD669"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 1 } }, checked, "/", total, "\uBA85 \uD655\uC778 \xB7 \uD655\uC778\uB960 ", checkedPct, "%")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 26, fontWeight: 950, color: statusTone.color, lineHeight: 1 } }, pPct, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, "\uCD9C\uC11D+\uC9C0\uAC01"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "#E2E8F0", marginBottom: 8 } }, total > 0 && present > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: `${present / total * 100}%`, background: T.ok, transition: "width .4s" }, title: `\uCD9C\uC11D ${present}\uBA85` }), total > 0 && late > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: `${late / total * 100}%`, background: T.warn, transition: "width .4s" }, title: `\uC9C0\uAC01 ${late}\uBA85` }), total > 0 && absent > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: `${absent / total * 100}%`, background: T.danger, transition: "width .4s" }, title: `\uACB0\uC11D ${absent}\uBA85` }), total > 0 && unknown > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: `${unknown / total * 100}%`, background: "#94A3B8", transition: "width .4s" }, title: `\uBBF8\uD655\uC778 \uAE30\uB85D ${unknown}\uBA85` }), total > 0 && unconfirmed > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: `${unconfirmed / total * 100}%`, background: "#CBD5E1", transition: "width .4s" }, title: `\uBBF8\uCC98\uB9AC ${unconfirmed}\uBA85` })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 5 } }, [
+        { l: "\uCD9C\uC11D", v: present, c: T.ok, bg: "#ECFDF5" },
+        { l: "\uC9C0\uAC01", v: late, c: T.warn, bg: "#FFFBEB" },
+        { l: "\uACB0\uC11D", v: absent, c: T.danger, bg: "#FEF2F2" },
+        { l: "\uBBF8\uD655\uC778", v: unknown, c: "#64748B", bg: "#F1F5F9" },
+        { l: "\uBBF8\uCC98\uB9AC", v: unconfirmed, c: T.mu, bg: "#F8FAFC" }
+      ].map(({ l, v, c: col, bg }) => /* @__PURE__ */ React.createElement("div", { key: l, style: { borderRadius: 8, background: bg, padding: "6px 4px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: col, fontWeight: 900 } }, v), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: col, fontWeight: 800 } }, l))))));
     }))), alerts.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 } }, alerts.map((al, i) => {
       const bg = al.level === "danger" ? "#FEF2F2" : al.level === "warn" ? "#FFFBEB" : "#EFF6FF";
       const border = al.level === "danger" ? "#FECACA" : al.level === "warn" ? "#FDE68A" : "#BFDBFE";

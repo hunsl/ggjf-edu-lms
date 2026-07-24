@@ -891,18 +891,31 @@ const formatVisibleRate = (s) => {
   const r = visibleRate(s);
   return r === null ? '중도탈락' : `${r}%`;
 };
+const localDateStr = (d = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
 const Dashboard = ({ students, courses }) => {
-  const today    = new Date();
-  const todayStr = today.toISOString().slice(0,10);
-  const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().slice(0,10);
+  const [clock, setClock] = useState(new Date());
+  const today    = clock;
+  const todayStr = localDateStr(today);
+  const tomorrowStr = localDateStr(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
 
   // ── 내부 데이터 (강사, 강의실, 예약, 오늘 출결) ──
   const [instructors, setInstructors] = useState(SEED_INSTRUCTORS);
   const [dashRooms,    setDashRooms]    = useState(SEED_ROOMS);
   const [bookings,    setBookings2]   = useState([]);
-  const [todayAtt,    setTodayAtt]    = useState({}); // { courseId: { present, late, absent, total } }
+  const [todayAtt,    setTodayAtt]    = useState({}); // { courseId: { present, late, absent, unknown } }
   const [loadTick,    setLoadTick]    = useState(0);  // 1분마다 재로드
+  const [lastLiveLoad, setLastLiveLoad] = useState(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => setClock(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -929,18 +942,81 @@ const Dashboard = ({ students, courses }) => {
           attRes.data.forEach(r => {
             const cid = sidToCid[r.student_id];
             if (!cid) return;
-            if (!map[cid]) map[cid] = { present:0, absent:0 };
+            if (!map[cid]) map[cid] = { present:0, late:0, absent:0, unknown:0 };
             if (r.status === "O") map[cid].present++;
+            else if (r.status === "L") map[cid].late++;
             else if (r.status === "A") map[cid].absent++;
+            else map[cid].unknown++;
           });
-          if (!cancelled) setTodayAtt(map);
+          if (!cancelled) {
+            setTodayAtt(map);
+            setLastLiveLoad(new Date());
+          }
         }
       } catch {}
     };
     load();
     const timer = setInterval(() => setLoadTick(t => t+1), 60000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [loadTick, students]);
+  }, [loadTick, students, todayStr]);
+
+  useEffect(() => {
+    if (!ENABLE_REALTIME) return;
+    let intentionallyClosed = false;
+    let heartbeatId = null;
+    let ws = null;
+    let retryDelay = 2000;
+    let ref = 0;
+    const joinRef = String(++ref);
+
+    const send = obj => {
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+    };
+    const connect = () => {
+      if (intentionallyClosed) return;
+      ws = new WebSocket(
+        `wss://${SB_URL.replace("https://","")}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`
+      );
+      ws.onopen = () => {
+        retryDelay = 2000;
+        send({
+          topic:"realtime:public:attendance",
+          event:"phx_join",
+          payload:{
+            config:{
+              broadcast:{ self:false },
+              presence:{ key:"" },
+              postgres_changes:[{ event:"*", schema:"public", table:"attendance", filter:`date=eq.${todayStr}` }]
+            },
+            access_token:SB_KEY
+          },
+          ref:joinRef,
+          join_ref:joinRef
+        });
+        heartbeatId = setInterval(() => send({ topic:"phoenix", event:"heartbeat", payload:{}, ref:String(++ref) }), 25000);
+      };
+      ws.onmessage = event => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.event === "postgres_changes") setLoadTick(t => t + 1);
+        } catch {}
+      };
+      ws.onclose = () => {
+        clearInterval(heartbeatId);
+        heartbeatId = null;
+        if (!intentionallyClosed) {
+          setTimeout(connect, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 30000);
+        }
+      };
+    };
+    connect();
+    return () => {
+      intentionallyClosed = true;
+      clearInterval(heartbeatId);
+      ws?.close();
+    };
+  }, [todayStr]);
 
   // ── 파생 데이터 ──
   const DAY_MAP2 = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
@@ -996,11 +1072,11 @@ const Dashboard = ({ students, courses }) => {
   liveCourses.forEach(c => {
     const cs = students.filter(s=>s.cid===c.id && !isDropoutStudent(s));
     const att = todayAtt[c.id] || {};
-    const confirmed = (att.present||0) + (att.absent||0);
+    const confirmed = (att.present||0) + (att.late||0) + (att.absent||0) + (att.unknown||0);
     if (confirmed > 0 && cs.length > 0) {
-      const presentPct = Math.round((att.present||0) / cs.length * 100);
+      const presentPct = Math.round(((att.present||0) + (att.late||0)) / cs.length * 100);
       if (presentPct < 50) {
-        alerts.push({ level:"danger", msg:`[${c.name}] 오늘 출석률 미달(${presentPct}%) — 미출석 ${cs.length-(att.present||0)}명` });
+        alerts.push({ level:"danger", msg:`[${c.name}] 오늘 출석률 미달(${presentPct}%) — 미확인/결석 ${Math.max(0, cs.length-((att.present||0)+(att.late||0)))}명` });
       }
     }
   });
@@ -1037,27 +1113,58 @@ const Dashboard = ({ students, courses }) => {
       {/* ══════════════════════════════════════════
           🟢 1구역: 오늘의 라이브 강의 현황
       ══════════════════════════════════════════ */}
-      <Card style={{ padding:22, marginBottom:16 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:14, display:"flex", gap:8, alignItems:"center" }}>
-          <span style={{ width:10, height:10, borderRadius:"50%", background:"#22C55E",
-            boxShadow:"0 0 0 3px #22C55E40", display:"inline-block", animation:"heroGlow 2s infinite" }}/>
-          오늘의 라이브 강의 현황
-          <span style={{ marginLeft:"auto", fontSize:10, color:T.mu }}>실시간 · 1분마다 갱신</span>
+      <Card style={{ padding:0, marginBottom:16, overflow:"hidden", border:"1px solid #DDE7F3" }}>
+        <div style={{
+          padding:"16px 20px", borderBottom:"1px solid #E2E8F0",
+          background:"linear-gradient(135deg,#F8FAFC,#EEF6FF)",
+          display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+          <div style={{ width:36, height:36, borderRadius:10, background:"#DCFCE7",
+            display:"flex", alignItems:"center", justifyContent:"center", color:"#15803D" }}>
+            <span style={{ width:10, height:10, borderRadius:"50%", background:"#22C55E",
+              boxShadow:"0 0 0 5px #22C55E2E", display:"inline-block", animation:"heroGlow 2s infinite" }}/>
+          </div>
+          <div>
+            <div style={{ fontSize:15, fontWeight:900, color:T.tx }}>오늘의 라이브 강의 현황</div>
+            <div style={{ fontSize:11, color:T.mu, marginTop:2 }}>
+              {todayStr} · {today.toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit" })} 기준
+              {lastLiveLoad && ` · 마지막 갱신 ${lastLiveLoad.toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit" })}`}
+            </div>
+          </div>
+          <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <Chip label={`${liveCourses.length}개 진행`} bg="#DCFCE7" color="#15803D"/>
+            <button onClick={()=>setLoadTick(t=>t+1)} style={{
+              display:"flex", alignItems:"center", gap:5, padding:"7px 11px",
+              border:`1px solid ${T.bd}`, borderRadius:8, background:"#fff",
+              color:T.mu, cursor:"pointer", fontSize:11, fontWeight:800 }}>
+              <Icon n="refresh" s={12}/> 새로고침
+            </button>
+          </div>
         </div>
         {liveCourses.length === 0 ? (
-          <div style={{ textAlign:"center", color:T.mu, padding:"32px 0", fontSize:13 }}>
-            오늘({todayStr}) 진행 중인 강의가 없습니다.
+          <div style={{ textAlign:"center", color:T.mu, padding:"34px 20px", fontSize:13, background:"#fff" }}>
+            <div style={{ fontSize:28, marginBottom:8 }}>📭</div>
+            <div style={{ fontSize:14, fontWeight:800, color:T.tx, marginBottom:4 }}>오늘 진행 중인 강의가 없습니다.</div>
+            <div style={{ fontSize:11 }}>과정 기간, 요일, 일정 예외 설정을 기준으로 표시합니다.</div>
           </div>
         ) : (
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:14 }}>
+          <div style={{ padding:16, display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(310px,1fr))", gap:12, background:"#fff" }}>
             {liveCourses.map(c => {
               const cs        = students.filter(s=>s.cid===c.id && !isDropoutStudent(s));
               const total     = cs.length;
               const att       = todayAtt[c.id] || {};
               const present   = att.present  || 0;
+              const late      = att.late     || 0;
               const absent    = att.absent   || 0;
-              const unconfirmed = Math.max(0, total - present - absent);
-              const pPct = total > 0 ? Math.round(present / total * 100) : 0;
+              const unknown   = att.unknown  || 0;
+              const attended  = present + late;
+              const checked   = present + late + absent + unknown;
+              const unconfirmed = Math.max(0, total - checked);
+              const pPct = total > 0 ? Math.round(attended / total * 100) : 0;
+              const checkedPct = total > 0 ? Math.round(checked / total * 100) : 0;
+              const statusTone = pPct >= 80 ? { bg:"#DCFCE7", color:"#15803D", label:"원활" }
+                : checked === 0 ? { bg:"#F1F5F9", color:T.mu, label:"출결 대기" }
+                : pPct >= 60 ? { bg:"#FEF3C7", color:"#B45309", label:"확인 필요" }
+                : { bg:"#FEE2E2", color:T.danger, label:"주의" };
               // 담당 강사
               const courseInst = instructors.filter(i => (i.cids||[]).includes(c.id));
               // 배정 강의실
@@ -1065,51 +1172,73 @@ const Dashboard = ({ students, courses }) => {
               const room    = booking ? dashRooms.find(r=>r.id===booking.roomId) : null;
               return (
                 <div key={c.id} style={{
-                  border:`1.5px solid ${c.cc}30`, borderRadius:14,
-                  background:`linear-gradient(145deg,#fff,${c.cc}08)`,
-                  padding:"16px 18px", position:"relative", overflow:"hidden" }}>
-                  <div style={{ position:"absolute", top:0, left:0, width:4, height:"100%",
-                    background:c.cc, borderRadius:"14px 0 0 14px" }}/>
-                  <div style={{ marginLeft:8 }}>
-                    {/* 과정명 + 시간 */}
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
-                      <div>
-                        <div style={{ fontSize:13, fontWeight:800, color:T.tx }}>{c.name}</div>
-                        <div style={{ fontSize:11, color:T.mu, marginTop:1 }}>{c.code}</div>
+                  border:`1px solid ${c.cc}35`, borderRadius:12,
+                  background:`linear-gradient(145deg,#FFFFFF,${c.cc}0A)`,
+                  boxShadow:"0 6px 18px rgba(15,23,42,.06)",
+                  padding:14, position:"relative", overflow:"hidden" }}>
+                  <div style={{ position:"absolute", inset:"0 auto 0 0", width:5, background:c.cc }}/>
+                  <div style={{ paddingLeft:8 }}>
+                    <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:10 }}>
+                      <div style={{ width:42, height:42, borderRadius:10, background:`${c.cc}16`,
+                        color:c.cc, display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:13, fontWeight:900, flex:"0 0 auto" }}>
+                        {c.code || "LIVE"}
                       </div>
-                      {c.schedTimeFrom && (
-                        <span style={{ fontSize:11, fontWeight:700, color:c.cc,
-                          background:`${c.cc}15`, borderRadius:8, padding:"3px 9px", whiteSpace:"nowrap", marginLeft:8 }}>
-                          {c.schedTimeFrom} ~ {c.schedTimeTo||""}
-                        </span>
-                      )}
+                      <div style={{ minWidth:0, flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:900, color:T.tx, lineHeight:1.35,
+                          overflow:"hidden", textOverflow:"ellipsis", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+                          {c.name}
+                        </div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:5 }}>
+                          {c.schedTimeFrom && <Chip label={`${c.schedTimeFrom}~${c.schedTimeTo||""}`} bg={`${c.cc}14`} color={c.cc} size={10}/>}
+                          <Chip label={statusTone.label} bg={statusTone.bg} color={statusTone.color} size={10}/>
+                        </div>
+                      </div>
                     </div>
                     {/* 강사 · 강의실 */}
-                    <div style={{ display:"flex", gap:8, marginBottom:10, flexWrap:"wrap" }}>
-                      <span style={{ fontSize:11, color:T.mu, display:"flex", alignItems:"center", gap:3 }}>
-                        <Icon n="people" s={11}/>
-                        {courseInst.length > 0
-                          ? courseInst.map(i=>`${i.name} ${i.type}`).join(", ")
-                          : "강사 미배정"}
-                      </span>
-                      <span style={{ fontSize:11, color:T.mu, display:"flex", alignItems:"center", gap:3 }}>
-                        <Icon n="book" s={11}/>
-                        {room ? room.name : "강의실 미배정"}
-                      </span>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+                      {[
+                        { icon:"people", label:"강사", value:courseInst.length > 0 ? courseInst.map(i=>`${i.name} ${i.type}`).join(", ") : "미배정" },
+                        { icon:"book", label:"강의실", value:room ? room.name : (c.method === "비대면" ? "비대면" : "미배정") },
+                      ].map(x=>(
+                        <div key={x.label} style={{ border:`1px solid ${T.bd}`, borderRadius:8, padding:"8px 9px", background:"#fff" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:T.mu, marginBottom:3 }}>
+                            <Icon n={x.icon} s={11}/> {x.label}
+                          </div>
+                          <div style={{ fontSize:11, color:T.tx, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{x.value}</div>
+                        </div>
+                      ))}
                     </div>
                     {/* 출결 프로그레스 바 */}
-                    <div style={{ fontSize:10, color:T.mu, marginBottom:5, display:"flex", justifyContent:"space-between" }}>
-                      <span>오늘 출결 현황 ({total}명)</span>
-                      <span style={{ fontWeight:700, color: pPct>=80?T.ok:pPct>=60?T.warn:T.danger }}>{pPct}% 출석</span>
+                    <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:7 }}>
+                      <div>
+                        <div style={{ fontSize:10, color:T.mu, fontWeight:700 }}>출석 현황</div>
+                        <div style={{ fontSize:11, color:T.mu, marginTop:1 }}>{checked}/{total}명 확인 · 확인률 {checkedPct}%</div>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontSize:26, fontWeight:950, color:statusTone.color, lineHeight:1 }}>{pPct}%</div>
+                        <div style={{ fontSize:10, color:T.mu }}>출석+지각</div>
+                      </div>
                     </div>
-                    <div style={{ display:"flex", height:8, borderRadius:6, overflow:"hidden", background:T.bd, marginBottom:6 }}>
-                      {present > 0 && <div style={{ width:`${present/total*100}%`, background:T.ok, transition:"width .4s" }} title={`출석 ${present}명`}/>}
-                      {absent  > 0 && <div style={{ width:`${absent/total*100}%`,  background:T.danger, transition:"width .4s" }} title={`결석 ${absent}명`}/>}
-                      {unconfirmed > 0 && <div style={{ width:`${unconfirmed/total*100}%`, background:T.bd, transition:"width .4s" }} title={`미확인 ${unconfirmed}명`}/>}
+                    <div style={{ display:"flex", height:10, borderRadius:999, overflow:"hidden", background:"#E2E8F0", marginBottom:8 }}>
+                      {total > 0 && present > 0 && <div style={{ width:`${present/total*100}%`, background:T.ok, transition:"width .4s" }} title={`출석 ${present}명`}/>}
+                      {total > 0 && late > 0 && <div style={{ width:`${late/total*100}%`, background:T.warn, transition:"width .4s" }} title={`지각 ${late}명`}/>}
+                      {total > 0 && absent > 0 && <div style={{ width:`${absent/total*100}%`, background:T.danger, transition:"width .4s" }} title={`결석 ${absent}명`}/>}
+                      {total > 0 && unknown > 0 && <div style={{ width:`${unknown/total*100}%`, background:"#94A3B8", transition:"width .4s" }} title={`미확인 기록 ${unknown}명`}/>}
+                      {total > 0 && unconfirmed > 0 && <div style={{ width:`${unconfirmed/total*100}%`, background:"#CBD5E1", transition:"width .4s" }} title={`미처리 ${unconfirmed}명`}/>}
                     </div>
-                    <div style={{ display:"flex", gap:10, fontSize:10 }}>
-                      {[{l:"출석",v:present,c:T.ok},{l:"결석",v:absent,c:T.danger},{l:"미확인",v:unconfirmed,c:T.mu}].map(({l,v,c:col})=>(
-                        <span key={l} style={{ color:col, fontWeight:700 }}>{l} {v}</span>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:5 }}>
+                      {[
+                        {l:"출석",v:present,c:T.ok,bg:"#ECFDF5"},
+                        {l:"지각",v:late,c:T.warn,bg:"#FFFBEB"},
+                        {l:"결석",v:absent,c:T.danger,bg:"#FEF2F2"},
+                        {l:"미확인",v:unknown,c:"#64748B",bg:"#F1F5F9"},
+                        {l:"미처리",v:unconfirmed,c:T.mu,bg:"#F8FAFC"},
+                      ].map(({l,v,c:col,bg})=>(
+                        <div key={l} style={{ borderRadius:8, background:bg, padding:"6px 4px", textAlign:"center" }}>
+                          <div style={{ fontSize:14, color:col, fontWeight:900 }}>{v}</div>
+                          <div style={{ fontSize:9, color:col, fontWeight:800 }}>{l}</div>
+                        </div>
                       ))}
                     </div>
                   </div>

@@ -231,8 +231,36 @@ const SEED_STUDENTS = [
     memo:"HACCP 실무 경험 있음. 결석 주의.", rate:55, earlyEmployed:false, dropout:true },
 ];
 
-const DATES = ["2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06",
-               "2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13"];
+// 한글 요일 → getDay() 숫자 매핑
+const KO_DAYS = { "일":0, "월":1, "화":2, "수":3, "목":4, "금":5, "토":6 };
+const KO_DAYS_REV = ["일","월","화","수","목","금","토"];
+
+/**
+ * 과정의 schedDays + dateFrom/dateTo 를 기반으로
+ * 실제 수업이 있는 날짜 목록(YYYY-MM-DD)을 반환한다.
+ */
+const getCourseDates = (course) => {
+  if (!course?.dateFrom || !course?.dateTo) return [];
+  const schedDayNums = (course.schedDays || "")
+    .split(",")
+    .map(d => KO_DAYS[d.trim()])
+    .filter(d => d !== undefined);
+  if (schedDayNums.length === 0) return [];
+  const dates = [];
+  // "T00:00:00" 를 붙여 로컬 자정 기준으로 파싱 (UTC 오프셋 이슈 방지)
+  const cur = new Date(course.dateFrom + "T00:00:00");
+  const end = new Date(course.dateTo   + "T00:00:00");
+  while (cur <= end) {
+    if (schedDayNums.includes(cur.getDay())) {
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth()+1).padStart(2,"0");
+      const d = String(cur.getDate()).padStart(2,"0");
+      dates.push(`${y}-${m}-${d}`);
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+};
 
 /* ═══════════════════════════════════════════════════════════
    TINY COMPONENTS
@@ -1334,7 +1362,10 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
 ═══════════════════════════════════════════════════════════ */
 const AttendanceMgmt = ({ students, courses }) => {
   const [course, setCourse]   = useState(courses[3] || courses[0]);
-  const [date, setDate]       = useState(DATES[DATES.length-1]);
+  const [date, setDate]       = useState(() => {
+    const d = getCourseDates(courses[3] || courses[0]);
+    return d[d.length - 1] || new Date().toISOString().split("T")[0];
+  });
   const [mode, setMode]       = useState("qr");
   const [qrType, setQrType]   = useState("in");
   const [simRunning, setSimRunning] = useState(false);
@@ -1366,10 +1397,17 @@ const AttendanceMgmt = ({ students, courses }) => {
   const [showTimeSetting, setShowTimeSetting] = useState(false);
   const [timeCustomized,  setTimeCustomized]  = useState(false); // 수동 수정 여부
 
-  // 과정 변경 시 시간 자동 갱신 (수동 수정 중이면 유지)
+  // 과정 변경 시 시간 자동 갱신 (수동 수정 중이면 유지) + 수업일 자동 선택
   const handleCourseChange = (c) => {
     setCourse(c);
     setRecords({});
+    // 과정의 마지막 수업일(또는 오늘 기준 가장 가까운 과거 수업일)로 날짜 초기화
+    const courseDates = getCourseDates(c);
+    if (courseDates.length > 0) {
+      const today = new Date().toISOString().split("T")[0];
+      const pastDates = courseDates.filter(d => d <= today);
+      setDate(pastDates.length > 0 ? pastDates[pastDates.length - 1] : courseDates[0]);
+    }
     if(!timeCustomized) {
       const t = initTimes(c);
       setStartH(t.sh); setStartM(t.sm);
@@ -1582,7 +1620,15 @@ const AttendanceMgmt = ({ students, courses }) => {
       <div style={{ background:"#FFFBEB", border:`1px solid #FDE68A`, borderRadius:8,
         padding:"10px 14px", marginBottom:14, display:"flex", gap:10, fontSize:12, color:"#92400E" }}>
         <Icon n="info" s={14}/>
-        <span><b>2026 개정 출결 기준:</b> 하루 수업시간 50% 미만 수강 시 결석 처리 · 총 교육시간 <b>80% 이상</b> 출석 시 수료</span>
+        <span>
+          <b>2026 개정 출결 기준:</b> 하루 수업시간 50% 미만 수강 시 결석 처리 · 총 교육시간 <b>80% 이상</b> 출석 시 수료
+          {course.schedDays ? (
+            <span style={{ marginLeft:10, padding:"2px 8px", background:"#FEF3C7",
+              borderRadius:4, border:"1px solid #FCD34D", fontWeight:700 }}>
+              📅 수업 요일: {course.schedDays} ({getCourseDates(course).length}일)
+            </span>
+          ) : null}
+        </span>
       </div>
 
       {/* ── 시간 설정 카드 ── */}
@@ -1668,12 +1714,28 @@ const AttendanceMgmt = ({ students, courses }) => {
           </select>
         </div>
         <div>
-          <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>수업일</div>
-          <select value={date} onChange={e=>setDate(e.target.value)}
-            style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
-              fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
-            {DATES.map(d=><option key={d} value={d}>{d}</option>)}
-          </select>
+          <div style={{ fontSize:10, color:T.mu, marginBottom:5, fontWeight:600 }}>수업일 <span style={{ color:T.p }}>(과정 스케줄 기준)</span></div>
+          {(() => {
+            const courseDates = getCourseDates(course);
+            if (courseDates.length === 0) {
+              return (
+                <div style={{ padding:"7px 10px", border:`1px solid ${T.warn}`, borderRadius:8,
+                  fontSize:12, background:"#FFFBEB", color:T.warn, fontWeight:600 }}>
+                  ⚠️ 수업일 정보 없음
+                </div>
+              );
+            }
+            return (
+              <select value={date} onChange={e=>setDate(e.target.value)}
+                style={{ padding:"7px 10px", border:`1px solid ${T.bd}`, borderRadius:8,
+                  fontSize:12, outline:"none", background:T.s2, cursor:"pointer", color:T.tx }}>
+                {courseDates.map(d => {
+                  const dow = KO_DAYS_REV[new Date(d + "T00:00:00").getDay()];
+                  return <option key={d} value={d}>{d} ({dow})</option>;
+                })}
+              </select>
+            );
+          })()}
         </div>
         <div style={{ marginLeft:"auto", display:"flex", gap:14, alignItems:"center" }}>
           {[
@@ -1920,6 +1982,40 @@ const AttendanceMgmt = ({ students, courses }) => {
 
                 alert(`✅ ${records.length}명 출결 저장 완료`);
                 setManualAtt({});
+
+                // ── 출석률 재계산 (2026 기준: O·L = 출석, A·E = 결석) ──
+                // 오늘까지 지나간 수업일 수를 기준으로 계산
+                try {
+                  const courseDates = getCourseDates(course);
+                  const today = new Date().toISOString().split("T")[0];
+                  const passedDays = courseDates.filter(d => d <= today);
+                  const totalDays = passedDays.length;
+                  if (totalDays > 0 && courseStudents.length > 0) {
+                    const ids = courseStudents.map(s => s.id);
+                    const { data: allAtt } = await sbGet(
+                      "attendance",
+                      `select=student_id,date,status&student_id=in.(${ids.join(",")})&type=eq.in`
+                    );
+                    // 학생별 출석 날짜 집합 (O 또는 L = 출석 처리)
+                    const attMap = {};
+                    (allAtt || []).forEach(att => {
+                      if (att.status === "O" || att.status === "L") {
+                        if (!attMap[att.student_id]) attMap[att.student_id] = new Set();
+                        attMap[att.student_id].add(att.date);
+                      }
+                    });
+                    for (const s of courseStudents) {
+                      const attended = (attMap[s.id] || new Set()).size;
+                      const newRate = Math.min(100, Math.round(attended / totalDays * 100));
+                      if (newRate !== s.rate) {
+                        await sbUpdate("students", `id=eq.${s.id}`, { rate: newRate });
+                      }
+                    }
+                    console.log("✅ 출석률 재계산 완료 (기준: 수업일", totalDays, "일)");
+                  }
+                } catch(rateErr) {
+                  console.warn("출석률 업데이트 오류 (출결 저장은 완료):", rateErr);
+                }
               } catch(err) {
                 alert("저장 오류: " + (err.message || JSON.stringify(err)));
               }
@@ -2512,6 +2608,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
     memo: "", rate: 0,
   };
   const [form, setForm] = useState(student ? { ...empty, ...student } : empty);
+  const submittedRef = useRef(false);  // 이중 저장 방지
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   // 나이: 생년월일 또는 주민번호 앞자리(birth)에서 계산
@@ -2699,6 +2796,9 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
           display:"flex", justifyContent:"flex-end", gap:8, background:T.s2, flexShrink:0 }}>
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
           <Btn onClick={()=>{
+            if(submittedRef.current) return;  // 이중 클릭 방지
+            if(!form.name) { alert("이름은 필수입니다."); return; }
+            submittedRef.current = true;
             const payload = {
               ...form,
               id: form.id||Date.now(),
@@ -2731,6 +2831,7 @@ const SEED_INSTRUCTORS = [
 const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
   const empty = { name:"", type:"주강사", subject:"", phone:"", email:"", career:"", cert:"", cids:[], note:"" };
   const [form, setForm] = useState(inst ? {...inst, cids:inst.cids||[]} : empty);
+  const submittedRef = useRef(false);  // 이중 저장 방지
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", color:T.tx, background:T.s2 };
@@ -2804,7 +2905,9 @@ const InstructorModal = ({ inst, onSave, onClose, isNew, courses }) => {
           display:"flex", justifyContent:"flex-end", gap:8, background:T.s2 }}>
           <Btn variant="ghost" onClick={onClose}>취소</Btn>
           <Btn onClick={()=>{
+            if(submittedRef.current) return;  // 이중 클릭 방지
             if(!form.name) return alert("이름은 필수입니다.");
+            submittedRef.current = true;
             onSave({...form, id:form.id||Date.now()});
             onClose();
           }}><Icon n="check" s={13}/>{isNew?"추가":"저장"}</Btn>
@@ -4461,8 +4564,16 @@ function App() {
       return; 
     }
     
-    console.log("✅ 학생 저장 완료:", (data||[]).length, "명 - 실시간 구독이 자동 반영");
-    // 실시간 구독이 자동으로 추가하므로 여기서는 아무것도 안 함
+    console.log("✅ 학생 저장 완료:", (data||[]).length, "명");
+    // 실시간 구독 외에도 로컬 state 즉시 반영 (realtime 지연 대비, 중복 방지 포함)
+    if (data && data.length > 0) {
+      const newStudents = data.map(toStudent);
+      setStudents(prev => {
+        const existingIds = new Set(prev.map(s => s.id));
+        const toAdd = newStudents.filter(s => !existingIds.has(s.id));
+        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+      });
+    }
   }, []);
 
   const updateStudent = useCallback(async (updated) => {
@@ -4499,8 +4610,15 @@ function App() {
       return; 
     }
     
-    console.log("✅ 과정 저장 완료:", data?.name, "- 실시간 구독이 자동 반영");
-    // 실시간 구독이 자동으로 추가하므로 여기서는 아무것도 안 함
+    console.log("✅ 과정 저장 완료:", data?.name);
+    // 실시간 구독 외에도 로컬 state 즉시 반영 (realtime 지연 대비, 중복 방지 포함)
+    if (data) {
+      const newCourse = toCourse(data);
+      setCourses(prev => {
+        if (prev.find(x => x.id === newCourse.id)) return prev;
+        return [...prev, newCourse];
+      });
+    }
   }, []);
 
   const updateCourse = useCallback(async (c) => {
@@ -4589,7 +4707,30 @@ function App() {
       {/* ── 모달들 ── */}
       {showNew && (
         <EditModal student={null} isNew={true} courses={courses}
-          onSave={s => setStudents(prev=>[...prev, s])} onClose={()=>setShowNew(false)}/>
+          onSave={async (s) => {
+            // 개별 신규 훈련생: Supabase에 저장 후 로컬 state 반영
+            try {
+              const { data, error } = await sbInsert("students", fromStudent(s));
+              if (error) throw error;
+              if (!data) {
+                // data가 없으면 DB에서 직접 재조회하여 Supabase 할당 ID 사용
+                const { data: reloaded, error: relErr } = await sbGet(
+                  "students", `select=*&name=eq.${encodeURIComponent(s.name)}&order=id.desc&limit=1`
+                );
+                if (relErr) throw relErr;
+                const rec = reloaded && reloaded[0] ? toStudent(reloaded[0]) : null;
+                if (rec) {
+                  setStudents(prev => prev.find(x => x.id === rec.id) ? prev : [...prev, rec]);
+                }
+              } else {
+                const saved = toStudent(data);
+                setStudents(prev => prev.find(x => x.id === saved.id) ? prev : [...prev, saved]);
+              }
+            } catch(err) {
+              alert("저장 오류: " + (err.message || JSON.stringify(err)));
+            }
+          }}
+          onClose={()=>setShowNew(false)}/>
       )}
       {editTarget && (
         <EditModal student={editTarget} courses={courses}

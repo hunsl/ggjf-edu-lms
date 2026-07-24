@@ -6372,10 +6372,10 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
       setCertDbStatus("ok");
       setCertDbError("");
       setLastSyncedAt(new Date());
-      if (data && data.length >= 0) {
+      if (data) {
         const hist = data.map(normalizeHistoryRecord);
         setCertHistory(hist);
-        saveCertHistory(hist); // localStorage 동기화
+        saveCertHistory(hist); // localStorage 동기화 (빈 배열이면 기존 캐시 초기화)
       }
     } catch(e) {
       console.warn("발급이력 DB 로드 오류:", e);
@@ -6384,7 +6384,7 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
     }
   }, []);
 
-  useEffect(() => { loadFromDB(); }, []);
+  useEffect(() => { loadFromDB(); }, [loadFromDB]);
 
   useEffect(() => {
     if (!ENABLE_REALTIME) return;

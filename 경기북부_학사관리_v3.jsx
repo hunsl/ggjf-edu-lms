@@ -4712,11 +4712,20 @@ function App() {
             try {
               const { data, error } = await sbInsert("students", fromStudent(s));
               if (error) throw error;
-              const saved = data ? toStudent(data) : { ...s, id: s.id || Date.now() };
-              setStudents(prev => {
-                if (prev.find(x => x.id === saved.id)) return prev;
-                return [...prev, saved];
-              });
+              if (!data) {
+                // data가 없으면 DB에서 직접 재조회하여 Supabase 할당 ID 사용
+                const { data: reloaded, error: relErr } = await sbGet(
+                  "students", `select=*&name=eq.${encodeURIComponent(s.name)}&order=id.desc&limit=1`
+                );
+                if (relErr) throw relErr;
+                const rec = reloaded && reloaded[0] ? toStudent(reloaded[0]) : null;
+                if (rec) {
+                  setStudents(prev => prev.find(x => x.id === rec.id) ? prev : [...prev, rec]);
+                }
+              } else {
+                const saved = toStudent(data);
+                setStudents(prev => prev.find(x => x.id === saved.id) ? prev : [...prev, saved]);
+              }
             } catch(err) {
               alert("저장 오류: " + (err.message || JSON.stringify(err)));
             }

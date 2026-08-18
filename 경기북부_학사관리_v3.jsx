@@ -274,6 +274,19 @@ const Chip = ({ label, bg, color, size=11 }) => (
 
 const rateColor = r => r >= 80 ? T.ok : r >= 70 ? T.warn : T.danger;
 
+/** 과정 종료 여부: dateTo가 있고 오늘보다 이전(같은 날은 종료로 처리) */
+const isCourseEnded = (course) => {
+  if(!course?.dateTo) return false;
+  const today = new Date().toISOString().split("T")[0];
+  return course.dateTo <= today;
+};
+
+/** 수료 상태 판정: "진행중" | "수료" | "미수료" */
+const getCompletionStatus = (student, course, threshold = 80) => {
+  if(!isCourseEnded(course)) return "진행중";
+  return (student.rate || 0) >= threshold ? "수료" : "미수료";
+};
+
 const RBar = ({ r, h=5 }) => (
   <div style={{ width:"100%", height:h, background:T.bd, borderRadius:h, overflow:"hidden" }}>
     <div style={{ height:"100%", width:`${Math.min(r,100)}%`, background:rateColor(r),
@@ -1322,6 +1335,12 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
                         <div style={{ fontSize:10, color:T.mu, marginTop:3 }}>
                           {attendedHours}h / {totalHours}h
                         </div>
+                        {(() => {
+                          const cs = getCompletionStatus(s, c);
+                          if(cs==="수료")   return <Chip label="✅ 수료"   bg={T.pbg}    color={T.p}       size={10}/>;
+                          if(cs==="미수료") return <Chip label="❌ 미수료" bg="#FEF2F2"  color={T.danger}  size={10}/>;
+                          return                   <Chip label="⏳ 진행중" bg="#EFF6FF"  color="#2563EB"   size={10}/>;
+                        })()}
                       </td>
 
                       {/* 수정·삭제 */}
@@ -2038,13 +2057,27 @@ const CompletionMgmt = ({ students, courses }) => {
   const [threshold, setThr] = useState(80);
   const [overrides, setOvr] = useState({});
   const list = students.filter(s=>s.cid===course.id);
-  const get  = s => overrides[s.id] ?? (s.rate>=threshold?"수료":"미수료");
+  const ended = isCourseEnded(course);
+  const get  = s => overrides[s.id] ?? (ended ? (s.rate>=threshold?"수료":"미수료") : "진행중");
   const completed = list.filter(s=>get(s)==="수료").length;
   const rate = list.length ? Math.round(completed/list.length*100) : 0;
 
   return (
     <div className="page">
       <SectionHead title="수료 관리" sub="출석률 기준 자동 판정 · 담당자 수동 조정 가능"/>
+
+      {/* 진행 중 안내 배너 */}
+      {!ended && course.dateTo && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 18px",
+          borderRadius:10, background:"#EFF6FF", border:"1px solid #BFDBFE",
+          color:"#1D4ED8", fontSize:13, fontWeight:600, marginBottom:16 }}>
+          <span style={{ fontSize:18 }}>⏳</span>
+          <span>
+            교육 <b>진행 중</b>인 과정입니다 ({course.dateFrom} ~ {course.dateTo}).&nbsp;
+            종료일 이후에 수료 판정이 확정됩니다. 지금은 담당자가 수동으로 조정할 수 있습니다.
+          </span>
+        </div>
+      )}
 
       <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
         {courses.map(c=>(
@@ -2073,15 +2106,20 @@ const CompletionMgmt = ({ students, courses }) => {
           </div>
           <Btn onClick={()=>{
             const j={};
-            list.forEach(s=>{ j[s.id]=s.rate>=threshold?"수료":"미수료"; });
+            list.forEach(s=>{ j[s.id]=ended?(s.rate>=threshold?"수료":"미수료"):"진행중"; });
             setOvr(j);
           }}>자동 판정</Btn>
         </Card>
         <Card style={{ padding:"16px 22px", textAlign:"center" }}>
           <div style={{ fontSize:11, color:T.mu }}>수료율</div>
-          <div style={{ fontSize:32, fontWeight:900, color:rate>=90?T.p:T.danger, lineHeight:1.1 }}>{rate}%</div>
-          <div style={{ fontSize:11, color:T.mu }}>{completed}/{list.length}명</div>
-          <Chip label={rate>=90?"목표달성":"목표미달"} bg={rate>=90?T.pbg:"#FEF2F2"} color={rate>=90?T.p:T.danger} size={10}/>
+          <div style={{ fontSize:32, fontWeight:900, color:ended?(rate>=90?T.p:T.danger):"#2563EB", lineHeight:1.1 }}>
+            {ended ? `${rate}%` : "-"}
+          </div>
+          <div style={{ fontSize:11, color:T.mu }}>{ended ? `${completed}/${list.length}명` : "집계 예정"}</div>
+          {ended
+            ? <Chip label={rate>=90?"목표달성":"목표미달"} bg={rate>=90?T.pbg:"#FEF2F2"} color={rate>=90?T.p:T.danger} size={10}/>
+            : <Chip label="교육 진행중" bg="#EFF6FF" color="#2563EB" size={10}/>
+          }
         </Card>
         <Card style={{ padding:"16px 22px" }}>
           <div style={{ fontSize:11, color:T.mu }}>과정 목표</div>
@@ -2104,9 +2142,12 @@ const CompletionMgmt = ({ students, courses }) => {
           </thead>
           <tbody>
             {list.map(s=>{
-              const auto = s.rate>=threshold?"수료":"미수료";
+              const auto = ended ? (s.rate>=threshold?"수료":"미수료") : "진행중";
               const final = get(s);
-              const changed = overrides[s.id]!==undefined && overrides[s.id]!==auto;
+              const baseAuto = ended ? (s.rate>=threshold?"수료":"미수료") : "진행중";
+              const changed = overrides[s.id]!==undefined && overrides[s.id]!==baseAuto;
+              const autoChipBg    = auto==="수료"?T.pbg : auto==="미수료"?"#FEF2F2":"#EFF6FF";
+              const autoChipColor = auto==="수료"?T.p   : auto==="미수료"?T.danger :"#2563EB";
               return (
                 <tr key={s.id} className="row-hover" style={{ borderBottom:`1px solid ${T.bd}` }}>
                   <td style={{ padding:"12px 16px", fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</td>
@@ -2115,15 +2156,15 @@ const CompletionMgmt = ({ students, courses }) => {
                     <RBar r={s.rate} h={3}/>
                   </td>
                   <td style={{ padding:"12px 16px", textAlign:"center" }}>
-                    <Chip label={auto} bg={auto==="수료"?T.pbg:"#FEF2F2"} color={auto==="수료"?T.p:T.danger}/>
+                    <Chip label={auto} bg={autoChipBg} color={autoChipColor}/>
                   </td>
                   <td style={{ padding:"12px 16px" }}>
                     <div style={{ display:"flex", gap:6, justifyContent:"center" }}>
-                      {["수료","미수료"].map(v=>(
+                      {["수료","진행중","미수료"].map(v=>(
                         <button key={v} onClick={()=>setOvr(p=>({...p,[s.id]:v}))} style={{
                           padding:"5px 14px", border:"none", borderRadius:6,
                           cursor:"pointer", fontWeight:700, fontSize:12, transition:"all .15s",
-                          background: final===v?(v==="수료"?T.p:T.danger):"#F1F5F9",
+                          background: final===v?(v==="수료"?T.p:v==="미수료"?T.danger:"#2563EB"):"#F1F5F9",
                           color: final===v?"#fff":T.mu }}>
                           {v}
                         </button>
@@ -3579,9 +3620,10 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
   /* ── 과정별 집계 ── */
   const stats = courses.map(c => {
     const ss = students.filter(s => s.cid === c.id);
-    const completed = ss.filter(s => s.rate >= 80).length;
+    const ended = isCourseEnded(c);
+    const completed = ended ? ss.filter(s => s.rate >= 80).length : 0;
     const avgRate   = ss.length ? Math.round(ss.reduce((a,s)=>a+s.rate,0)/ss.length) : 0;
-    return { ...c, enrolled:ss.length, completed, avgRate };
+    return { ...c, enrolled:ss.length, completed, avgRate, ended };
   });
 
   /* ── 전체 백업 엑셀 ── */
@@ -3598,7 +3640,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
         "조기수료":s.earlyEmployed?"Y":"",
         "중도탈락":s.dropout?"Y":"",
         "현재이수시간":Math.round((c?.hours||0)*(s.rate||0)/100)+"h",
-        "출석률(%)":s.rate, "수료여부":s.rate>=80?"수료":"미수료",
+        "출석률(%)":s.rate, "수료여부":isCourseEnded(c)?(s.rate>=80?"수료":"미수료"):"진행중",
       };
     });
     const ws1 = XLSX.utils.json_to_sheet(rows);
@@ -3634,7 +3676,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
       "조기수료":s.earlyEmployed?"Y":"",
       "중도탈락":s.dropout?"Y":"",
       "현재이수시간":Math.round((c?.hours||0)*(s.rate||0)/100)+"h",
-      "출석률(%)":s.rate,"수료여부":s.rate>=80?"수료":"미수료",
+      "출석률(%)":s.rate,"수료여부":isCourseEnded(c)?(s.rate>=80?"수료":"미수료"):"진행중",
     }));
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);

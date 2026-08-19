@@ -2720,9 +2720,17 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
               </div>
             </FLD>
             <FLD label="과정">
-              <select value={form.cid} onChange={e=>set("cid",+e.target.value)} style={selStyle}>
-                {courses.map(c=><option key={c.id} value={c.id}>{c.code}</option>)}
-              </select>
+              {isNew ? (
+                <select value={form.cid} onChange={e=>set("cid",+e.target.value)} style={selStyle}>
+                  {courses.map(c=><option key={c.id} value={c.id}>{c.code}</option>)}
+                </select>
+              ) : (
+                <div style={{ padding:"8px 10px", background:T.s3, borderRadius:8,
+                  fontSize:12, color:T.mu, lineHeight:"20px" }}>
+                  {courses.find(c=>c.id===form.cid)?.code || form.cid}
+                  <span style={{ marginLeft:6, fontSize:10, color:T.mu }}>(변경 불가)</span>
+                </div>
+              )}
             </FLD>
           </div>
 

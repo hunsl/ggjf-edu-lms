@@ -12404,28 +12404,60 @@ function App() {
     addAudit("훈련생 수정", `${updated.name} 정보 수정`, currentUser?.name);
   }, [addAudit, currentUser]);
 
+  const archiveStudent = useCallback(async (id, reason = "삭제요청(이력보존)") => {
+    const today = localDateStr();
+    const patch = {
+      enrollment_status: "중도탈락",
+      status_change_date: today,
+      dropout_reason: reason,
+    };
+    const { error } = await sbUpdate("students", `id=eq.${id}`, patch);
+    if (error) return { ok: false, error };
+    return { ok: true, patch };
+  }, []);
+
   const deleteStudent = useCallback(async (id) => {
-    if (!window.confirm("이 훈련생을 삭제하시겠습니까?")) return;
+    if (!window.confirm("이 훈련생을 삭제하지 않고 이력 보존 상태(중도탈락)로 변경할까요?")) return;
     const target = students.find(s => s.id === id);
-    const { error } = await sbDelete("students", `id=eq.${id}`);
-    if (error) { alert("삭제 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => prev.filter(s => s.id!==id));
-    addAudit("훈련생 삭제", `${target?.name || id} 삭제`, currentUser?.name);
-  }, [students, addAudit, currentUser]);
+    const res = await archiveStudent(id, "개별 삭제요청(이력보존)");
+    if (!res.ok) { alert("상태 변경 오류: " + (res.error.message||JSON.stringify(res.error))); return; }
+    setStudents(prev => prev.map(s => s.id===id ? ({ ...s, enrollmentStatus: "중도탈락", statusChangeDate: res.patch.status_change_date, dropoutReason: res.patch.dropout_reason }) : s));
+    addAudit("훈련생 상태변경", `${target?.name || id} 중도탈락(이력보존) 처리`, currentUser?.name);
+  }, [students, addAudit, currentUser, archiveStudent]);
 
   const resetData = useCallback(async () => {
-    const { error } = await sbDelete("students", "id=gte.0");
-    if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents([]);
-    addAudit("전체 초기화", "모든 훈련생 데이터 삭제", currentUser?.name);
-  }, [addAudit, currentUser]);
+    if (!window.confirm("전체 삭제 대신 전체 이력을 중도탈락(보존) 처리합니다. 진행할까요?")) return;
+    const ids = students.map(s => s.id);
+    if (ids.length === 0) return;
+    const updates = await Promise.all(ids.map(id => archiveStudent(id, "전체 초기화(이력보존)")));
+    const failed = updates.find(r => !r.ok);
+    if (failed) { alert("초기화 오류: " + (failed.error.message||JSON.stringify(failed.error))); return; }
+    const today = localDateStr();
+    setStudents(prev => prev.map(s => ({
+      ...s,
+      enrollmentStatus: "중도탈락",
+      statusChangeDate: today,
+      dropoutReason: "전체 초기화(이력보존)"
+    })));
+    addAudit("전체 상태변경", "모든 훈련생 중도탈락(이력보존) 처리", currentUser?.name);
+  }, [students, addAudit, currentUser, archiveStudent]);
 
   const resetCoursStudents = useCallback(async (cid) => {
-    const { error } = await sbDelete("students", `cid=eq.${cid}`);
-    if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => prev.filter(s => s.cid !== cid));
-    addAudit("과정 초기화", `과정 ID ${cid} 훈련생 삭제`, currentUser?.name);
-  }, [addAudit, currentUser]);
+    if (!window.confirm("과정 훈련생 삭제 대신 중도탈락(이력보존) 처리합니다. 진행할까요?")) return;
+    const targets = students.filter(s => Number(s.cid) === Number(cid));
+    if (targets.length === 0) return;
+    const updates = await Promise.all(targets.map(s => archiveStudent(s.id, `과정초기화(${cid}) 이력보존`)));
+    const failed = updates.find(r => !r.ok);
+    if (failed) { alert("초기화 오류: " + (failed.error.message||JSON.stringify(failed.error))); return; }
+    const today = localDateStr();
+    setStudents(prev => prev.map(s => Number(s.cid) !== Number(cid) ? s : ({
+      ...s,
+      enrollmentStatus: "중도탈락",
+      statusChangeDate: today,
+      dropoutReason: `과정초기화(${cid}) 이력보존`
+    })));
+    addAudit("과정 상태변경", `과정 ID ${cid} 훈련생 중도탈락(이력보존) 처리`, currentUser?.name);
+  }, [students, addAudit, currentUser, archiveStudent]);
 
   // ── 과정 CRUD ──
   const addCourse = useCallback(async (c) => {

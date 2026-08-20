@@ -66,6 +66,7 @@
 |------|------|
 | `index.html` | 시스템 전체 (이 파일 하나로 모든 화면이 작동) |
 | `supabase-setup.sql` | Supabase 데이터베이스 초기 설정 SQL (처음 한 번만 실행) |
+| `supabase-recovery-duksu.sql` | 박덕수님 수료 이력 조회/복구/검증 SQL (운영 복구용) |
 
 ---
 

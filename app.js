@@ -12001,35 +12001,79 @@ ${msg}`;
       setStudents((prev) => prev.map((s) => s.id === updated.id ? updated : s));
       addAudit("\uD6C8\uB828\uC0DD \uC218\uC815", `${updated.name} \uC815\uBCF4 \uC218\uC815`, currentUser?.name);
     }, [addAudit, currentUser]);
+    const archiveStudent = useCallback(async (id, reason = "\uC0AD\uC81C\uC694\uCCAD(\uC774\uB825\uBCF4\uC874)") => {
+      const today = localDateStr();
+      const patch = {
+        enrollment_status: "\uC911\uB3C4\uD0C8\uB77D",
+        status_change_date: today,
+        dropout_reason: reason
+      };
+      const { error } = await sbUpdate("students", `id=eq.${id}`, patch);
+      if (error) return { ok: false, error };
+      return { ok: true, patch };
+    }, []);
     const deleteStudent = useCallback(async (id) => {
-      if (!window.confirm("\uC774 \uD6C8\uB828\uC0DD\uC744 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?")) return;
+      if (!window.confirm("\uC774 \uD6C8\uB828\uC0DD\uC744 \uC0AD\uC81C\uD558\uC9C0 \uC54A\uACE0 \uC774\uB825 \uBCF4\uC874 \uC0C1\uD0DC(\uC911\uB3C4\uD0C8\uB77D)\uB85C \uBCC0\uACBD\uD560\uAE4C\uC694?")) return;
       const target = students.find((s) => s.id === id);
-      const { error } = await sbDelete("students", `id=eq.${id}`);
-      if (error) {
-        alert("\uC0AD\uC81C \uC624\uB958: " + (error.message || JSON.stringify(error)));
+      const res = await archiveStudent(id, "\uAC1C\uBCC4 \uC0AD\uC81C\uC694\uCCAD(\uC774\uB825\uBCF4\uC874)");
+      if (!res.ok) {
+        alert("\uC0C1\uD0DC \uBCC0\uACBD \uC624\uB958: " + (res.error.message || JSON.stringify(res.error)));
         return;
       }
-      setStudents((prev) => prev.filter((s) => s.id !== id));
-      addAudit("\uD6C8\uB828\uC0DD \uC0AD\uC81C", `${target?.name || id} \uC0AD\uC81C`, currentUser?.name);
-    }, [students, addAudit, currentUser]);
+      setStudents((prev) => prev.map((s) => s.id === id ? {
+        ...s,
+        enrollmentStatus: "\uC911\uB3C4\uD0C8\uB77D",
+        statusChangeDate: res.patch.status_change_date,
+        dropoutReason: res.patch.dropout_reason
+      } : s));
+      addAudit("\uD6C8\uB828\uC0DD \uC0C1\uD0DC\uBCC0\uACBD", `${target?.name || id} \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC`, currentUser?.name);
+    }, [students, addAudit, currentUser, archiveStudent]);
     const resetData = useCallback(async () => {
-      const { error } = await sbDelete("students", "id=gte.0");
+      if (!window.confirm("\uC804\uCCB4 \uC0AD\uC81C \uB300\uC2E0 \uC804\uCCB4 \uC774\uB825\uC744 \uC911\uB3C4\uD0C8\uB77D(\uBCF4\uC874) \uCC98\uB9AC\uD569\uB2C8\uB2E4. \uC9C4\uD589\uD560\uAE4C\uC694?")) return;
+      const ids = students.map((s) => s.id);
+      if (ids.length === 0) return;
+      const today = localDateStr();
+      const patch = {
+        enrollment_status: "\uC911\uB3C4\uD0C8\uB77D",
+        status_change_date: today,
+        dropout_reason: "\uC804\uCCB4 \uCD08\uAE30\uD654(\uC774\uB825\uBCF4\uC874)"
+      };
+      const { error } = await sbUpdate("students", `id=in.(${ids.join(",")})`, patch);
       if (error) {
         alert("\uCD08\uAE30\uD654 \uC624\uB958: " + (error.message || JSON.stringify(error)));
         return;
       }
-      setStudents([]);
-      addAudit("\uC804\uCCB4 \uCD08\uAE30\uD654", "\uBAA8\uB4E0 \uD6C8\uB828\uC0DD \uB370\uC774\uD130 \uC0AD\uC81C", currentUser?.name);
-    }, [addAudit, currentUser]);
-    const resetCoursStudents = useCallback(async (cid) => {
-      const { error } = await sbDelete("students", `cid=eq.${cid}`);
+      setStudents((prev) => prev.map((s) => ({
+        ...s,
+        enrollmentStatus: "\uC911\uB3C4\uD0C8\uB77D",
+        statusChangeDate: today,
+        dropoutReason: "\uC804\uCCB4 \uCD08\uAE30\uD654(\uC774\uB825\uBCF4\uC874)"
+      })));
+      addAudit("\uC804\uCCB4 \uC0C1\uD0DC\uBCC0\uACBD", `\uBAA8\uB4E0 \uD6C8\uB828\uC0DD \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC ${ids.length}\uAC74`, currentUser?.name);
+    }, [students, addAudit, currentUser]);
+    const resetCourseStudents = useCallback(async (cid) => {
+      if (!window.confirm("\uACFC\uC815 \uD6C8\uB828\uC0DD \uC0AD\uC81C \uB300\uC2E0 \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC\uD569\uB2C8\uB2E4. \uC9C4\uD589\uD560\uAE4C\uC694?")) return;
+      const targets = students.filter((s) => Number(s.cid) === Number(cid));
+      if (targets.length === 0) return;
+      const today = localDateStr();
+      const patch = {
+        enrollment_status: "\uC911\uB3C4\uD0C8\uB77D",
+        status_change_date: today,
+        dropout_reason: `\uACFC\uC815\uCD08\uAE30\uD654(${cid}) \uC774\uB825\uBCF4\uC874`
+      };
+      const { error } = await sbUpdate("students", `cid=eq.${cid}`, patch);
       if (error) {
         alert("\uCD08\uAE30\uD654 \uC624\uB958: " + (error.message || JSON.stringify(error)));
         return;
       }
-      setStudents((prev) => prev.filter((s) => s.cid !== cid));
-      addAudit("\uACFC\uC815 \uCD08\uAE30\uD654", `\uACFC\uC815 ID ${cid} \uD6C8\uB828\uC0DD \uC0AD\uC81C`, currentUser?.name);
-    }, [addAudit, currentUser]);
+      setStudents((prev) => prev.map((s) => Number(s.cid) !== Number(cid) ? s : {
+        ...s,
+        enrollmentStatus: "\uC911\uB3C4\uD0C8\uB77D",
+        statusChangeDate: today,
+        dropoutReason: `\uACFC\uC815\uCD08\uAE30\uD654(${cid}) \uC774\uB825\uBCF4\uC874`
+      }));
+      addAudit("\uACFC\uC815 \uC0C1\uD0DC\uBCC0\uACBD", `\uACFC\uC815 ID ${cid} \uD6C8\uB828\uC0DD \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC ${targets.length}\uAC74`, currentUser?.name);
+    }, [students, addAudit, currentUser]);
     const addCourse = useCallback(async (c) => {
       const { data, error } = await sbInsert("courses", fromCourse(c));
       if (error) {
@@ -12225,7 +12269,7 @@ ${msg}`;
         students,
         courses,
         onResetAll: resetData,
-        onResetCourse: resetCoursStudents,
+        onResetCourse: resetCourseStudents,
         onClose: () => setShowDataMgr(false)
       }
     ), showAccMgr && currentUser.role === "admin" && /* @__PURE__ */ React.createElement(

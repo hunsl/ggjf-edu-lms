@@ -12429,35 +12429,43 @@ function App() {
     if (!window.confirm("전체 삭제 대신 전체 이력을 중도탈락(보존) 처리합니다. 진행할까요?")) return;
     const ids = students.map(s => s.id);
     if (ids.length === 0) return;
-    const updates = await Promise.all(ids.map(id => archiveStudent(id, "전체 초기화(이력보존)")));
-    const failed = updates.find(r => !r.ok);
-    if (failed) { alert("초기화 오류: " + (failed.error.message||JSON.stringify(failed.error))); return; }
     const today = localDateStr();
+    const patch = {
+      enrollment_status: "중도탈락",
+      status_change_date: today,
+      dropout_reason: "전체 초기화(이력보존)"
+    };
+    const { error } = await sbUpdate("students", `id=in.(${ids.join(",")})`, patch);
+    if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.map(s => ({
       ...s,
       enrollmentStatus: "중도탈락",
       statusChangeDate: today,
       dropoutReason: "전체 초기화(이력보존)"
     })));
-    addAudit("전체 상태변경", "모든 훈련생 중도탈락(이력보존) 처리", currentUser?.name);
-  }, [students, addAudit, currentUser, archiveStudent]);
+    addAudit("전체 상태변경", `모든 훈련생 중도탈락(이력보존) 처리 ${ids.length}건`, currentUser?.name);
+  }, [students, addAudit, currentUser]);
 
-  const resetCoursStudents = useCallback(async (cid) => {
+  const resetCourseStudents = useCallback(async (cid) => {
     if (!window.confirm("과정 훈련생 삭제 대신 중도탈락(이력보존) 처리합니다. 진행할까요?")) return;
     const targets = students.filter(s => Number(s.cid) === Number(cid));
     if (targets.length === 0) return;
-    const updates = await Promise.all(targets.map(s => archiveStudent(s.id, `과정초기화(${cid}) 이력보존`)));
-    const failed = updates.find(r => !r.ok);
-    if (failed) { alert("초기화 오류: " + (failed.error.message||JSON.stringify(failed.error))); return; }
     const today = localDateStr();
+    const patch = {
+      enrollment_status: "중도탈락",
+      status_change_date: today,
+      dropout_reason: `과정초기화(${cid}) 이력보존`
+    };
+    const { error } = await sbUpdate("students", `cid=eq.${cid}`, patch);
+    if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.map(s => Number(s.cid) !== Number(cid) ? s : ({
       ...s,
       enrollmentStatus: "중도탈락",
       statusChangeDate: today,
       dropoutReason: `과정초기화(${cid}) 이력보존`
     })));
-    addAudit("과정 상태변경", `과정 ID ${cid} 훈련생 중도탈락(이력보존) 처리`, currentUser?.name);
-  }, [students, addAudit, currentUser, archiveStudent]);
+    addAudit("과정 상태변경", `과정 ID ${cid} 훈련생 중도탈락(이력보존) 처리 ${targets.length}건`, currentUser?.name);
+  }, [students, addAudit, currentUser]);
 
   // ── 과정 CRUD ──
   const addCourse = useCallback(async (c) => {
@@ -12626,7 +12634,7 @@ function App() {
         <DataManager
           students={students} courses={courses}
           onResetAll={resetData}
-          onResetCourse={resetCoursStudents}
+          onResetCourse={resetCourseStudents}
           onClose={()=>setShowDataMgr(false)}
         />
       )}

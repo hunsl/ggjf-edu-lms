@@ -58,6 +58,7 @@ const toStudent = r => r ? ({
   itvScore: r.itv_score||"", itvGrade: r.itv_grade||"",
   itvPass: r.itv_pass||false, memo: r.memo||"", rate: r.rate||0,
   earlyEmployed: r.early_employed||false, dropout: r.dropout||false,
+  personId: r.person_id || r.id,
 }) : null;
 
 const fromStudent = s => ({
@@ -67,6 +68,7 @@ const fromStudent = s => ({
   itv_score: s.itvScore||null, itv_grade: s.itvGrade||"",
   itv_pass: s.itvPass||false, memo: s.memo||"", rate: s.rate||0,
   early_employed: s.earlyEmployed||false, dropout: s.dropout||false,
+  person_id: s.personId||null,
 });
 
 const toCourse = r => r ? ({
@@ -1214,6 +1216,8 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onDelete, onNew }) => {
                     s.unemployment && {l:"실업급여",bg:"#EFF6FF",c:"#2563EB"},
                     s.disabled     && {l:"장애",    bg:"#F5F3FF",c:"#7C3AED"},
                     s.veteran      && {l:"보훈",    bg:"#ECFDF5",c:"#059669"},
+                    s.personId && students.some(o => o.id !== s.id && (o.personId||o.id) === (s.personId||s.id))
+                      && {l:"🔄 재수강",bg:"#FFF7ED",c:"#C2410C"},
                   ].filter(Boolean);
                   const gradeColor = g => g?.startsWith("A")?T.ok:g?.startsWith("B")?T.warn:T.danger;
                   const stateBadges = [
@@ -2636,7 +2640,7 @@ const calcAge = birth => {
   return `${age}세`;
 };
 
-const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) => {
+const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES, allStudents=[] }) => {
   const empty = {
     cid: courses[0]?.id || 1,
     name: "", gender: "남",
@@ -2647,10 +2651,20 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
     itvScore: "", itvGrade: "B", itvPass: true,
     earlyEmployed: false, dropout: false,
     memo: "", rate: 0,
+    personId: null,
   };
   const [form, setForm] = useState(student ? { ...empty, ...student } : empty);
   const submittedRef = useRef(false);  // 이중 저장 방지
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  // 재수강 검색 상태
+  const [reEnrollOpen, setReEnrollOpen] = useState(false);
+  const [reSearch, setReSearch] = useState("");
+  const reResults = reSearch.length >= 1
+    ? allStudents.filter(s =>
+        s.name.includes(reSearch) || (s.birth||"").includes(reSearch) || (s.phone||"").includes(reSearch)
+      ).slice(0, 10)
+    : [];
 
   // 나이: 생년월일 또는 주민번호 앞자리(birth)에서 계산
   const age = (() => {
@@ -2701,6 +2715,87 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
 
         {/* 바디 */}
         <div style={{ flex:1, overflowY:"auto", padding:"20px 22px", display:"flex", flexDirection:"column", gap:12 }}>
+
+          {/* ── 재수강 검색 패널 (신규 등록 시에만) ── */}
+          {isNew && (
+            <div style={{ border:`1.5px solid ${reEnrollOpen?"#F97316":T.bd}`, borderRadius:10,
+              overflow:"hidden", transition:"border-color .2s" }}>
+              <button type="button" onClick={()=>setReEnrollOpen(o=>!o)} style={{
+                width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
+                padding:"9px 12px", background:reEnrollOpen?"#FFF7ED":T.s2,
+                border:"none", cursor:"pointer", gap:8 }}>
+                <span style={{ fontSize:12, fontWeight:700, color:reEnrollOpen?"#C2410C":T.p }}>
+                  🔄 기존 교육생 재수강 등록
+                </span>
+                <span style={{ fontSize:11, color:T.mu }}>{reEnrollOpen?"▲ 닫기":"▼ 열기"}</span>
+              </button>
+              {reEnrollOpen && (
+                <div style={{ padding:"10px 12px", background:T.s, borderTop:`1px solid ${T.bd}` }}>
+                  <div style={{ fontSize:11, color:T.mu, marginBottom:6 }}>
+                    이름·생년월일·연락처로 기존 교육생을 검색하세요. 선택하면 기본정보가 자동 입력됩니다.
+                  </div>
+                  <input
+                    value={reSearch}
+                    onChange={e=>setReSearch(e.target.value)}
+                    placeholder="이름 또는 생년월일 검색..."
+                    style={{ ...inpStyle, marginBottom:6 }}
+                  />
+                  {reResults.length > 0 && (
+                    <div style={{ display:"flex", flexDirection:"column", gap:4, maxHeight:180, overflowY:"auto" }}>
+                      {reResults.map(s => {
+                        const prevCourse = courses.find(c=>c.id===s.cid);
+                        return (
+                          <button key={s.id} type="button"
+                            onClick={()=>{
+                              setForm(prev=>({
+                                ...prev,
+                                name: s.name,
+                                gender: s.gender||prev.gender,
+                                birth: s.birth||prev.birth,
+                                idBack: s.idBack||prev.idBack,
+                                phone: s.phone||prev.phone,
+                                addrCity: s.addrCity||prev.addrCity,
+                                personId: s.personId || s.id,
+                                itvScore: "", itvGrade: "B", itvPass: true,
+                                memo: "",
+                              }));
+                              setReSearch("");
+                              setReEnrollOpen(false);
+                            }}
+                            style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                              padding:"7px 10px", borderRadius:7, border:`1px solid ${T.bd}`,
+                              background:T.s2, cursor:"pointer", textAlign:"left", gap:8 }}>
+                            <div>
+                              <span style={{ fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</span>
+                              <span style={{ fontSize:11, color:T.mu, marginLeft:6 }}>{s.birth||"-"}</span>
+                              <span style={{ fontSize:11, color:T.mu, marginLeft:6 }}>{s.phone||""}</span>
+                            </div>
+                            <div style={{ fontSize:10, color:T.p, whiteSpace:"nowrap" }}>
+                              {prevCourse ? `이전: ${prevCourse.code}` : ""}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {reSearch.length >= 1 && reResults.length === 0 && (
+                    <div style={{ fontSize:11, color:T.mu, padding:"6px 0" }}>검색 결과 없음</div>
+                  )}
+                  {form.personId && form.personId !== form.id && (
+                    <div style={{ marginTop:6, padding:"6px 10px", borderRadius:7,
+                      background:"#FFF7ED", border:"1px solid #FED7AA", fontSize:11, color:"#C2410C" }}>
+                      ✅ 재수강 연결됨 — {form.name} (이전 이력 보존)
+                      <button type="button" onClick={()=>setForm(p=>({...p,personId:null}))}
+                        style={{ marginLeft:8, fontSize:10, color:T.danger, background:"none",
+                          border:"none", cursor:"pointer", textDecoration:"underline" }}>
+                        연결 해제
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {divider("기본 신원")}
           <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:10 }}>
@@ -2838,6 +2933,43 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
               placeholder="면접 특이사항, 취업 의지, 배려 필요 사항 등 자유 기재"
               rows={3} style={{ ...inpStyle, resize:"vertical", fontFamily:"inherit", lineHeight:1.6 }}/>
           </FLD>
+
+          {/* ── 동일 인물 과정 이력 (읽기 전용) ── */}
+          {(() => {
+            const pid = form.personId || form.id;
+            if (!pid) return null;
+            const history = allStudents.filter(s => (s.personId||s.id) === pid && s.id !== form.id);
+            if (history.length === 0) return null;
+            return (
+              <div style={{ border:`1px solid #FED7AA`, borderRadius:8, overflow:"hidden" }}>
+                <div style={{ padding:"7px 12px", background:"#FFF7ED",
+                  fontSize:11, fontWeight:700, color:"#C2410C" }}>
+                  📋 동일 인물 과정 이력 ({history.length}건)
+                </div>
+                <div style={{ padding:"8px 12px", display:"flex", flexDirection:"column", gap:5 }}>
+                  {history.map(h => {
+                    const hc = courses.find(c=>c.id===h.cid);
+                    return (
+                      <div key={h.id} style={{ display:"flex", alignItems:"center",
+                        justifyContent:"space-between", padding:"5px 8px",
+                        background:T.s2, borderRadius:6, fontSize:11 }}>
+                        <span style={{ fontWeight:700, color:T.tx }}>{hc?.code || "?"}</span>
+                        <span style={{ color:T.mu }}>{hc?.name}</span>
+                        <span style={{ color:h.rate>=80?T.ok:T.danger, fontWeight:700 }}>
+                          {h.rate}%
+                        </span>
+                        <Chip
+                          label={h.earlyEmployed?"조기수료":h.dropout?"중도탈락":h.rate>=80?"수료":"진행/미수료"}
+                          bg={h.earlyEmployed?"#ECFDF5":h.dropout?"#FEF2F2":h.rate>=80?T.pbg:"#EFF6FF"}
+                          color={h.earlyEmployed?"#059669":h.dropout?"#DC2626":h.rate>=80?T.p:"#2563EB"}
+                          size={10}/>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* 푸터 */}
@@ -2853,6 +2985,7 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
               id: form.id||Date.now(),
               earlyEmployed: !!form.earlyEmployed,
               dropout: !!form.dropout && !form.earlyEmployed,
+              personId: form.personId || undefined,
             };
             onSave(payload);
             onClose();
@@ -4618,6 +4751,14 @@ function App() {
     // 실시간 구독 외에도 로컬 state 즉시 반영 (realtime 지연 대비, 중복 방지 포함)
     if (data && data.length > 0) {
       const newStudents = data.map(toStudent);
+      // person_id가 없는 신규 학생은 자기 id로 설정
+      const toInit = newStudents.filter(s => !s.personId);
+      if (toInit.length > 0) {
+        await Promise.all(toInit.map(s =>
+          sbUpdate("students", `id=eq.${s.id}`, { person_id: s.id })
+        ));
+        toInit.forEach(s => { s.personId = s.id; });
+      }
       setStudents(prev => {
         const existingIds = new Set(prev.map(s => s.id));
         const toAdd = newStudents.filter(s => !existingIds.has(s.id));
@@ -4756,13 +4897,21 @@ function App() {
       <GStyle/>
       {/* ── 모달들 ── */}
       {showNew && (
-        <EditModal student={null} isNew={true} courses={courses}
+        <EditModal student={null} isNew={true} courses={courses} allStudents={students}
           onSave={async (s) => {
             // 개별 신규 훈련생: Supabase에 저장 후 로컬 state 반영
             try {
               const { data, error } = await sbInsert("students", fromStudent(s));
               if (error) throw error;
-              if (!data) {
+              const saved = data ? toStudent(data) : null;
+              if (saved) {
+                // person_id가 없으면 자기 자신(id)으로 설정
+                if (!saved.personId || saved.personId === saved.id) {
+                  await sbUpdate("students", `id=eq.${saved.id}`, { person_id: saved.id });
+                  saved.personId = saved.id;
+                }
+                setStudents(prev => prev.find(x => x.id === saved.id) ? prev : [...prev, saved]);
+              } else {
                 // data가 없으면 DB에서 직접 재조회하여 Supabase 할당 ID 사용
                 const { data: reloaded, error: relErr } = await sbGet(
                   "students", `select=*&name=eq.${encodeURIComponent(s.name)}&order=id.desc&limit=1`
@@ -4770,11 +4919,12 @@ function App() {
                 if (relErr) throw relErr;
                 const rec = reloaded && reloaded[0] ? toStudent(reloaded[0]) : null;
                 if (rec) {
+                  if (!rec.personId) {
+                    await sbUpdate("students", `id=eq.${rec.id}`, { person_id: rec.id });
+                    rec.personId = rec.id;
+                  }
                   setStudents(prev => prev.find(x => x.id === rec.id) ? prev : [...prev, rec]);
                 }
-              } else {
-                const saved = toStudent(data);
-                setStudents(prev => prev.find(x => x.id === saved.id) ? prev : [...prev, saved]);
               }
             } catch(err) {
               alert("저장 오류: " + (err.message || JSON.stringify(err)));
@@ -4783,7 +4933,7 @@ function App() {
           onClose={()=>setShowNew(false)}/>
       )}
       {editTarget && (
-        <EditModal student={editTarget} courses={courses}
+        <EditModal student={editTarget} courses={courses} allStudents={students}
           onSave={updateStudent} onClose={()=>setEditTarget(null)}/>
       )}
       {showDataMgr && (

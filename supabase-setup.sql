@@ -245,6 +245,13 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS status_change_date TEXT;
 ALTER TABLE students ADD COLUMN IF NOT EXISTS dropout_reason TEXT;
 ALTER TABLE students ADD COLUMN IF NOT EXISTS employer_name TEXT;
 
+-- 다과정 참여 교육생 지원: person_id로 동일 인물 묶기
+-- (첫 등록 시 person_id = 자신의 id, 재수강 시 person_id = 원본 학생 id)
+ALTER TABLE students ADD COLUMN IF NOT EXISTS person_id BIGINT;
+-- 기존 행은 자기 id로 초기화
+UPDATE students SET person_id = id WHERE person_id IS NULL;
+CREATE INDEX IF NOT EXISTS students_person_id_idx ON students (person_id);
+
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS type TEXT DEFAULT '주강사';
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '경기도 강사';

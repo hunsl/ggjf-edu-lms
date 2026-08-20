@@ -144,6 +144,9 @@ const sbStorageUpload = async (bucket, path, file) => {
 /* ── DB 컬럼(snake_case) ↔ 앱(camelCase) 변환 ── */
 const toNum = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
 
+// 동일인 식별 키 (이름 + 생년월일 조합, DB 저장 없이 앱 내부에서만 사용)
+const makePersonKey = s => ((s?.name || "") + "|" + (s?.birth || "")).trim().toLowerCase();
+
 const toStudent = r => r ? ({
   id: Number(r.id), cid: Number(r.cid), name: r.name, gender: r.gender||"",
   birth: r.birth||"", idBack: r.id_back||"", phone: r.phone||"",
@@ -1038,15 +1041,25 @@ const Dashboard = ({ students, courses }) => {
     return Number(s.rate || 0) < 80;
   };
   const atRisk   = students.filter(isRiskTarget);
-  const completedCnt = students.filter(s => ['수료', '조기취업 수료'].includes(s.enrollmentStatus || '')).length;
-  const earlyEmploymentCnt = students.filter(s => (s.enrollmentStatus || '') === '조기취업').length;
-  const employedCnt = students.filter(s => {
-    const employment = getEffectiveEmploymentStatus(s);
-    return employment !== '미취업' || (s.enrollmentStatus || '') === '조기취업';
-  }).length;
+
+  // 동일인(name+birth) 중복 제거 통계
+  const uniquePersonCount = new Set(students.map(makePersonKey)).size;
+  const completedCnt = new Set(
+    students.filter(s => ['수료', '조기취업 수료'].includes(s.enrollmentStatus || '')).map(makePersonKey)
+  ).size;
+  const earlyEmploymentCnt = new Set(
+    students.filter(s => (s.enrollmentStatus || '') === '조기취업').map(makePersonKey)
+  ).size;
+  const employedCnt = new Set(
+    students.filter(s => {
+      const employment = getEffectiveEmploymentStatus(s);
+      return employment !== '미취업' || (s.enrollmentStatus || '') === '조기취업';
+    }).map(makePersonKey)
+  ).size;
+  const atRiskUniqueCnt = new Set(atRisk.map(makePersonKey)).size;
   const employmentGoal = courses.reduce((a,b)=>a+Number(b.eGoal || 0),0);
   const completionGoal = courses.reduce((a,b)=>a+Number(b.cGoal || 0),0);
-  const employmentRate = students.length ? Math.round(employedCnt / students.length * 100) : 0;
+  const employmentRate = uniquePersonCount ? Math.round(employedCnt / uniquePersonCount * 100) : 0;
   const completionGoalRate = completionGoal ? Math.round(completedCnt / completionGoal * 100) : 0;
 
   const courseProgress = courses.map(c => {
@@ -1082,7 +1095,7 @@ const Dashboard = ({ students, courses }) => {
   });
   // 위험 훈련생 수
   if (atRisk.length > 0) {
-    alerts.push({ level:"info", msg:`누적 출석률 80% 미만 수료 위험 훈련생 ${atRisk.length}명` });
+    alerts.push({ level:"info", msg:`누적 출석률 80% 미만 수료 위험 훈련생 ${atRiskUniqueCnt}명` });
   }
 
   return (
@@ -1278,7 +1291,7 @@ const Dashboard = ({ students, courses }) => {
           { label:"총 모집 목표", val:`${totalTgt}명`, sub:`${courses.length}개 과정`, icon:"people", color:T.p },
           { label:"이번달 진행중", val:`${activeCnt}개`, sub:"운영 과정 수", icon:"cal", color:T.ok },
           { label:"평균 출석률", val:`${avgRate}%`, sub:"전체 훈련생", icon:"check", color:T.info },
-          { label:"수료 위험", val:`${atRisk.length}명`, sub:"출석률 80% 미만", icon:"alert", color:T.danger },
+          { label:"수료 위험", val:`${atRiskUniqueCnt}명`, sub:"출석률 80% 미만", icon:"alert", color:T.danger },
           { label:"수료 확정", val:`${completedCnt}명`, sub:`목표 대비 ${completionGoalRate}%`, icon:"award", color:"#15803D" },
           { label:"취업/예정", val:`${employedCnt}명`, sub:`취업 목표 ${employmentGoal}명`, icon:"user", color:"#0369A1" },
           { label:"조기취업", val:`${earlyEmploymentCnt}명`, sub:"수료 전 취업", icon:"check", color:"#7E22CE" },
@@ -2113,6 +2126,17 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
     return true;
   }), [students, cFilter, enrollFilter, empFilter, riskOnly, search]);
 
+  // 동일인(name+birth)이 여러 과정에 등록된 경우 맵: personKey → 해당 학생 레코드 배열
+  const multiCourseMap = useMemo(() => {
+    const map = new Map();
+    students.forEach(s => {
+      const k = makePersonKey(s);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(s);
+    });
+    return map;
+  }, [students]);
+
   const studentSummary = useMemo(() => {
     const enrolled = {};
     const employment = {};
@@ -2483,6 +2507,15 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                                 color: s.gender==="여"?"#BE185D":"#1D4ED8" }}>
                                 {s.gender||""}
                               </span>
+                              {(multiCourseMap.get(makePersonKey(s))?.length || 1) > 1 && (
+                                <span title="동일인이 여러 과정에 등록됨" style={{
+                                  marginLeft:5, fontSize:9, fontWeight:800,
+                                  background:"#FEF3C7", color:"#92400E",
+                                  borderRadius:10, padding:"1px 6px", verticalAlign:"middle",
+                                  border:"1px solid #FDE68A" }}>
+                                  {multiCourseMap.get(makePersonKey(s)).length}개 과정
+                                </span>
+                              )}
                             </div>
                             <div style={{ fontSize:10, color:T.mu }}>{age} · {s.birth||"-"}</div>
                           </div>
@@ -2697,6 +2730,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                   ["status", "등록상태"],
                   ["after", "사후관리"],
                   ["attendance", `출결 ${workspaceAtt.length ? workspaceAtt.length : ""}`],
+                  ...((() => { const k = makePersonKey(selectedStudent); const recs = multiCourseMap.get(k) || []; return recs.length > 1 ? [["courses", `${recs.length}개 과정`]] : []; })()),
                 ].map(([id, label]) => {
                   const active = workspaceTab === id;
                   return (
@@ -2795,6 +2829,52 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         ))}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {workspaceTab === "courses" && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                    <div style={{ fontSize:12, color:T.mu, fontWeight:700, marginBottom:2 }}>
+                      {selectedStudent.name}님이 등록된 모든 과정
+                    </div>
+                    {(multiCourseMap.get(makePersonKey(selectedStudent)) || []).map(rec => {
+                      const c = courses.find(x => x.id === rec.cid);
+                      const isCurrent = rec.id === selectedStudent.id;
+                      const esColor = (STATUS_COLORS[rec.enrollmentStatus || "재학중"] || { bg:T.s3, color:T.mu });
+                      return (
+                        <div key={rec.id} style={{
+                          border:`1.5px solid ${isCurrent ? T.p : T.bd}`,
+                          borderRadius:10, padding:"11px 13px", background: isCurrent ? T.pbg : T.s2 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                            <div style={{ minWidth:0 }}>
+                              <div style={{ fontSize:12, fontWeight:800, color:T.tx, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                                {c?.name || `과정 ID ${rec.cid}`}
+                                {isCurrent && <span style={{ marginLeft:6, fontSize:9, background:T.p, color:"#fff", borderRadius:8, padding:"1px 6px" }}>현재</span>}
+                              </div>
+                              <div style={{ fontSize:10, color:T.mu, marginTop:2 }}>
+                                {c?.code} · {c?.dateFrom || ""} ~ {c?.dateTo || ""}
+                              </div>
+                            </div>
+                            <Chip label={rec.enrollmentStatus || "재학중"} bg={esColor.bg} color={esColor.color} size={10}/>
+                          </div>
+                          <div style={{ marginTop:8, display:"flex", gap:6, flexWrap:"wrap" }}>
+                            <span style={{ fontSize:10, color:T.mu }}>출석률</span>
+                            <span style={{ fontSize:12, fontWeight:800, color: rec.rate >= 80 ? "#15803D" : rec.rate >= 70 ? T.warn : T.danger }}>
+                              {rec.rate}%
+                            </span>
+                            <span style={{ fontSize:10, color:T.mu, marginLeft:8 }}>누적</span>
+                            <span style={{ fontSize:10, color:T.tx, fontWeight:700 }}>{(rec.accumulatedHours || 0).toFixed(1)}h</span>
+                            {!isCurrent && (
+                              <button onClick={()=>setSelectedStudentId(rec.id)} style={{
+                                marginLeft:"auto", padding:"3px 9px", borderRadius:7, border:`1px solid ${T.bd}`,
+                                background:"#fff", color:T.p, cursor:"pointer", fontSize:10, fontWeight:750 }}>
+                                이 과정으로 보기
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -8221,7 +8301,7 @@ const EmploymentQuickDialog = ({ student, onSave, onClose }) => {
   );
 };
 
-const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) => {
+const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES, allStudents=[] }) => {
   const empty = {
     cid: courses[0]?.id || 1,
     name: "", gender: "남",
@@ -8445,6 +8525,22 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES }) =
           <Btn onClick={async ()=>{
             if(!form.name||!form.name.trim()) return alert("이름은 필수 입력 항목입니다.");
             if(!form.birth) return alert("주민등록번호는 필수 입력 항목입니다. (앞 6자리 입력 필요)");
+            // ── 동일인 중복 과정 감지 (신규 등록 시) ──
+            if (isNew && allStudents.length > 0) {
+              const key = makePersonKey(form);
+              const samePersons = allStudents.filter(s => makePersonKey(s) === key);
+              if (samePersons.length > 0) {
+                const existingCourseNames = samePersons.map(s => {
+                  const c = courses.find(x => x.id === s.cid);
+                  return c ? `[${c.code}] ${c.name}` : `과정 ID ${s.cid}`;
+                }).join("\n");
+                const selectedCourseName = (() => { const c = courses.find(x=>x.id===form.cid); return c ? `[${c.code}] ${c.name}` : ""; })();
+                const ok = window.confirm(
+                  `⚠️ 이미 등록된 훈련생입니다!\n\n이름: ${form.name}  생년월일: ${form.birth}\n\n기존 등록 과정:\n${existingCourseNames}\n\n새로 추가할 과정:\n${selectedCourseName}\n\n같은 훈련생을 이 과정에 추가 등록하시겠습니까?`
+                );
+                if (!ok) return;
+              }
+            }
             await onSave({ ...form, id: form.id||undefined });
             onClose();
           }}>
@@ -12623,7 +12719,7 @@ function App() {
       />
       {/* ── 모달들 ── */}
       {showNew && (
-        <EditModal student={null} isNew={true} courses={courses}
+        <EditModal student={null} isNew={true} courses={courses} allStudents={students}
           onSave={s => addStudents([s])} onClose={()=>setShowNew(false)}/>
       )}
       {editTarget && (

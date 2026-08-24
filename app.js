@@ -1,4 +1,4 @@
-var GgjfEduLms = (() => {
+(() => {
   const { useState, useMemo, useEffect, useRef, useCallback } = React;
   const _mem = {};
   const _probe = (storage) => {
@@ -9,7 +9,7 @@ var GgjfEduLms = (() => {
       const ok = storage.getItem(k) === "1";
       storage.removeItem(k);
       return ok;
-    } catch {
+    } catch (e) {
       return false;
     }
   };
@@ -21,7 +21,7 @@ var GgjfEduLms = (() => {
       if (!_sessionOk) return _mem["s_" + k] || null;
       try {
         return sessionStorage.getItem(k);
-      } catch {
+      } catch (e) {
         return _mem["s_" + k] || null;
       }
     },
@@ -32,7 +32,7 @@ var GgjfEduLms = (() => {
       }
       try {
         sessionStorage.setItem(k, v);
-      } catch {
+      } catch (e) {
         _mem["s_" + k] = v;
       }
     },
@@ -43,7 +43,7 @@ var GgjfEduLms = (() => {
       }
       try {
         sessionStorage.removeItem(k);
-      } catch {
+      } catch (e) {
         delete _mem["s_" + k];
       }
     }
@@ -53,7 +53,7 @@ var GgjfEduLms = (() => {
       if (!_localOk) return _mem["l_" + k] || null;
       try {
         return localStorage.getItem(k);
-      } catch {
+      } catch (e) {
         return _mem["l_" + k] || null;
       }
     },
@@ -64,7 +64,7 @@ var GgjfEduLms = (() => {
       }
       try {
         localStorage.setItem(k, v);
-      } catch {
+      } catch (e) {
         _mem["l_" + k] = v;
       }
     },
@@ -75,7 +75,7 @@ var GgjfEduLms = (() => {
       }
       try {
         localStorage.removeItem(k);
-      } catch {
+      } catch (e) {
         delete _mem["l_" + k];
       }
     }
@@ -202,6 +202,32 @@ var GgjfEduLms = (() => {
     return isFinite(n) ? n : null;
   };
   const makePersonKey = (s) => (((s == null ? void 0 : s.name) || "") + "|" + ((s == null ? void 0 : s.birth) || "")).trim().toLowerCase();
+  const personIdOf = (s) => {
+    const n = Number((s == null ? void 0 : s.personId) || (s == null ? void 0 : s.id));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const personGroupKey = (s) => {
+    const pid = personIdOf(s);
+    if ((s == null ? void 0 : s.personId) && pid) return "id:" + pid;
+    const k = makePersonKey(s);
+    return k && k !== "|" ? "key:" + k : "row:" + ((s == null ? void 0 : s.id) || "");
+  };
+  const samePerson = (a, b) => {
+    if (!a || !b) return false;
+    const pa = a.personId ? personIdOf(a) : null;
+    const pb = b.personId ? personIdOf(b) : null;
+    if (pa && pb && pa === pb) return true;
+    const ka = makePersonKey(a), kb = makePersonKey(b);
+    if (ka && kb && ka !== "|" && ka === kb) return true;
+    const phoneA = String(a.phone || "").replace(/[^0-9]/g, "");
+    const phoneB = String(b.phone || "").replace(/[^0-9]/g, "");
+    return !!(phoneA && phoneB && phoneA.length >= 10 && phoneA === phoneB && (a.name || "") === (b.name || ""));
+  };
+  const resolvePersonId = (student, all) => {
+    if (student == null ? void 0 : student.personId) return personIdOf(student);
+    const match = (all || []).find((s) => s.id !== (student == null ? void 0 : student.id) && samePerson(s, student));
+    return personIdOf(match) || null;
+  };
   const toStudent = (r) => r ? {
     id: Number(r.id),
     cid: Number(r.cid),
@@ -231,7 +257,8 @@ var GgjfEduLms = (() => {
     accumulatedHours: parseFloat(r.accumulated_hours) || 0,
     statusChangeDate: r.status_change_date || null,
     dropoutReason: r.dropout_reason || null,
-    employerName: r.employer_name || null
+    employerName: r.employer_name || null,
+    personId: r.person_id ? Number(r.person_id) : Number(r.id)
   } : null;
   const excelDateToISO = (v) => {
     if (!v && v !== 0) return null;
@@ -273,7 +300,8 @@ var GgjfEduLms = (() => {
       accumulated_hours: (_b = toNum(s.accumulatedHours)) != null ? _b : 0,
       status_change_date: s.statusChangeDate || null,
       dropout_reason: s.dropoutReason || null,
-      employer_name: s.employerName || null
+      employer_name: s.employerName || null,
+      person_id: s.personId ? Number(s.personId) : null
     };
   };
   const toCourse = (r) => {
@@ -632,7 +660,7 @@ var GgjfEduLms = (() => {
           return;
         }
       }
-    } catch {
+    } catch (e) {
     }
     try {
       const { data, error } = await sbGet("holidays", "select=date&order=date");
@@ -641,7 +669,7 @@ var GgjfEduLms = (() => {
         _holidaySet = new Set(dates);
         try {
           safeLocal.set("gjf_holidays", JSON.stringify({ data: dates, ts: Date.now() }));
-        } catch {
+        } catch (e) {
         }
       }
     } catch (e) {
@@ -1230,7 +1258,7 @@ var GgjfEduLms = (() => {
             if (!rRes.error && ((_b = rRes.data) == null ? void 0 : _b.length)) setDashRooms(rRes.data.map(toRoom));
             if (!bRes.error && ((_c = bRes.data) == null ? void 0 : _c.length)) setBookings2(bRes.data.map(toBooking));
           }
-        } catch {
+        } catch (e) {
         }
         try {
           const attRes = await sbGet("attendance", `select=student_id,status&date=eq.${todayStr}`);
@@ -1254,7 +1282,7 @@ var GgjfEduLms = (() => {
               setLastLiveLoad(/* @__PURE__ */ new Date());
             }
           }
-        } catch {
+        } catch (e) {
         }
       };
       load();
@@ -1302,7 +1330,7 @@ var GgjfEduLms = (() => {
           try {
             const msg = JSON.parse(event.data);
             if (msg.event === "postgres_changes") setLoadTick((t) => t + 1);
-          } catch {
+          } catch (e) {
           }
         };
         ws.onclose = () => {
@@ -1339,20 +1367,20 @@ var GgjfEduLms = (() => {
       return Number(s.rate || 0) < 80;
     };
     const atRisk = students.filter(isRiskTarget);
-    const uniquePersonCount = new Set(students.map(makePersonKey)).size;
+    const uniquePersonCount = new Set(students.map(personGroupKey)).size;
     const completedCnt = new Set(
-      students.filter((s) => ["\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC"].includes(s.enrollmentStatus || "")).map(makePersonKey)
+      students.filter((s) => ["\uC218\uB8CC", "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC"].includes(s.enrollmentStatus || "")).map(personGroupKey)
     ).size;
     const earlyEmploymentCnt = new Set(
-      students.filter((s) => (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5").map(makePersonKey)
+      students.filter((s) => (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5").map(personGroupKey)
     ).size;
     const employedCnt = new Set(
       students.filter((s) => {
         const employment = getEffectiveEmploymentStatus(s);
         return employment !== "\uBBF8\uCDE8\uC5C5" || (s.enrollmentStatus || "") === "\uC870\uAE30\uCDE8\uC5C5";
-      }).map(makePersonKey)
+      }).map(personGroupKey)
     ).size;
-    const atRiskUniqueCnt = new Set(atRisk.map(makePersonKey)).size;
+    const atRiskUniqueCnt = new Set(atRisk.map(personGroupKey)).size;
     const employmentGoal = courses.reduce((a, b) => a + Number(b.eGoal || 0), 0);
     const completionGoal = courses.reduce((a, b) => a + Number(b.cGoal || 0), 0);
     const employmentRate = uniquePersonCount ? Math.round(employedCnt / uniquePersonCount * 100) : 0;
@@ -2124,6 +2152,76 @@ var GgjfEduLms = (() => {
       justifyContent: "center"
     } }, /* @__PURE__ */ React.createElement(Icon, { n: "plus", s: 20 })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.mu } }, "\uC0C8 \uACFC\uC815 \uCD94\uAC00"))));
   };
+  const AddCourseEnrollmentModal = ({ student, students, courses, onSave, onClose }) => {
+    var _a;
+    const enrolledCids = new Set(
+      students.filter((s) => samePerson(s, student)).map((s) => Number(s.cid))
+    );
+    const available = courses.filter((c) => !enrolledCids.has(Number(c.id)));
+    const [cid, setCid] = useState(((_a = available[0]) == null ? void 0 : _a.id) || "");
+    const [enrollmentStatus, setEnrollmentStatus] = useState("\uC7AC\uD559\uC911");
+    const [saving, setSaving] = useState(false);
+    const selStyle = {
+      width: "100%",
+      padding: "8px 10px",
+      border: `1px solid ${T.bd}`,
+      borderRadius: 8,
+      fontSize: 12,
+      outline: "none",
+      background: T.s2,
+      color: T.tx,
+      cursor: "pointer"
+    };
+    const submit = async () => {
+      if (!cid) return alert("\uCD94\uAC00\uD560 \uACFC\uC815\uC744 \uC120\uD0DD\uD558\uC138\uC694.");
+      if (enrolledCids.has(Number(cid))) return alert("\uC774\uBBF8 \uC774 \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.");
+      setSaving(true);
+      try {
+        const { id, rate, accumulatedHours, enrollmentStatus: _es, statusChangeDate, dropoutReason, cid: _cid, ...rest } = student;
+        await onSave({
+          ...rest,
+          cid: Number(cid),
+          personId: personIdOf(student),
+          enrollmentStatus,
+          rate: 0,
+          accumulatedHours: 0,
+          statusChangeDate: enrollmentStatus === "\uC218\uB8CC" || enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC" ? localDateStr() : null,
+          dropoutReason: null
+        });
+        onClose();
+      } catch (e) {
+        alert("\uCD94\uAC00 \uB4F1\uB85D \uC624\uB958: " + ((e == null ? void 0 : e.message) || e));
+      } finally {
+        setSaving(false);
+      }
+    };
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "modal-backdrop",
+        style: {
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,.5)",
+          zIndex: 1e3,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        },
+        onClick: (e) => {
+          if (e.target === e.currentTarget) onClose();
+        }
+      },
+      /* @__PURE__ */ React.createElement("div", { style: {
+        background: T.s,
+        borderRadius: 16,
+        width: 440,
+        maxWidth: "96vw",
+        boxShadow: "0 24px 64px rgba(0,0,0,.28)",
+        overflow: "hidden"
+      } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 20px", background: `linear-gradient(135deg,${T.sb},${T.p})` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#fff" } }, "\uB2E4\uB978 \uACFC\uC815 \uCD94\uAC00 \uB4F1\uB85D"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,.7)", marginTop: 3 } }, student.name, " \xB7 \uAE30\uC874 \uACFC\uC815 \uC774\uB825\uC740 \uADF8\uB300\uB85C \uC720\uC9C0\uB429\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement("div", { style: { padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 } }, available.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: T.mu, lineHeight: 1.6 } }, "\uB4F1\uB85D\uD560 \uC218 \uC788\uB294 \uB0A8\uC740 \uACFC\uC815\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC774\uBBF8 \uBAA8\uB4E0 \uACFC\uC815\uC5D0 \uC774\uB825\uC774 \uC788\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(FLD, { label: "\uCD94\uAC00\uD560 \uACFC\uC815", required: true }, /* @__PURE__ */ React.createElement("select", { value: cid, onChange: (e) => setCid(+e.target.value), style: selStyle }, available.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.code, " \u2014 ", c.name)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uC774 \uACFC\uC815\uC758 \uB4F1\uB85D\uC0C1\uD0DC" }, /* @__PURE__ */ React.createElement("select", { value: enrollmentStatus, onChange: (e) => setEnrollmentStatus(e.target.value), style: selStyle }, ENROLLMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.55, padding: "8px 10px", background: T.s2, borderRadius: 8 } }, "\uC218\uB8CC\uD55C \uACFC\uC815\uC744 \uB098\uC911\uC5D0 \uB123\uB294 \uACBD\uC6B0 \uC0C1\uD0DC\uB97C ", /* @__PURE__ */ React.createElement("b", { style: { color: T.tx } }, "\uC218\uB8CC"), "\uB85C \uB450\uBA74 \uB429\uB2C8\uB2E4. \uCD9C\uC11D\uB960\xB7\uB204\uC801\uC2DC\uAC04\uC740 \uACF5\uB780(0)\uC73C\uB85C \uB450\uACE0 \uC774\uB825\uB9CC \uC0B4\uB9BD\uB2C8\uB2E4."))), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 20px", borderTop: `1px solid ${T.bd}`, display: "flex", justifyContent: "flex-end", gap: 8, background: T.s2 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uCDE8\uC18C"), available.length > 0 && /* @__PURE__ */ React.createElement(Btn, { onClick: submit, disabled: saving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " ", saving ? "\uB4F1\uB85D \uC911..." : "\uCD94\uAC00 \uB4F1\uB85D")))
+    );
+  };
   const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew, currentUser }) => {
     const [search, setSearch] = useState("");
     const [cFilter, setCFilter] = useState(0);
@@ -2146,6 +2244,7 @@ var GgjfEduLms = (() => {
     const [attRecords, setAttRecords] = useState([]);
     const [attLoading, setAttLoading] = useState(false);
     const [studentDetailTab, setStudentDetailTab] = useState("profile");
+    const [addCourseFor, setAddCourseFor] = useState(null);
     useEffect(() => {
       if (!attModal) {
         setAttRecords([]);
@@ -2165,7 +2264,7 @@ var GgjfEduLms = (() => {
             `select=date,check_in,check_out,status&student_id=eq.${studentId}&order=date.asc`
           );
           if (!cancelled) setAttRecords(error ? [] : data || []);
-        } catch {
+        } catch (e) {
           if (!cancelled) setAttRecords([]);
         }
         if (!cancelled) setAttLoading(false);
@@ -2210,7 +2309,7 @@ var GgjfEduLms = (() => {
             `select=date,check_in,check_out,status&student_id=eq.${studentId}&order=date.asc`
           );
           if (!cancelled) setWorkspaceAtt(error ? [] : data || []);
-        } catch {
+        } catch (e) {
           if (!cancelled) setWorkspaceAtt([]);
         }
         if (!cancelled) setWorkspaceAttLoading(false);
@@ -2307,7 +2406,7 @@ var GgjfEduLms = (() => {
                 }));
               }
             }
-          } catch {
+          } catch (e) {
           }
         };
         ws.onerror = () => {
@@ -2340,7 +2439,7 @@ var GgjfEduLms = (() => {
     const multiCourseMap = useMemo(() => {
       const map = /* @__PURE__ */ new Map();
       students.forEach((s) => {
-        const k = makePersonKey(s);
+        const k = personGroupKey(s);
         if (!map.has(k)) map.set(k, []);
         map.get(k).push(s);
       });
@@ -2427,11 +2526,23 @@ var GgjfEduLms = (() => {
           itvPass: yn(r["\uD569\uACA9\uC5EC\uBD80"]) || String(r["\uD569\uACA9\uC5EC\uBD80"] || "").trim() === "\uD569\uACA9",
           memo: r["\uD2B9\uC774\uC0AC\uD56D"] || ""
         };
-        const existing = phone ? students.find((s) => s.phone && s.phone === phone) : null;
-        if (existing) {
-          toUpdate.push({ ...existing, ...base });
+        const phoneDigits = phone.replace(/[^0-9]/g, "");
+        const sibling = students.find((s) => {
+          const sPhone = String(s.phone || "").replace(/[^0-9]/g, "");
+          const phoneMatch = phoneDigits.length >= 10 && sPhone === phoneDigits;
+          const keyMatch = base.name && base.birth && makePersonKey(s) === makePersonKey(base);
+          return phoneMatch || keyMatch;
+        });
+        const existingSameCourse = sibling && Number(sibling.cid) === Number(base.cid) ? sibling : students.find((s) => samePerson(s, base) && Number(s.cid) === Number(base.cid));
+        if (existingSameCourse) {
+          toUpdate.push({ ...existingSameCourse, ...base, cid: existingSameCourse.cid, personId: existingSameCourse.personId || existingSameCourse.id });
         } else {
-          toAdd.push({ ...base, rate: 0 });
+          toAdd.push({
+            ...base,
+            rate: 0,
+            personId: sibling ? personIdOf(sibling) : null,
+            enrollmentStatus: "\uC7AC\uD559\uC911"
+          });
         }
       });
       if (toAdd.length > 0) onAdd(toAdd);
@@ -2706,7 +2817,7 @@ var GgjfEduLms = (() => {
           fontSize: 10,
           fontWeight: 600,
           color: s.gender === "\uC5EC" ? "#BE185D" : "#1D4ED8"
-        } }, s.gender || ""), (((_b = multiCourseMap.get(makePersonKey(s))) == null ? void 0 : _b.length) || 1) > 1 && /* @__PURE__ */ React.createElement("span", { title: "\uB3D9\uC77C\uC778\uC774 \uC5EC\uB7EC \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB428", style: {
+        } }, s.gender || ""), (((_b = multiCourseMap.get(personGroupKey(s))) == null ? void 0 : _b.length) || 1) > 1 && /* @__PURE__ */ React.createElement("span", { title: "\uB3D9\uC77C\uC778\uC774 \uC5EC\uB7EC \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB428", style: {
           marginLeft: 5,
           fontSize: 9,
           fontWeight: 800,
@@ -2716,7 +2827,7 @@ var GgjfEduLms = (() => {
           padding: "1px 6px",
           verticalAlign: "middle",
           border: "1px solid #FDE68A"
-        } }, multiCourseMap.get(makePersonKey(s)).length, "\uAC1C \uACFC\uC815")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, age, " \xB7 ", s.birth || "-")))),
+        } }, multiCourseMap.get(personGroupKey(s)).length, "\uAC1C \uACFC\uC815")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, age, " \xB7 ", s.birth || "-")))),
         /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", maxWidth: 150 } }, /* @__PURE__ */ React.createElement("div", { style: {
           fontSize: 11,
           fontWeight: 600,
@@ -2873,9 +2984,8 @@ var GgjfEduLms = (() => {
       ["after", "\uC0AC\uD6C4\uAD00\uB9AC"],
       ["attendance", `\uCD9C\uACB0 ${workspaceAtt.length ? workspaceAtt.length : ""}`],
       ...(() => {
-        const k = makePersonKey(selectedStudent);
-        const recs = multiCourseMap.get(k) || [];
-        return recs.length > 1 ? [["courses", `${recs.length}\uAC1C \uACFC\uC815`]] : [];
+        const recs = multiCourseMap.get(personGroupKey(selectedStudent)) || [selectedStudent];
+        return [["courses", recs.length > 1 ? `${recs.length}\uAC1C \uACFC\uC815` : "\uCC38\uC5EC \uACFC\uC815"]];
       })()
     ].map(([id, label]) => {
       const active = workspaceTab === id;
@@ -2899,7 +3009,7 @@ var GgjfEduLms = (() => {
       opacity: selectedCourse ? 1 : 0.55,
       fontSize: 12,
       fontWeight: 850
-    } }, "\uC774\uB825 \uB0A8\uAE30\uBA70 \uC0C1\uD0DC\uBCC0\uACBD"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.6 } }, "\uC911\uB3C4\uD0C8\uB77D \uC0AC\uC720\uB098 \uC870\uAE30\uCDE8\uC5C5 \uAE30\uC5C5\uBA85\uCC98\uB7FC \uC774\uB825\uC774 \uD544\uC694\uD55C \uBCC0\uACBD\uC740 \uC0C1\uD0DC\uBCC0\uACBD \uC808\uCC28 \uBC84\uD2BC\uC744 \uC0AC\uC6A9\uD558\uBA74 \uB429\uB2C8\uB2E4.")), workspaceTab === "after" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5\uC5EC\uBD80" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.status || "\uBBF8\uCDE8\uC5C5", onChange: (e) => setWorkspace("status", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, EMPLOYMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5 \uAE30\uC5C5\uBA85" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.employerName || "", onChange: (e) => setWorkspace("employerName", e.target.value), placeholder: "\uCDE8\uC5C5\uCC98 \uB610\uB294 \uC608\uC815 \uAE30\uC5C5", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC790\uACA9\uC99D" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.cert || "", onChange: (e) => setWorkspace("cert", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC0AC\uD6C4\uAD00\uB9AC \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement("textarea", { value: workspaceForm.memo || "", onChange: (e) => setWorkspace("memo", e.target.value), rows: 5, placeholder: "\uCDE8\uC5C5\uC0C1\uB2F4, \uC5F0\uB77D \uACB0\uACFC, \uC99D\uBE59 \uC694\uCCAD \uB4F1", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2, resize: "vertical", fontFamily: "inherit" } })), /* @__PURE__ */ React.createElement("button", { onClick: () => setEmploymentTarget(selectedStudent), style: { padding: "8px 12px", borderRadius: 8, border: `1px solid #0F766E`, background: "#F0FDFA", color: "#0F766E", cursor: "pointer", fontSize: 12, fontWeight: 850 } }, "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815 \uCC3D \uC5F4\uAE30")), workspaceTab === "attendance" && /* @__PURE__ */ React.createElement("div", null, workspaceAttLoading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911...") : workspaceAtt.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, workspaceAtt.slice(-12).reverse().map((r, i) => /* @__PURE__ */ React.createElement("div", { key: `${r.date}-${i}`, style: { display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center", border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 10px", background: T.s2 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx, fontWeight: 800 } }, r.date), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, r.check_in ? r.check_in.slice(0, 5) : "--:--", " / ", r.check_out ? r.check_out.slice(0, 5) : "--:--")), /* @__PURE__ */ React.createElement(Chip, { label: { O: "\uCD9C\uC11D", A: "\uACB0\uC11D", L: "\uC9C0\uAC01", U: "\uBBF8\uD655\uC778" }[r.status || "U"] || r.status, bg: r.status === "O" ? "#DCFCE7" : r.status === "A" ? "#FEE2E2" : T.s3, color: r.status === "O" ? "#15803D" : r.status === "A" ? T.danger : T.mu, size: 10 }))))), workspaceTab === "courses" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.mu, fontWeight: 700, marginBottom: 2 } }, selectedStudent.name, "\uB2D8\uC774 \uB4F1\uB85D\uB41C \uBAA8\uB4E0 \uACFC\uC815"), (multiCourseMap.get(makePersonKey(selectedStudent)) || []).map((rec) => {
+    } }, "\uC774\uB825 \uB0A8\uAE30\uBA70 \uC0C1\uD0DC\uBCC0\uACBD"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.6 } }, "\uC911\uB3C4\uD0C8\uB77D \uC0AC\uC720\uB098 \uC870\uAE30\uCDE8\uC5C5 \uAE30\uC5C5\uBA85\uCC98\uB7FC \uC774\uB825\uC774 \uD544\uC694\uD55C \uBCC0\uACBD\uC740 \uC0C1\uD0DC\uBCC0\uACBD \uC808\uCC28 \uBC84\uD2BC\uC744 \uC0AC\uC6A9\uD558\uBA74 \uB429\uB2C8\uB2E4.")), workspaceTab === "after" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5\uC5EC\uBD80" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.status || "\uBBF8\uCDE8\uC5C5", onChange: (e) => setWorkspace("status", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, EMPLOYMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5 \uAE30\uC5C5\uBA85" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.employerName || "", onChange: (e) => setWorkspace("employerName", e.target.value), placeholder: "\uCDE8\uC5C5\uCC98 \uB610\uB294 \uC608\uC815 \uAE30\uC5C5", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC790\uACA9\uC99D" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.cert || "", onChange: (e) => setWorkspace("cert", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC0AC\uD6C4\uAD00\uB9AC \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement("textarea", { value: workspaceForm.memo || "", onChange: (e) => setWorkspace("memo", e.target.value), rows: 5, placeholder: "\uCDE8\uC5C5\uC0C1\uB2F4, \uC5F0\uB77D \uACB0\uACFC, \uC99D\uBE59 \uC694\uCCAD \uB4F1", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2, resize: "vertical", fontFamily: "inherit" } })), /* @__PURE__ */ React.createElement("button", { onClick: () => setEmploymentTarget(selectedStudent), style: { padding: "8px 12px", borderRadius: 8, border: `1px solid #0F766E`, background: "#F0FDFA", color: "#0F766E", cursor: "pointer", fontSize: 12, fontWeight: 850 } }, "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815 \uCC3D \uC5F4\uAE30")), workspaceTab === "attendance" && /* @__PURE__ */ React.createElement("div", null, workspaceAttLoading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911...") : workspaceAtt.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, workspaceAtt.slice(-12).reverse().map((r, i) => /* @__PURE__ */ React.createElement("div", { key: `${r.date}-${i}`, style: { display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center", border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 10px", background: T.s2 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx, fontWeight: 800 } }, r.date), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, r.check_in ? r.check_in.slice(0, 5) : "--:--", " / ", r.check_out ? r.check_out.slice(0, 5) : "--:--")), /* @__PURE__ */ React.createElement(Chip, { label: { O: "\uCD9C\uC11D", A: "\uACB0\uC11D", L: "\uC9C0\uAC01", U: "\uBBF8\uD655\uC778" }[r.status || "U"] || r.status, bg: r.status === "O" ? "#DCFCE7" : r.status === "A" ? "#FEE2E2" : T.s3, color: r.status === "O" ? "#15803D" : r.status === "A" ? T.danger : T.mu, size: 10 }))))), workspaceTab === "courses" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.mu, fontWeight: 700, marginBottom: 2 } }, selectedStudent.name, "\uB2D8\uC774 \uB4F1\uB85D\uB41C \uBAA8\uB4E0 \uACFC\uC815"), (multiCourseMap.get(personGroupKey(selectedStudent)) || [selectedStudent]).map((rec) => {
       const c = courses.find((x) => x.id === rec.cid);
       const isCurrent = rec.id === selectedStudent.id;
       const esColor = STATUS_COLORS[rec.enrollmentStatus || "\uC7AC\uD559\uC911"] || { bg: T.s3, color: T.mu };
@@ -2919,10 +3029,25 @@ var GgjfEduLms = (() => {
         fontSize: 10,
         fontWeight: 750
       } }, "\uC774 \uACFC\uC815\uC73C\uB85C \uBCF4\uAE30")));
-    }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 14px", borderTop: `1px solid ${T.bd}`, background: T.s2, display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => {
+    }), /* @__PURE__ */ React.createElement("button", { onClick: () => {
+      setAddCourseFor(selectedStudent);
+      setWorkspaceTab("courses");
+    }, style: {
+      padding: "9px 12px",
+      borderRadius: 10,
+      border: `1.5px dashed ${T.p}`,
+      background: T.pbg,
+      color: T.p,
+      cursor: "pointer",
+      fontSize: 12,
+      fontWeight: 800
+    } }, "\uB2E4\uB978 \uACFC\uC815 \uCD94\uAC00 \uB4F1\uB85D"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, lineHeight: 1.5 } }, "\uAE30\uC874 \uACFC\uC815 \uC774\uB825\uC740 \uADF8\uB300\uB85C \uB450\uACE0, \uC0C8 \uACFC\uC815 \uD589\uB9CC \uCD94\uAC00\uD569\uB2C8\uB2E4. \uC218\uB8CC\uD55C \uACFC\uC815\uB3C4 \uC774 \uBC84\uD2BC\uC73C\uB85C \uB123\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4."))), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 14px", borderTop: `1px solid ${T.bd}`, background: T.s2, display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => {
       setAttModal(selectedStudent);
       setStudentDetailTab("attendance");
-    }, style: { padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.bd}`, background: "#fff", color: T.mu, cursor: "pointer", fontSize: 11, fontWeight: 750 } }, "\uCD9C\uACB0 \uC0C1\uC138"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => onEdit(selectedStudent), style: { padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.bd}`, background: "#fff", color: T.mu, cursor: "pointer", fontSize: 11, fontWeight: 750 } }, "\uC804\uCCB4 \uC591\uC2DD"), /* @__PURE__ */ React.createElement(Btn, { size: "sm", onClick: saveWorkspace, disabled: workspaceSaving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 12 }), " ", workspaceSaving ? "\uC800\uC7A5 \uC911..." : "\uC800\uC7A5")))))), attModal && (() => {
+    }, style: { padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.bd}`, background: "#fff", color: T.mu, cursor: "pointer", fontSize: 11, fontWeight: 750 } }, "\uCD9C\uACB0 \uC0C1\uC138"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => {
+      setAddCourseFor(selectedStudent);
+      setWorkspaceTab("courses");
+    }, style: { padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.p}`, background: T.pbg, color: T.p, cursor: "pointer", fontSize: 11, fontWeight: 750 } }, "\uACFC\uC815 \uCD94\uAC00"), /* @__PURE__ */ React.createElement("button", { onClick: () => onEdit(selectedStudent), style: { padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.bd}`, background: "#fff", color: T.mu, cursor: "pointer", fontSize: 11, fontWeight: 750 } }, "\uC804\uCCB4 \uC591\uC2DD"), /* @__PURE__ */ React.createElement(Btn, { size: "sm", onClick: saveWorkspace, disabled: workspaceSaving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 12 }), " ", workspaceSaving ? "\uC800\uC7A5 \uC911..." : "\uC800\uC7A5")))))), attModal && (() => {
       const modalCourse = courses.find((x) => x.id === attModal.cid);
       const STATUS_LABEL = { O: "\uCD9C\uC11D", A: "\uACB0\uC11D", L: "\uC9C0\uAC01", U: "\uBBF8\uD655\uC778" };
       const STATUS_COLOR = { O: T.ok, A: T.danger, L: T.warn, U: T.mu };
@@ -3090,6 +3215,15 @@ var GgjfEduLms = (() => {
         student: employmentTarget,
         onSave: onUpdate,
         onClose: () => setEmploymentTarget(null)
+      }
+    ), addCourseFor && /* @__PURE__ */ React.createElement(
+      AddCourseEnrollmentModal,
+      {
+        student: addCourseFor,
+        students,
+        courses,
+        onSave: (s) => onAdd([s]),
+        onClose: () => setAddCourseFor(null)
       }
     ));
   };
@@ -4673,7 +4807,7 @@ var GgjfEduLms = (() => {
         try {
           const { data } = await sbGet("instructors", "select=*&order=id");
           if (data) setInstructors(data.map(toInstructor));
-        } catch {
+        } catch (e) {
         }
       })();
     }, []);
@@ -6266,14 +6400,14 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
   const loadCertHistory = () => {
     try {
       return JSON.parse(safeLocal.get(CERT_HIST_KEY) || "[]");
-    } catch {
+    } catch (e) {
       return [];
     }
   };
   const saveCertHistory = (hist) => {
     try {
       safeLocal.set(CERT_HIST_KEY, JSON.stringify(hist));
-    } catch {
+    } catch (e) {
     }
   };
   const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
@@ -7768,7 +7902,10 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         fontSize: 12,
         background: form.gender === g ? g === "\uB0A8" ? "#EFF6FF" : "#FDF2F8" : T.s3,
         color: form.gender === g ? g === "\uB0A8" ? "#1D4ED8" : "#BE185D" : T.mu
-      } }, g)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uACFC\uC815" }, /* @__PURE__ */ React.createElement("select", { value: form.cid, onChange: (e) => set("cid", +e.target.value), style: selStyle }, courses.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.code, " \u2014 ", c.name))))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr", gap: 10 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uC8FC\uBBFC\uB4F1\uB85D\uBC88\uD638", required: true }, /* @__PURE__ */ React.createElement(
+      } }, g)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uACFC\uC815" }, isNew ? /* @__PURE__ */ React.createElement("select", { value: form.cid, onChange: (e) => set("cid", +e.target.value), style: selStyle }, courses.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.code, " \u2014 ", c.name))) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { ...selStyle, background: T.s3, color: T.tx, cursor: "default" } }, (() => {
+        const c = courses.find((x) => x.id === form.cid);
+        return c ? `${c.code} \u2014 ${c.name}` : "\uACFC\uC815 \uC5C6\uC74C";
+      })()), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 4, lineHeight: 1.5 } }, "\uC218\uC815 \uD654\uBA74\uC5D0\uC11C\uB294 \uACFC\uC815\uC744 \uBC14\uAFC0 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4. \uB2E4\uB978 \uACFC\uC815\uC740 \uC0C1\uC138 \uD328\uB110\uC758 ", /* @__PURE__ */ React.createElement("b", null, "\uB2E4\uB978 \uACFC\uC815 \uCD94\uAC00 \uB4F1\uB85D"), "\uC744 \uC0AC\uC6A9\uD558\uC138\uC694.")))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr", gap: 10 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uC8FC\uBBFC\uB4F1\uB85D\uBC88\uD638", required: true }, /* @__PURE__ */ React.createElement(
         "input",
         {
           value: residentInput,
@@ -7869,19 +8006,27 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         if (!form.name || !form.name.trim()) return alert("\uC774\uB984\uC740 \uD544\uC218 \uC785\uB825 \uD56D\uBAA9\uC785\uB2C8\uB2E4.");
         if (!form.birth) return alert("\uC8FC\uBBFC\uB4F1\uB85D\uBC88\uD638\uB294 \uD544\uC218 \uC785\uB825 \uD56D\uBAA9\uC785\uB2C8\uB2E4. (\uC55E 6\uC790\uB9AC \uC785\uB825 \uD544\uC694)");
         if (isNew && allStudents.length > 0) {
-          const key = makePersonKey(form);
-          const samePersons = allStudents.filter((s) => makePersonKey(s) === key);
+          const samePersons = allStudents.filter((s) => samePerson(s, form));
+          const sameCourse = samePersons.find((s) => Number(s.cid) === Number(form.cid));
+          if (sameCourse) {
+            const c = courses.find((x) => x.id === form.cid);
+            return alert(`\uC774\uBBF8 \uC774 \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.
+
+${form.name} \xB7 ${c ? `[${c.code}] ${c.name}` : "\uD574\uB2F9 \uACFC\uC815"}
+
+\uAC19\uC740 \uACFC\uC815\uC740 \uD55C \uBC88\uB9CC \uB4F1\uB85D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.`);
+          }
           if (samePersons.length > 0) {
             const existingCourseNames = samePersons.map((s) => {
               const c = courses.find((x) => x.id === s.cid);
-              return c ? `[${c.code}] ${c.name}` : `\uACFC\uC815 ID ${s.cid}`;
+              return c ? `[${c.code}] ${c.name} (${s.enrollmentStatus || "\uC7AC\uD559\uC911"})` : `\uACFC\uC815 ID ${s.cid}`;
             }).join("\n");
             const selectedCourseName = (() => {
               const c = courses.find((x) => x.id === form.cid);
               return c ? `[${c.code}] ${c.name}` : "";
             })();
             const ok = window.confirm(
-              `\u26A0\uFE0F \uC774\uBBF8 \uB4F1\uB85D\uB41C \uD6C8\uB828\uC0DD\uC785\uB2C8\uB2E4!
+              `\uC774\uBBF8 \uB4F1\uB85D\uB41C \uD6C8\uB828\uC0DD\uC785\uB2C8\uB2E4.
 
 \uC774\uB984: ${form.name}  \uC0DD\uB144\uC6D4\uC77C: ${form.birth}
 
@@ -7891,12 +8036,16 @@ ${existingCourseNames}
 \uC0C8\uB85C \uCD94\uAC00\uD560 \uACFC\uC815:
 ${selectedCourseName}
 
-\uAC19\uC740 \uD6C8\uB828\uC0DD\uC744 \uC774 \uACFC\uC815\uC5D0 \uCD94\uAC00 \uB4F1\uB85D\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?`
+\uAE30\uC874 \uACFC\uC815 \uC774\uB825\uC744 \uC720\uC9C0\uD55C \uCC44 \uC774 \uACFC\uC815\uC5D0 \uCD94\uAC00 \uB4F1\uB85D\uD560\uAE4C\uC694?`
             );
             if (!ok) return;
+            const linkedId = resolvePersonId(samePersons[0], allStudents) || personIdOf(samePersons[0]);
+            await onSave({ ...form, id: void 0, personId: linkedId, enrollmentStatus: form.enrollmentStatus || "\uC7AC\uD559\uC911" });
+            onClose();
+            return;
           }
         }
-        await onSave({ ...form, id: form.id || void 0 });
+        await onSave({ ...form, id: form.id || void 0, personId: form.personId || resolvePersonId(form, allStudents) });
         onClose();
       } }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " ", isNew ? "\uB4F1\uB85D" : "\uC800\uC7A5")))
     );
@@ -11909,7 +12058,7 @@ ${formatCoursePeriod(c)}
     const [auditLog, setAuditLog] = useState(() => {
       try {
         return JSON.parse(safeLocal.get("gjf_audit_log") || "[]");
-      } catch {
+      } catch (e) {
         return [];
       }
     });
@@ -11925,7 +12074,7 @@ ${formatCoursePeriod(c)}
         const next = [entry, ...prev].slice(0, 300);
         try {
           safeLocal.set("gjf_audit_log", JSON.stringify(next));
-        } catch {
+        } catch (e) {
         }
         return next;
       });
@@ -12128,10 +12277,20 @@ ${msg}`;
         return;
       }
       if (data && data.length > 0) {
+        const newStudents = data.map((r, i) => {
+          var _a;
+          const mapped = toStudent(r);
+          const intended = ((_a = newOnes[i]) == null ? void 0 : _a.personId) ? Number(newOnes[i].personId) : null;
+          mapped.personId = intended || mapped.personId || mapped.id;
+          return mapped;
+        });
+        await Promise.all(newStudents.map(
+          (s) => sbUpdate("students", `id=eq.${s.id}`, { person_id: s.personId })
+        ));
         setStudents((prev) => {
-          const newIds = new Set(data.map((r) => r.id));
+          const newIds = new Set(newStudents.map((s) => s.id));
           const filtered = prev.filter((s) => !newIds.has(s.id));
-          return [...filtered, ...data.map(toStudent)];
+          return [...filtered, ...newStudents];
         });
       } else {
         const { data: fresh, error: fetchErr } = await sbGet("students", "select=*&order=id");
@@ -12145,19 +12304,22 @@ ${msg}`;
       console.log("\u2705 \uD559\uC0DD \uC800\uC7A5 \uC644\uB8CC:", (data || []).length, "\uBA85");
     }, [addAudit, currentUser]);
     const updateStudent = useCallback(async (updated) => {
-      let body = fromStudent(updated);
-      let { error } = await sbUpdate("students", `id=eq.${updated.id}`, body);
+      var _a;
+      const existing = (((_a = window._studentsRef) == null ? void 0 : _a.current) || []).find((s) => s.id === updated.id);
+      const locked = existing ? { ...updated, cid: existing.cid, personId: updated.personId || existing.personId || existing.id } : updated;
+      let body = fromStudent(locked);
+      let { error } = await sbUpdate("students", `id=eq.${locked.id}`, body);
       if (error && isStudentSchemaErr(error)) {
         console.warn("\u26A0\uFE0F students.cid \uC2A4\uD0A4\uB9C8 \uCE90\uC2DC \uC624\uB958 \u2014 Supabase \uB300\uC2DC\uBCF4\uB4DC \u2192 Settings \u2192 API \u2192 Schema Cache \u2192 Reload");
         const { cid, ...fallback } = body;
-        ({ error } = await sbUpdate("students", `id=eq.${updated.id}`, fallback));
+        ({ error } = await sbUpdate("students", `id=eq.${locked.id}`, fallback));
       }
       if (error) {
         alert("\uC218\uC815 \uC624\uB958: " + (error.message || JSON.stringify(error)));
         return;
       }
-      setStudents((prev) => prev.map((s) => s.id === updated.id ? updated : s));
-      addAudit("\uD6C8\uB828\uC0DD \uC218\uC815", `${updated.name} \uC815\uBCF4 \uC218\uC815`, currentUser == null ? void 0 : currentUser.name);
+      setStudents((prev) => prev.map((s) => s.id === locked.id ? locked : s));
+      addAudit("\uD6C8\uB828\uC0DD \uC218\uC815", `${locked.name} \uC815\uBCF4 \uC218\uC815`, currentUser == null ? void 0 : currentUser.name);
     }, [addAudit, currentUser]);
     const archiveStudent = useCallback(async (id, reason = "\uC0AD\uC81C\uC694\uCCAD(\uC774\uB825\uBCF4\uC874)") => {
       const today = localDateStr();
@@ -12287,7 +12449,7 @@ ${msg}`;
       return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(GStyle, null), /* @__PURE__ */ React.createElement(LoginScreen, { accounts, onLogin: (user) => {
         try {
           safeSession.set("gjf_user", JSON.stringify(user));
-        } catch {
+        } catch (e) {
         }
         setCurrentUser(user);
         setPiDismissed(false);
@@ -12414,6 +12576,7 @@ ${msg}`;
       {
         student: editTarget,
         courses,
+        allStudents: students,
         onSave: updateStudent,
         onClose: () => setEditTarget(null)
       }

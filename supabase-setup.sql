@@ -251,6 +251,10 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS person_id BIGINT;
 -- 기존 행은 자기 id로 초기화
 UPDATE students SET person_id = id WHERE person_id IS NULL;
 CREATE INDEX IF NOT EXISTS students_person_id_idx ON students (person_id);
+-- 같은 사람 + 같은 과정은 1행만. 중복이 있으면 이 인덱스는 실패하므로 먼저 중복을 정리하세요.
+CREATE UNIQUE INDEX IF NOT EXISTS students_person_course_uidx
+  ON students (person_id, cid)
+  WHERE person_id IS NOT NULL AND cid IS NOT NULL;
 
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE instructors ADD COLUMN IF NOT EXISTS type TEXT DEFAULT '주강사';

@@ -144,8 +144,34 @@ const sbStorageUpload = async (bucket, path, file) => {
 /* ── DB 컬럼(snake_case) ↔ 앱(camelCase) 변환 ── */
 const toNum = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
 
-// 동일인 식별 키 (이름 + 생년월일 조합, DB 저장 없이 앱 내부에서만 사용)
+// 동일인 식별: person_id 우선, 없으면 이름+생년월일
 const makePersonKey = s => ((s?.name || "") + "|" + (s?.birth || "")).trim().toLowerCase();
+const personIdOf = s => {
+  const n = Number(s?.personId || s?.id);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const personGroupKey = s => {
+  const pid = personIdOf(s);
+  if (s?.personId && pid) return "id:" + pid;
+  const k = makePersonKey(s);
+  return k && k !== "|" ? "key:" + k : "row:" + (s?.id || "");
+};
+const samePerson = (a, b) => {
+  if (!a || !b) return false;
+  const pa = a.personId ? personIdOf(a) : null;
+  const pb = b.personId ? personIdOf(b) : null;
+  if (pa && pb && pa === pb) return true;
+  const ka = makePersonKey(a), kb = makePersonKey(b);
+  if (ka && kb && ka !== "|" && ka === kb) return true;
+  const phoneA = String(a.phone || "").replace(/[^0-9]/g, "");
+  const phoneB = String(b.phone || "").replace(/[^0-9]/g, "");
+  return !!(phoneA && phoneB && phoneA.length >= 10 && phoneA === phoneB && (a.name || "") === (b.name || ""));
+};
+const resolvePersonId = (student, all) => {
+  if (student?.personId) return personIdOf(student);
+  const match = (all || []).find(s => s.id !== student?.id && samePerson(s, student));
+  return personIdOf(match) || null;
+};
 
 const toStudent = r => r ? ({
   id: Number(r.id), cid: Number(r.cid), name: r.name, gender: r.gender||"",
@@ -161,6 +187,7 @@ const toStudent = r => r ? ({
   statusChangeDate: r.status_change_date || null,
   dropoutReason: r.dropout_reason || null,
   employerName: r.employer_name || null,
+  personId: r.person_id ? Number(r.person_id) : Number(r.id),
 }) : null;
 
 // Excel serial date number → ISO "YYYY-MM-DD" string (or null if empty)
@@ -191,6 +218,7 @@ const fromStudent = s => {
     status_change_date: s.statusChangeDate || null,
     dropout_reason: s.dropoutReason || null,
     employer_name: s.employerName || null,
+    person_id: s.personId ? Number(s.personId) : null,
   };
 };
 
@@ -1042,21 +1070,21 @@ const Dashboard = ({ students, courses }) => {
   };
   const atRisk   = students.filter(isRiskTarget);
 
-  // 동일인(name+birth) 중복 제거 통계
-  const uniquePersonCount = new Set(students.map(makePersonKey)).size;
+  // 동일인(person_id 우선, 없으면 name+birth) 중복 제거 통계
+  const uniquePersonCount = new Set(students.map(personGroupKey)).size;
   const completedCnt = new Set(
-    students.filter(s => ['수료', '조기취업 수료'].includes(s.enrollmentStatus || '')).map(makePersonKey)
+    students.filter(s => ['수료', '조기취업 수료'].includes(s.enrollmentStatus || '')).map(personGroupKey)
   ).size;
   const earlyEmploymentCnt = new Set(
-    students.filter(s => (s.enrollmentStatus || '') === '조기취업').map(makePersonKey)
+    students.filter(s => (s.enrollmentStatus || '') === '조기취업').map(personGroupKey)
   ).size;
   const employedCnt = new Set(
     students.filter(s => {
       const employment = getEffectiveEmploymentStatus(s);
       return employment !== '미취업' || (s.enrollmentStatus || '') === '조기취업';
-    }).map(makePersonKey)
+    }).map(personGroupKey)
   ).size;
-  const atRiskUniqueCnt = new Set(atRisk.map(makePersonKey)).size;
+  const atRiskUniqueCnt = new Set(atRisk.map(personGroupKey)).size;
   const employmentGoal = courses.reduce((a,b)=>a+Number(b.eGoal || 0),0);
   const completionGoal = courses.reduce((a,b)=>a+Number(b.cGoal || 0),0);
   const employmentRate = uniquePersonCount ? Math.round(employedCnt / uniquePersonCount * 100) : 0;
@@ -1937,6 +1965,87 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
 /* ===========================================================
    STUDENT MANAGEMENT  ★ Excel Upload / Download
 =========================================================== */
+const AddCourseEnrollmentModal = ({ student, students, courses, onSave, onClose }) => {
+  const enrolledCids = new Set(
+    students.filter(s => samePerson(s, student)).map(s => Number(s.cid))
+  );
+  const available = courses.filter(c => !enrolledCids.has(Number(c.id)));
+  const [cid, setCid] = useState(available[0]?.id || "");
+  const [enrollmentStatus, setEnrollmentStatus] = useState("재학중");
+  const [saving, setSaving] = useState(false);
+  const selStyle = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
+    borderRadius:8, fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer" };
+
+  const submit = async () => {
+    if (!cid) return alert("추가할 과정을 선택하세요.");
+    if (enrolledCids.has(Number(cid))) return alert("이미 이 과정에 등록되어 있습니다.");
+    setSaving(true);
+    try {
+      const { id, rate, accumulatedHours, enrollmentStatus: _es, statusChangeDate, dropoutReason, cid: _cid, ...rest } = student;
+      await onSave({
+        ...rest,
+        cid: Number(cid),
+        personId: personIdOf(student),
+        enrollmentStatus,
+        rate: 0,
+        accumulatedHours: 0,
+        statusChangeDate: (enrollmentStatus === "수료" || enrollmentStatus === "조기취업 수료") ? localDateStr() : null,
+        dropoutReason: null,
+      });
+      onClose();
+    } catch (e) {
+      alert("추가 등록 오류: " + (e?.message || e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:1000,
+      display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:T.s, borderRadius:16, width:440, maxWidth:"96vw",
+        boxShadow:"0 24px 64px rgba(0,0,0,.28)", overflow:"hidden" }}>
+        <div style={{ padding:"16px 20px", background:`linear-gradient(135deg,${T.sb},${T.p})` }}>
+          <div style={{ fontSize:15, fontWeight:800, color:"#fff" }}>다른 과정 추가 등록</div>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,.7)", marginTop:3 }}>
+            {student.name} · 기존 과정 이력은 그대로 유지됩니다
+          </div>
+        </div>
+        <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+          {available.length === 0 ? (
+            <div style={{ fontSize:13, color:T.mu, lineHeight:1.6 }}>등록할 수 있는 남은 과정이 없습니다. 이미 모든 과정에 이력이 있습니다.</div>
+          ) : (
+            <>
+              <FLD label="추가할 과정" required>
+                <select value={cid} onChange={e=>setCid(+e.target.value)} style={selStyle}>
+                  {available.map(c => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
+                </select>
+              </FLD>
+              <FLD label="이 과정의 등록상태">
+                <select value={enrollmentStatus} onChange={e=>setEnrollmentStatus(e.target.value)} style={selStyle}>
+                  {ENROLLMENT_STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </FLD>
+              <div style={{ fontSize:11, color:T.mu, lineHeight:1.55, padding:"8px 10px", background:T.s2, borderRadius:8 }}>
+                수료한 과정을 나중에 넣는 경우 상태를 <b style={{ color:T.tx }}>수료</b>로 두면 됩니다. 출석률·누적시간은 공란(0)으로 두고 이력만 살립니다.
+              </div>
+            </>
+          )}
+        </div>
+        <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.bd}`, display:"flex", justifyContent:"flex-end", gap:8, background:T.s2 }}>
+          <Btn variant="ghost" onClick={onClose}>취소</Btn>
+          {available.length > 0 && (
+            <Btn onClick={submit} disabled={saving}>
+              <Icon n="check" s={13}/> {saving ? "등록 중..." : "추가 등록"}
+            </Btn>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew, currentUser }) => {
   const [search, setSearch] = useState("");
   const [cFilter, setCFilter] = useState(0);
@@ -1963,6 +2072,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
   const [attRecords, setAttRecords] = useState([]);       // 출결 일별 기록
   const [attLoading, setAttLoading] = useState(false);
   const [studentDetailTab, setStudentDetailTab] = useState("profile");
+  const [addCourseFor, setAddCourseFor] = useState(null);
 
   // 모달 열릴 때 출결 데이터 로드
   useEffect(() => {
@@ -2126,11 +2236,11 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
     return true;
   }), [students, cFilter, enrollFilter, empFilter, riskOnly, search]);
 
-  // 동일인(name+birth)이 여러 과정에 등록된 경우 맵: personKey → 해당 학생 레코드 배열
+  // 동일인(person_id 우선)이 여러 과정에 등록된 경우 맵
   const multiCourseMap = useMemo(() => {
     const map = new Map();
     students.forEach(s => {
-      const k = makePersonKey(s);
+      const k = personGroupKey(s);
       if (!map.has(k)) map.set(k, []);
       map.get(k).push(s);
     });
@@ -2218,11 +2328,25 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
         itvPass:    yn(r["합격여부"]) || String(r["합격여부"]||"").trim() === "합격",
         memo:       r["특이사항"]           || "",
       };
-      const existing = phone ? students.find(s => s.phone && s.phone === phone) : null;
-      if (existing) {
-        toUpdate.push({ ...existing, ...base });
+      const phoneDigits = phone.replace(/[^0-9]/g, "");
+      const sibling = students.find(s => {
+        const sPhone = String(s.phone || "").replace(/[^0-9]/g, "");
+        const phoneMatch = phoneDigits.length >= 10 && sPhone === phoneDigits;
+        const keyMatch = base.name && base.birth && makePersonKey(s) === makePersonKey(base);
+        return phoneMatch || keyMatch;
+      });
+      const existingSameCourse = sibling && Number(sibling.cid) === Number(base.cid)
+        ? sibling
+        : students.find(s => samePerson(s, base) && Number(s.cid) === Number(base.cid));
+      if (existingSameCourse) {
+        toUpdate.push({ ...existingSameCourse, ...base, cid: existingSameCourse.cid, personId: existingSameCourse.personId || existingSameCourse.id });
       } else {
-        toAdd.push({ ...base, rate: 0 }); // ID는 DB 자동 생성
+        toAdd.push({
+          ...base,
+          rate: 0,
+          personId: sibling ? personIdOf(sibling) : null,
+          enrollmentStatus: "재학중",
+        });
       }
     });
     if (toAdd.length > 0) onAdd(toAdd);
@@ -2507,13 +2631,13 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                                 color: s.gender==="여"?"#BE185D":"#1D4ED8" }}>
                                 {s.gender||""}
                               </span>
-                              {(multiCourseMap.get(makePersonKey(s))?.length || 1) > 1 && (
+                              {(multiCourseMap.get(personGroupKey(s))?.length || 1) > 1 && (
                                 <span title="동일인이 여러 과정에 등록됨" style={{
                                   marginLeft:5, fontSize:9, fontWeight:800,
                                   background:"#FEF3C7", color:"#92400E",
                                   borderRadius:10, padding:"1px 6px", verticalAlign:"middle",
                                   border:"1px solid #FDE68A" }}>
-                                  {multiCourseMap.get(makePersonKey(s)).length}개 과정
+                                  {multiCourseMap.get(personGroupKey(s)).length}개 과정
                                 </span>
                               )}
                             </div>
@@ -2730,7 +2854,10 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                   ["status", "등록상태"],
                   ["after", "사후관리"],
                   ["attendance", `출결 ${workspaceAtt.length ? workspaceAtt.length : ""}`],
-                  ...((() => { const k = makePersonKey(selectedStudent); const recs = multiCourseMap.get(k) || []; return recs.length > 1 ? [["courses", `${recs.length}개 과정`]] : []; })()),
+                  ...((() => {
+                    const recs = multiCourseMap.get(personGroupKey(selectedStudent)) || [selectedStudent];
+                    return [["courses", recs.length > 1 ? `${recs.length}개 과정` : "참여 과정"]];
+                  })()),
                 ].map(([id, label]) => {
                   const active = workspaceTab === id;
                   return (
@@ -2837,7 +2964,7 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                     <div style={{ fontSize:12, color:T.mu, fontWeight:700, marginBottom:2 }}>
                       {selectedStudent.name}님이 등록된 모든 과정
                     </div>
-                    {(multiCourseMap.get(makePersonKey(selectedStudent)) || []).map(rec => {
+                    {(multiCourseMap.get(personGroupKey(selectedStudent)) || [selectedStudent]).map(rec => {
                       const c = courses.find(x => x.id === rec.cid);
                       const isCurrent = rec.id === selectedStudent.id;
                       const esColor = (STATUS_COLORS[rec.enrollmentStatus || "재학중"] || { bg:T.s3, color:T.mu });
@@ -2875,6 +3002,14 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         </div>
                       );
                     })}
+                    <button onClick={()=>{ setAddCourseFor(selectedStudent); setWorkspaceTab("courses"); }} style={{
+                      padding:"9px 12px", borderRadius:10, border:`1.5px dashed ${T.p}`,
+                      background:T.pbg, color:T.p, cursor:"pointer", fontSize:12, fontWeight:800 }}>
+                      다른 과정 추가 등록
+                    </button>
+                    <div style={{ fontSize:10, color:T.mu, lineHeight:1.5 }}>
+                      기존 과정 이력은 그대로 두고, 새 과정 행만 추가합니다. 수료한 과정도 이 버튼으로 넣을 수 있습니다.
+                    </div>
                   </div>
                 )}
               </div>
@@ -2884,6 +3019,9 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                   출결 상세
                 </button>
                 <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={()=>{ setAddCourseFor(selectedStudent); setWorkspaceTab("courses"); }} style={{ padding:"7px 10px", borderRadius:8, border:`1px solid ${T.p}`, background:T.pbg, color:T.p, cursor:"pointer", fontSize:11, fontWeight:750 }}>
+                    과정 추가
+                  </button>
                   <button onClick={()=>onEdit(selectedStudent)} style={{ padding:"7px 10px", borderRadius:8, border:`1px solid ${T.bd}`, background:"#fff", color:T.mu, cursor:"pointer", fontSize:11, fontWeight:750 }}>
                     전체 양식
                   </button>
@@ -3102,6 +3240,15 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
           student={employmentTarget}
           onSave={onUpdate}
           onClose={() => setEmploymentTarget(null)}
+        />
+      )}
+      {addCourseFor && (
+        <AddCourseEnrollmentModal
+          student={addCourseFor}
+          students={students}
+          courses={courses}
+          onSave={s => onAdd([s])}
+          onClose={() => setAddCourseFor(null)}
         />
       )}
     </div>
@@ -8392,9 +8539,20 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES, all
               </div>
             </FLD>
             <FLD label="과정">
-              <select value={form.cid} onChange={e=>set("cid",+e.target.value)} style={selStyle}>
-                {courses.map(c=><option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
-              </select>
+              {isNew ? (
+                <select value={form.cid} onChange={e=>set("cid",+e.target.value)} style={selStyle}>
+                  {courses.map(c=><option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
+                </select>
+              ) : (
+                <>
+                  <div style={{ ...selStyle, background:T.s3, color:T.tx, cursor:"default" }}>
+                    {(() => { const c = courses.find(x=>x.id===form.cid); return c ? `${c.code} — ${c.name}` : "과정 없음"; })()}
+                  </div>
+                  <div style={{ fontSize:11, color:T.mu, marginTop:4, lineHeight:1.5 }}>
+                    수정 화면에서는 과정을 바꿀 수 없습니다. 다른 과정은 상세 패널의 <b>다른 과정 추가 등록</b>을 사용하세요.
+                  </div>
+                </>
+              )}
             </FLD>
           </div>
 
@@ -8527,21 +8685,29 @@ const EditModal = ({ student, onSave, onClose, isNew=false, courses=COURSES, all
             if(!form.birth) return alert("주민등록번호는 필수 입력 항목입니다. (앞 6자리 입력 필요)");
             // ── 동일인 중복 과정 감지 (신규 등록 시) ──
             if (isNew && allStudents.length > 0) {
-              const key = makePersonKey(form);
-              const samePersons = allStudents.filter(s => makePersonKey(s) === key);
+              const samePersons = allStudents.filter(s => samePerson(s, form));
+              const sameCourse = samePersons.find(s => Number(s.cid) === Number(form.cid));
+              if (sameCourse) {
+                const c = courses.find(x => x.id === form.cid);
+                return alert(`이미 이 과정에 등록되어 있습니다.\n\n${form.name} · ${c ? `[${c.code}] ${c.name}` : "해당 과정"}\n\n같은 과정은 한 번만 등록할 수 있습니다.`);
+              }
               if (samePersons.length > 0) {
                 const existingCourseNames = samePersons.map(s => {
                   const c = courses.find(x => x.id === s.cid);
-                  return c ? `[${c.code}] ${c.name}` : `과정 ID ${s.cid}`;
+                  return c ? `[${c.code}] ${c.name} (${s.enrollmentStatus || "재학중"})` : `과정 ID ${s.cid}`;
                 }).join("\n");
                 const selectedCourseName = (() => { const c = courses.find(x=>x.id===form.cid); return c ? `[${c.code}] ${c.name}` : ""; })();
                 const ok = window.confirm(
-                  `⚠️ 이미 등록된 훈련생입니다!\n\n이름: ${form.name}  생년월일: ${form.birth}\n\n기존 등록 과정:\n${existingCourseNames}\n\n새로 추가할 과정:\n${selectedCourseName}\n\n같은 훈련생을 이 과정에 추가 등록하시겠습니까?`
+                  `이미 등록된 훈련생입니다.\n\n이름: ${form.name}  생년월일: ${form.birth}\n\n기존 등록 과정:\n${existingCourseNames}\n\n새로 추가할 과정:\n${selectedCourseName}\n\n기존 과정 이력을 유지한 채 이 과정에 추가 등록할까요?`
                 );
                 if (!ok) return;
+                const linkedId = resolvePersonId(samePersons[0], allStudents) || personIdOf(samePersons[0]);
+                await onSave({ ...form, id: undefined, personId: linkedId, enrollmentStatus: form.enrollmentStatus || "재학중" });
+                onClose();
+                return;
               }
             }
-            await onSave({ ...form, id: form.id||undefined });
+            await onSave({ ...form, id: form.id||undefined, personId: form.personId || resolvePersonId(form, allStudents) });
             onClose();
           }}>
             <Icon n="check" s={13}/> {isNew ? "등록" : "저장"}
@@ -12467,11 +12633,19 @@ function App() {
       return; 
     }
     if (data && data.length > 0) {
-      // Supabase가 저장된 레코드를 반환한 경우 로컬 state 즉시 반영
+      const newStudents = data.map((r, i) => {
+        const mapped = toStudent(r);
+        const intended = newOnes[i]?.personId ? Number(newOnes[i].personId) : null;
+        mapped.personId = intended || mapped.personId || mapped.id;
+        return mapped;
+      });
+      await Promise.all(newStudents.map(s =>
+        sbUpdate("students", `id=eq.${s.id}`, { person_id: s.personId })
+      ));
       setStudents(prev => {
-        const newIds = new Set(data.map(r => r.id));
+        const newIds = new Set(newStudents.map(s => s.id));
         const filtered = prev.filter(s => !newIds.has(s.id));
-        return [...filtered, ...data.map(toStudent)];
+        return [...filtered, ...newStudents];
       });
     } else {
       // 응답 데이터가 없으면 DB에서 전체 다시 로드 (Realtime 미연결 환경 대응)
@@ -12487,17 +12661,21 @@ function App() {
   }, [addAudit, currentUser]);
 
   const updateStudent = useCallback(async (updated) => {
-    let body = fromStudent(updated);
-    let { error } = await sbUpdate("students", `id=eq.${updated.id}`, body);
+    const existing = (window._studentsRef?.current || []).find(s => s.id === updated.id);
+    const locked = existing
+      ? { ...updated, cid: existing.cid, personId: updated.personId || existing.personId || existing.id }
+      : updated;
+    let body = fromStudent(locked);
+    let { error } = await sbUpdate("students", `id=eq.${locked.id}`, body);
     // cid 컬럼 스키마 캐시 오류 → cid 제외 후 재시도
     if (error && isStudentSchemaErr(error)) {
       console.warn("⚠️ students.cid 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload");
       const { cid, ...fallback } = body;
-      ({ error } = await sbUpdate("students", `id=eq.${updated.id}`, fallback));
+      ({ error } = await sbUpdate("students", `id=eq.${locked.id}`, fallback));
     }
     if (error) { alert("수정 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => prev.map(s => s.id===updated.id ? updated : s));
-    addAudit("훈련생 수정", `${updated.name} 정보 수정`, currentUser?.name);
+    setStudents(prev => prev.map(s => s.id===locked.id ? locked : s));
+    addAudit("훈련생 수정", `${locked.name} 정보 수정`, currentUser?.name);
   }, [addAudit, currentUser]);
 
   const archiveStudent = useCallback(async (id, reason = "삭제요청(이력보존)") => {
@@ -12723,7 +12901,7 @@ function App() {
           onSave={s => addStudents([s])} onClose={()=>setShowNew(false)}/>
       )}
       {editTarget && (
-        <EditModal student={editTarget} courses={courses}
+        <EditModal student={editTarget} courses={courses} allStudents={students}
           onSave={updateStudent} onClose={()=>setEditTarget(null)}/>
       )}
       {showDataMgr && (

@@ -223,10 +223,33 @@
     const phoneB = String(b.phone || "").replace(/[^0-9]/g, "");
     return !!(phoneA && phoneB && phoneA.length >= 10 && phoneA === phoneB && (a.name || "") === (b.name || ""));
   };
+  const siblingStudentIds = (student, all = []) => {
+    const ids = /* @__PURE__ */ new Set();
+    const selfId = Number(student == null ? void 0 : student.id);
+    if (Number.isFinite(selfId) && selfId > 0) ids.add(selfId);
+    (all || []).forEach((s) => {
+      if (samePerson(s, student) || personIdOf(s) && personIdOf(student) && personIdOf(s) === personIdOf(student)) {
+        const n = Number(s.id);
+        if (Number.isFinite(n) && n > 0) ids.add(n);
+      }
+    });
+    return [...ids];
+  };
   const resolvePersonId = (student, all) => {
     if (student == null ? void 0 : student.personId) return personIdOf(student);
     const match = (all || []).find((s) => s.id !== (student == null ? void 0 : student.id) && samePerson(s, student));
     return personIdOf(match) || null;
+  };
+  const matchesStudentKeyword = (student, keyword) => {
+    const raw = String(keyword || "").trim();
+    if (!raw) return true;
+    const name = String((student == null ? void 0 : student.name) || "").toLowerCase();
+    if (name.includes(raw.toLowerCase())) return true;
+    const digits = raw.replace(/[^0-9]/g, "");
+    if (!digits) return false;
+    const phone = String((student == null ? void 0 : student.phone) || "").replace(/[^0-9]/g, "");
+    const phone2 = String((student == null ? void 0 : student.phone2) || (student == null ? void 0 : student.phoneEmer) || "").replace(/[^0-9]/g, "");
+    return phone.includes(digits) || phone2.includes(digits);
   };
   const toStudent = (r) => r ? {
     id: Number(r.id),
@@ -324,7 +347,7 @@
       schedTimeFrom: r.sched_time_from || "09:00",
       schedTimeTo: r.sched_time_to || "13:00",
       breakMinutes: (_a = toNum(r.break_minutes)) != null ? _a : 60,
-      includeBreakInHours: r.include_break_in_hours === true,
+      includeBreakInHours: r.include_break_in_hours !== false,
       notes: r.notes || "",
       pdfName: r.pdf_name || "",
       pdfData: r.pdf_data || "",
@@ -350,7 +373,7 @@
       sched_time_from: c.schedTimeFrom || null,
       sched_time_to: c.schedTimeTo || null,
       break_minutes: (_a = toNum(c.breakMinutes)) != null ? _a : 60,
-      include_break_in_hours: c.includeBreakInHours === true,
+      include_break_in_hours: c.includeBreakInHours !== false,
       notes: c.notes || "",
       pdf_name: c.pdfName || "",
       pdf_data: c.pdfData || "",
@@ -1678,7 +1701,7 @@
       schedTimeFrom: "09:00",
       schedTimeTo: "13:00",
       breakMinutes: 60,
-      includeBreakInHours: false,
+      includeBreakInHours: true,
       links: [],
       notes: "",
       pdfName: "",
@@ -1696,7 +1719,7 @@
       schedTimeFrom: course.schedTimeFrom || "09:00",
       schedTimeTo: course.schedTimeTo || "13:00",
       breakMinutes: (_a = toNum(course.breakMinutes)) != null ? _a : 60,
-      includeBreakInHours: course.includeBreakInHours === true
+      includeBreakInHours: course.includeBreakInHours !== false
     } : empty);
     const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
     const inp = {
@@ -1912,7 +1935,7 @@
           onChange: (e) => set("includeBreakInHours", e.target.checked),
           style: { width: 15, height: 15, cursor: "pointer" }
         }
-      ), /* @__PURE__ */ React.createElement("label", { htmlFor: "includeBreakInHours", style: { fontSize: 12, fontWeight: 600, color: T.tx, cursor: "pointer" } }, "\uC218\uB8CC\uC2DC\uAC04 \uACC4\uC0B0 \uC2DC \uC26C\uB294\uC2DC\uAC04 \uD3EC\uD568"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "(\uCCB4\uD06C \uC2DC: \uC26C\uB294\uC2DC\uAC04\uC774 \uC218\uC5C5\uC2DC\uAC04\uC5D0 \uD3EC\uD568\uB418\uC5B4 \uC218\uB8CC\uC2DC\uAC04\uC5D0 \uBC18\uC601\uB428)")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\u{1F4DD} \uCC38\uACE0\uC0AC\uD56D"), /* @__PURE__ */ React.createElement(
+      ), /* @__PURE__ */ React.createElement("label", { htmlFor: "includeBreakInHours", style: { fontSize: 12, fontWeight: 600, color: T.tx, cursor: "pointer" } }, "\uC218\uB8CC\uC2DC\uAC04 \uACC4\uC0B0 \uC2DC \uC26C\uB294\uC2DC\uAC04 \uD3EC\uD568"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "(\uCCB4\uD06C \uC2DC: 13:00~17:00\uC774\uBA74 \uB9CC\uC810 4\uC2DC\uAC04. 16:30 \uD1F4\uC2E4\uB3C4 4\uC2DC\uAC04. \uBCF4\uAC15\uC740 \uADF8 \uC704\uC5D0 \uCD94\uAC00)")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\u{1F4DD} \uCC38\uACE0\uC0AC\uD56D"), /* @__PURE__ */ React.createElement(
         "textarea",
         {
           value: form.notes || "",
@@ -4597,7 +4620,9 @@
     }
     return getTotalCourseHours(course);
   };
-  const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorName) => {
+  const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorName, printOptions = {}) => {
+    const sheetHeading = printOptions.heading || "\uCD9C \uC11D \uBD80";
+    const sheetKind = printOptions.kindLabel || "\uCD9C\uC11D\uBD80";
     const today = /* @__PURE__ */ new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const period = formatCoursePeriod(course);
@@ -4631,7 +4656,7 @@
       const colW = Math.max(24, Math.min(36, Math.floor(1060 / Math.max(n, 1))));
       const isLast = pageNum === totalPages;
       const pageStudents = courseStudents;
-      const miniHeader = totalPages > 1 ? `<div class="page-mini-header"><span class="page-course-name">${course.name}</span><span class="page-info">\uCD9C\uC11D\uBD80 (${pageNum}/${totalPages})</span></div>` : "";
+      const miniHeader = totalPages > 1 ? `<div class="page-mini-header"><span class="page-course-name">${course.name}</span><span class="page-info">${sheetKind} (${pageNum}/${totalPages})</span></div>` : "";
       return `
     ${miniHeader}
     <table class="att-table">
@@ -4696,7 +4721,7 @@
       return buildTable(chunk, pageNum) + signHtml + (i < totalPages - 1 ? '<div style="page-break-before:always;margin-top:6px;"></div>' : "");
     }).join("");
     const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
-<title>\uCD9C\uC11D\uBD80 - ${course.name}</title>
+<title>${sheetKind} - ${course.name}</title>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -4748,7 +4773,7 @@
   }
 </style></head>
 <body>
-  <div class="header"><h1>\uCD9C \uC11D \uBD80</h1></div>
+  <div class="header"><h1>${sheetHeading}</h1></div>
   <table class="info-table">
     <tr>
       <td class="lbl">\uACFC\uC815\uBA85</td>
@@ -4794,6 +4819,9 @@
     const [attData, setAttData] = useState({});
     const [loadingSheet, setLoadingSheet] = useState(false);
     const [instructors, setInstructors] = useState([]);
+    const [showRequestPrint, setShowRequestPrint] = useState(false);
+    const [requestSearch, setRequestSearch] = useState("");
+    const [requestSelected, setRequestSelected] = useState({});
     useEffect(() => {
       if (!courses.length) return;
       setSheetCourse((prev) => {
@@ -4844,6 +4872,11 @@
       };
       load();
     }, [sheetCourse, students]);
+    useEffect(() => {
+      setRequestSelected({});
+      setRequestSearch("");
+      setShowRequestPrint(false);
+    }, [sheetCourse == null ? void 0 : sheetCourse.id]);
     const allDates = buildCourseDatesAll(sheetCourse);
     const courseStudents = students.filter((s) => s.cid === (sheetCourse == null ? void 0 : sheetCourse.id));
     const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
@@ -4866,6 +4899,9 @@
     const totalDatePages = Math.ceil(allDates.length / PAGE_SIZE);
     const visibleDates = allDates.slice(datePage * PAGE_SIZE, (datePage + 1) * PAGE_SIZE);
     const pageStudents = courseStudents;
+    const requestCandidates = courseStudents.filter((s) => matchesStudentKeyword(s, requestSearch));
+    const requestSelectedList = courseStudents.filter((s) => requestSelected[s.id]);
+    const requestSelectedCount = requestSelectedList.length;
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, { style: { padding: "14px 18px", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, marginBottom: 6, fontWeight: 600 } }, "\uCD9C\uC11D\uBD80 \u2014 \uACFC\uC815 \uC120\uD0DD"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 } }, courses.map((c) => {
       const active = (sheetCourse == null ? void 0 : sheetCourse.id) === c.id;
       return /* @__PURE__ */ React.createElement(
@@ -4922,7 +4958,10 @@
       showTimes ? "\uC228\uAE30\uAE30" : "\uBCF4\uAE30"
     ), /* @__PURE__ */ React.createElement(Btn, { size: "sm", onClick: () => {
       printAttendanceSheet(sheetCourse, courseStudents, allDates, attData, instructorName);
-    } }, "\u{1F5A8}\uFE0F PDF \uCD9C\uB825")))), loadingSheet ? /* @__PURE__ */ React.createElement(Card, { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\u23F3 \uCD9C\uC11D \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uACE0 \uC788\uC2B5\uB2C8\uB2E4...") : courseStudents.length === 0 ? /* @__PURE__ */ React.createElement(Card, { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\uD574\uB2F9 \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB41C \uD6C8\uB828\uC0DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : allDates.length === 0 ? /* @__PURE__ */ React.createElement(Card, { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\uACFC\uC815 \uC77C\uC815\uC774 \uC124\uC815\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden" } }, totalDatePages > 1 && /* @__PURE__ */ React.createElement("div", { style: { padding: "8px 14px", borderBottom: `1px solid ${T.bd}`, display: "flex", gap: 8, alignItems: "center", background: T.s2 } }, /* @__PURE__ */ React.createElement(
+    } }, "\u{1F5A8}\uFE0F PDF \uCD9C\uB825"), /* @__PURE__ */ React.createElement(Btn, { size: "sm", variant: "outline", onClick: () => {
+      setRequestSearch("");
+      setShowRequestPrint(true);
+    } }, "\uC694\uCCAD\uC790 \uAC80\uC0C9 \uCD9C\uB825")))), loadingSheet ? /* @__PURE__ */ React.createElement(Card, { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\u23F3 \uCD9C\uC11D \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uACE0 \uC788\uC2B5\uB2C8\uB2E4...") : courseStudents.length === 0 ? /* @__PURE__ */ React.createElement(Card, { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\uD574\uB2F9 \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB41C \uD6C8\uB828\uC0DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : allDates.length === 0 ? /* @__PURE__ */ React.createElement(Card, { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\uACFC\uC815 \uC77C\uC815\uC774 \uC124\uC815\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden" } }, totalDatePages > 1 && /* @__PURE__ */ React.createElement("div", { style: { padding: "8px 14px", borderBottom: `1px solid ${T.bd}`, display: "flex", gap: 8, alignItems: "center", background: T.s2 } }, /* @__PURE__ */ React.createElement(
       "button",
       {
         disabled: datePage === 0,
@@ -5036,7 +5075,130 @@
           showTimes && timeText && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 8, lineHeight: 1.2, fontWeight: 500, color: T.mu, whiteSpace: "nowrap" } }, timeText)
         );
       }), /* @__PURE__ */ React.createElement("td", { style: { padding: "6px 4px", textAlign: "center", fontSize: 13, fontWeight: 800, color: T.p, background: T.s2 } }, presentDays));
-    }))))));
+    }))))), showRequestPrint && /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        style: {
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,.5)",
+          zIndex: 1200,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16
+        },
+        onClick: () => setShowRequestPrint(false)
+      },
+      /* @__PURE__ */ React.createElement(
+        "div",
+        {
+          onClick: (e) => e.stopPropagation(),
+          style: {
+            width: "min(560px, 100%)",
+            maxHeight: "88vh",
+            background: T.s,
+            borderRadius: 14,
+            border: `1px solid ${T.bd}`,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden"
+          }
+        },
+        /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 18px 12px", borderBottom: `1px solid ${T.bd}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: T.tx } }, "\uC218\uAC15\uC99D\uBA85\uC11C \uC694\uCCAD\uC790 \uAC80\uC0C9 \uCD9C\uB825"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 4 } }, "\uC774\uB984 \uB610\uB294 \uC5F0\uB77D\uCC98\uB85C \uCC3E\uC544 \uCCB4\uD06C\uD55C \uC0AC\uB78C\uB9CC \uCD9C\uC11D\uBD80\uC5D0 \uB123\uC5B4 \uC778\uC1C4\uD569\uB2C8\uB2E4. \uBC1C\uAE09\uC774\uB825\uC73C\uB85C \uC790\uB3D9 \uC120\uD0DD\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4."), /* @__PURE__ */ React.createElement(
+          "input",
+          {
+            autoFocus: true,
+            value: requestSearch,
+            onChange: (e) => setRequestSearch(e.target.value),
+            placeholder: "\uC774\uB984 \uB610\uB294 \uC5F0\uB77D\uCC98 \uAC80\uC0C9",
+            style: {
+              width: "100%",
+              marginTop: 10,
+              padding: "8px 10px",
+              border: `1px solid ${T.bd}`,
+              borderRadius: 8,
+              fontSize: 13,
+              outline: "none",
+              background: T.s2,
+              color: T.tx
+            }
+          }
+        ), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, "\uAC80\uC0C9 ", requestCandidates.length, "\uBA85 \xB7 \uC120\uD0DD ", requestSelectedCount, "\uBA85"), /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setRequestSelected((prev) => {
+                const next = { ...prev };
+                requestCandidates.forEach((s) => {
+                  next[s.id] = true;
+                });
+                return next;
+              });
+            },
+            style: {
+              padding: "4px 8px",
+              borderRadius: 6,
+              border: `1px solid ${T.bd}`,
+              background: T.s2,
+              color: T.tx,
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 600
+            }
+          },
+          "\uAC80\uC0C9\uACB0\uACFC \uBAA8\uB450 \uC120\uD0DD"
+        ), /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => setRequestSelected({}),
+            style: {
+              padding: "4px 8px",
+              borderRadius: 6,
+              border: `1px solid ${T.bd}`,
+              background: T.s2,
+              color: T.mu,
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 600
+            }
+          },
+          "\uC120\uD0DD \uD574\uC81C"
+        ))),
+        /* @__PURE__ */ React.createElement("div", { style: { overflowY: "auto", flex: 1, padding: "6px 0" } }, requestCandidates.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: 28, textAlign: "center", fontSize: 12, color: T.mu } }, "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.") : requestCandidates.map((s) => {
+          const checked = !!requestSelected[s.id];
+          return /* @__PURE__ */ React.createElement("label", { key: s.id, style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 18px",
+            cursor: "pointer",
+            background: checked ? T.pbg : "transparent"
+          } }, /* @__PURE__ */ React.createElement(
+            "input",
+            {
+              type: "checkbox",
+              checked,
+              onChange: () => setRequestSelected((p) => ({ ...p, [s.id]: !p[s.id] })),
+              style: { width: 15, height: 15, cursor: "pointer" }
+            }
+          ), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx } }, s.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, s.phone || "\uC5F0\uB77D\uCC98 \uC5C6\uC74C")));
+        })),
+        /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 18px", borderTop: `1px solid ${T.bd}`, display: "flex", gap: 8, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement(Btn, { size: "sm", variant: "ghost", onClick: () => setShowRequestPrint(false) }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { size: "sm", onClick: () => {
+          if (requestSelectedCount === 0) {
+            alert("\uC120\uD0DD\uB41C \uD6C8\uB828\uC0DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC218\uAC15\uC99D\uBA85\uC11C\uB97C \uC694\uCCAD\uD55C \uC0AC\uB78C\uC744 \uAC80\uC0C9\uD574 \uCCB4\uD06C\uD558\uC138\uC694.");
+            return;
+          }
+          printAttendanceSheet(sheetCourse, requestSelectedList, allDates, attData, instructorName, {
+            heading: "\uCD9C \uC11D \uBD80 (\uC218\uAC15\uC99D\uBA85\uC11C \uC694\uCCAD)",
+            kindLabel: "\uCD9C\uC11D\uBD80 (\uC218\uAC15\uC99D\uBA85\uC11C \uC694\uCCAD)"
+          });
+          setShowRequestPrint(false);
+        } }, "\uC120\uD0DD\uD55C ", requestSelectedCount, "\uBA85 \uC778\uC1C4"))
+      )
+    ));
   };
   const CompletionMgmt = ({ students, courses }) => {
     const [course, setCourse] = useState(courses[0]);
@@ -5348,7 +5510,7 @@
       if (normalized === "true" || normalized === "1" || normalized === "y") return true;
     }
     if (typeof raw === "number") return raw !== 0;
-    return false;
+    return true;
   };
   const getCourseScheduleMinutes = (course) => {
     const schedStart = parseTimeToMinutes(course == null ? void 0 : course.schedTimeFrom);
@@ -5404,9 +5566,10 @@
     return Math.round(Math.max(0, baseHours + add - deduct) * 100) / 100;
   };
   const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
+    var _a, _b;
     if (record.status === "A") return applyManualHoursAdjustment(0, record);
-    let checkInMin = parseTimeToMinutes(record.check_in);
-    let checkOutMin = parseTimeToMinutes(record.check_out);
+    let checkInMin = parseTimeToMinutes((_a = record.check_in) != null ? _a : record.checkIn);
+    let checkOutMin = parseTimeToMinutes((_b = record.check_out) != null ? _b : record.checkOut);
     if ((record.status === "O" || record.status === "L") && scheduleMinutes) {
       if (checkInMin === null) checkInMin = scheduleMinutes.schedStart;
       if (checkOutMin === null) checkOutMin = scheduleMinutes.schedEnd;
@@ -5427,8 +5590,19 @@
     }
     const stayMinutes = checkOutMin - checkInMin;
     const safeBreak = normalizeBreakMinutes(breakMinutes);
-    const appliedBreak = includeBreakInHours ? 0 : Math.min(safeBreak, stayMinutes);
-    const diffMinutes = Math.max(0, stayMinutes - appliedBreak);
+    let diffMinutes;
+    if (includeBreakInHours) {
+      const credited = stayMinutes + safeBreak;
+      if (scheduleMinutes) {
+        const schedSpan = scheduleMinutes.schedEnd - scheduleMinutes.schedStart;
+        diffMinutes = Math.max(0, Math.min(schedSpan, credited));
+      } else {
+        diffMinutes = Math.max(0, stayMinutes);
+      }
+    } else {
+      const appliedBreak = Math.min(safeBreak, stayMinutes);
+      diffMinutes = Math.max(0, stayMinutes - appliedBreak);
+    }
     const autoHours = Math.round(diffMinutes / 60 * 100) / 100;
     return applyManualHoursAdjustment(autoHours, record);
   };
@@ -5504,14 +5678,14 @@
     return Math.min(rounded, 100);
   };
   const recalculateHoursAndRate = async (studentId, courseId) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     try {
       const student = (_b = (_a = window._studentsRef) == null ? void 0 : _a.current) == null ? void 0 : _b.find((s) => sameId(s.id, studentId));
       const course = (_d = (_c = window._coursesRef) == null ? void 0 : _c.current) == null ? void 0 : _d.find((c) => sameId(c.id, courseId));
       if (!student || !course) return;
       const { data: attRecords, error } = await sbGet(
         "attendance",
-        `select=*&student_id=eq.${studentId}&course_id=eq.${courseId}`
+        `select=*&student_id=in.(${siblingStudentIds(student, (_e = window._studentsRef) == null ? void 0 : _e.current).join(",")})&course_id=eq.${courseId}`
       );
       if (error) throw error;
       const cutoffDate = student.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" || student.enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D" ? student.statusChangeDate : null;
@@ -5544,11 +5718,12 @@
     }
   };
   const showAttendanceHourBasis = async (student, course) => {
+    var _a;
     try {
       if (!student || !course) return;
       const { data: attRecords, error } = await sbGet(
         "attendance",
-        `select=*&student_id=eq.${Number(student.id)}&course_id=eq.${Number(course.id)}&order=date.asc`
+        `select=*&student_id=in.(${siblingStudentIds(student, (_a = window._studentsRef) == null ? void 0 : _a.current).join(",")})&course_id=eq.${Number(course.id)}&order=date.asc`
       );
       if (error) throw error;
       const cutoffDate = student.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" || student.enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D" ? student.statusChangeDate : null;
@@ -5605,11 +5780,9 @@ ${invalidLines.join("\n")}` : null
     for (const course of courses) {
       const courseStudents = students.filter((s) => sameId(s.cid, course.id));
       if (courseStudents.length === 0) continue;
-      const studentIds = courseStudents.map((s) => Number(s.id)).filter(Boolean);
-      const studentFilter = studentIds.length ? `&student_id=in.(${studentIds.join(",")})` : "";
       const { data, error } = await sbGet(
         "attendance",
-        `select=id,course_id,student_id,date,status,check_in,check_out&course_id=eq.${Number(course.id)}${studentFilter}&order=date.asc&limit=10000`
+        `select=id,course_id,student_id,date,status,check_in,check_out,manual_add_hours,manual_deduct_hours&course_id=eq.${Number(course.id)}&order=date.asc&limit=10000`
       );
       if (error) {
         console.error("\uC77C\uAD04 \uC7AC\uACC4\uC0B0 \u2014 \uCD9C\uACB0 \uC870\uD68C \uC2E4\uD328:", course.name, error);
@@ -5623,7 +5796,8 @@ ${invalidLines.join("\n")}` : null
       if (!course) continue;
       const courseAttendance = attendanceByCourse.get(Number(course.id)) || [];
       if (courseAttendance.length === 0) continue;
-      const records = courseAttendance.filter((a) => sameId(a.student_id, student.id));
+      const siblingIds = siblingStudentIds(student, students);
+      const records = courseAttendance.filter((a) => siblingIds.some((id) => sameId(a.student_id, id)));
       const cutoffDate = student.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" || student.enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D" ? student.statusChangeDate : null;
       const breakMinutes = getCourseBreakMinutes(course);
       const includeBreakInHours = shouldIncludeBreakInHours(course);

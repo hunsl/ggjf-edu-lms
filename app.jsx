@@ -167,10 +167,34 @@ const samePerson = (a, b) => {
   const phoneB = String(b.phone || "").replace(/[^0-9]/g, "");
   return !!(phoneA && phoneB && phoneA.length >= 10 && phoneA === phoneB && (a.name || "") === (b.name || ""));
 };
+const siblingStudentIds = (student, all = []) => {
+  const ids = new Set();
+  const selfId = Number(student?.id);
+  if (Number.isFinite(selfId) && selfId > 0) ids.add(selfId);
+  (all || []).forEach(s => {
+    if (samePerson(s, student) || (personIdOf(s) && personIdOf(student) && personIdOf(s) === personIdOf(student))) {
+      const n = Number(s.id);
+      if (Number.isFinite(n) && n > 0) ids.add(n);
+    }
+  });
+  return [...ids];
+};
 const resolvePersonId = (student, all) => {
   if (student?.personId) return personIdOf(student);
   const match = (all || []).find(s => s.id !== student?.id && samePerson(s, student));
   return personIdOf(match) || null;
+};
+
+const matchesStudentKeyword = (student, keyword) => {
+  const raw = String(keyword || "").trim();
+  if (!raw) return true;
+  const name = String(student?.name || "").toLowerCase();
+  if (name.includes(raw.toLowerCase())) return true;
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return false;
+  const phone = String(student?.phone || "").replace(/[^0-9]/g, "");
+  const phone2 = String(student?.phone2 || student?.phoneEmer || "").replace(/[^0-9]/g, "");
+  return phone.includes(digits) || phone2.includes(digits);
 };
 
 const toStudent = r => r ? ({
@@ -231,7 +255,7 @@ const toCourse = r => r ? ({
   schedTimeFrom: r.sched_time_from||"09:00",
   schedTimeTo: r.sched_time_to||"13:00",
   breakMinutes: toNum(r.break_minutes) ?? 60,
-  includeBreakInHours: r.include_break_in_hours === true,
+  includeBreakInHours: r.include_break_in_hours !== false,
   notes: r.notes||"", pdfName: r.pdf_name||"", pdfData: r.pdf_data||"",
   links: r.links||[],
 }) : null;
@@ -245,7 +269,7 @@ const fromCourse = c => ({
   sched_time_from: c.schedTimeFrom||null,
   sched_time_to: c.schedTimeTo||null,
   break_minutes: toNum(c.breakMinutes) ?? 60,
-  include_break_in_hours: c.includeBreakInHours === true,
+  include_break_in_hours: c.includeBreakInHours !== false,
   notes: c.notes||"", pdf_name: c.pdfName||"", pdf_data: c.pdfData||"",
   links: c.links||[],
 });
@@ -1492,7 +1516,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
     dateFrom:"", dateTo:"", period:"",
     method:"대면", hours:0, tgt:20, cGoal:18, eGoal:12,
     schedDays:"", schedTimeFrom:"09:00", schedTimeTo:"13:00", breakMinutes:60,
-    includeBreakInHours: false,
+    includeBreakInHours: true,
     links:[], notes:"", pdfName:"", pdfData:""
   };
   const [form, setForm] = useState(course ? {
@@ -1502,7 +1526,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
     pdfName: course.pdfName||"", pdfData: course.pdfData||"",
     schedDays: course.schedDays||"", schedTimeFrom: course.schedTimeFrom||"09:00", schedTimeTo: course.schedTimeTo||"13:00",
     breakMinutes: toNum(course.breakMinutes) ?? 60,
-    includeBreakInHours: course.includeBreakInHours === true,
+    includeBreakInHours: course.includeBreakInHours !== false,
   } : empty);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const inp = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
@@ -1716,7 +1740,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
             <label htmlFor="includeBreakInHours" style={{ fontSize:12, fontWeight:600, color:T.tx, cursor:"pointer" }}>
               수료시간 계산 시 쉬는시간 포함
             </label>
-            <span style={{ fontSize:11, color:T.mu }}>(체크 시: 쉬는시간이 수업시간에 포함되어 수료시간에 반영됨)</span>
+            <span style={{ fontSize:11, color:T.mu }}>(체크 시: 13:00~17:00이면 만점 4시간. 16:30 퇴실도 4시간. 보강은 그 위에 추가)</span>
           </div>
 
           {/* 참고사항 메모 */}
@@ -4613,7 +4637,9 @@ const getAttendanceSheetTotalHours = (course, student) => {
   return getTotalCourseHours(course);
 };
 
-const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorName) => {
+const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorName, printOptions = {}) => {
+  const sheetHeading = printOptions.heading || "출 석 부";
+  const sheetKind = printOptions.kindLabel || "출석부";
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const period = formatCoursePeriod(course);
@@ -4647,7 +4673,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
     const isLast = pageNum === totalPages;
     const pageStudents = courseStudents;
     const miniHeader = totalPages > 1
-      ? `<div class="page-mini-header"><span class="page-course-name">${course.name}</span><span class="page-info">출석부 (${pageNum}/${totalPages})</span></div>`
+      ? `<div class="page-mini-header"><span class="page-course-name">${course.name}</span><span class="page-info">${sheetKind} (${pageNum}/${totalPages})</span></div>`
       : '';
     return `
     ${miniHeader}
@@ -4716,7 +4742,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
   }).join('');
 
   const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/>
-<title>출석부 - ${course.name}</title>
+<title>${sheetKind} - ${course.name}</title>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -4768,7 +4794,7 @@ const printAttendanceSheet = (course, courseStudents, dates, attMap, instructorN
   }
 </style></head>
 <body>
-  <div class="header"><h1>출 석 부</h1></div>
+  <div class="header"><h1>${sheetHeading}</h1></div>
   <table class="info-table">
     <tr>
       <td class="lbl">과정명</td>
@@ -4812,6 +4838,9 @@ const AttendanceSheet = ({ course, courses, students }) => {
   const [attData, setAttData] = useState({});      // { "studentId_date": { status, checkIn, checkOut } }
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [instructors, setInstructors] = useState([]);
+  const [showRequestPrint, setShowRequestPrint] = useState(false);
+  const [requestSearch, setRequestSearch] = useState("");
+  const [requestSelected, setRequestSelected] = useState({});
 
   // courses prop 변경 시 sheetCourse 동기화
   useEffect(() => {
@@ -4864,6 +4893,12 @@ const AttendanceSheet = ({ course, courses, students }) => {
     load();
   }, [sheetCourse, students]);
 
+  useEffect(() => {
+    setRequestSelected({});
+    setRequestSearch("");
+    setShowRequestPrint(false);
+  }, [sheetCourse?.id]);
+
   const allDates = buildCourseDatesAll(sheetCourse);
   const courseStudents = students.filter(s => s.cid === sheetCourse?.id);
   const today = new Date().toISOString().slice(0, 10);
@@ -4885,6 +4920,9 @@ const AttendanceSheet = ({ course, courses, students }) => {
   const totalDatePages = Math.ceil(allDates.length / PAGE_SIZE);
   const visibleDates = allDates.slice(datePage * PAGE_SIZE, (datePage + 1) * PAGE_SIZE);
   const pageStudents = courseStudents;
+  const requestCandidates = courseStudents.filter(s => matchesStudentKeyword(s, requestSearch));
+  const requestSelectedList = courseStudents.filter(s => requestSelected[s.id]);
+  const requestSelectedCount = requestSelectedList.length;
 
   return (
     <div>
@@ -4927,6 +4965,12 @@ const AttendanceSheet = ({ course, courses, students }) => {
               printAttendanceSheet(sheetCourse, courseStudents, allDates, attData, instructorName);
             }}>
               🖨️ PDF 출력
+            </Btn>
+            <Btn size="sm" variant="outline" onClick={() => {
+              setRequestSearch("");
+              setShowRequestPrint(true);
+            }}>
+              요청자 검색 출력
             </Btn>
           </div>
         </div>
@@ -5056,6 +5100,90 @@ const AttendanceSheet = ({ course, courses, students }) => {
           </table>
           </div>
         </Card>
+      )}
+      {showRequestPrint && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:1200,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+          onClick={() => setShowRequestPrint(false)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width:"min(560px, 100%)", maxHeight:"88vh", background:T.s, borderRadius:14,
+              border:`1px solid ${T.bd}`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+            <div style={{ padding:"16px 18px 12px", borderBottom:`1px solid ${T.bd}` }}>
+              <div style={{ fontSize:14, fontWeight:800, color:T.tx }}>수강증명서 요청자 검색 출력</div>
+              <div style={{ fontSize:11, color:T.mu, marginTop:4 }}>
+                이름 또는 연락처로 찾아 체크한 사람만 출석부에 넣어 인쇄합니다. 발급이력으로 자동 선택하지 않습니다.
+              </div>
+              <input
+                autoFocus
+                value={requestSearch}
+                onChange={e => setRequestSearch(e.target.value)}
+                placeholder="이름 또는 연락처 검색"
+                style={{ width:"100%", marginTop:10, padding:"8px 10px", border:`1px solid ${T.bd}`,
+                  borderRadius:8, fontSize:13, outline:"none", background:T.s2, color:T.tx }}
+              />
+              <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:8, flexWrap:"wrap" }}>
+                <span style={{ fontSize:11, color:T.mu }}>
+                  검색 {requestCandidates.length}명 · 선택 {requestSelectedCount}명
+                </span>
+                <button type="button"
+                  onClick={() => {
+                    setRequestSelected(prev => {
+                      const next = { ...prev };
+                      requestCandidates.forEach(s => { next[s.id] = true; });
+                      return next;
+                    });
+                  }}
+                  style={{ padding:"4px 8px", borderRadius:6, border:`1px solid ${T.bd}`, background:T.s2,
+                    color:T.tx, cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                  검색결과 모두 선택
+                </button>
+                <button type="button"
+                  onClick={() => setRequestSelected({})}
+                  style={{ padding:"4px 8px", borderRadius:6, border:`1px solid ${T.bd}`, background:T.s2,
+                    color:T.mu, cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                  선택 해제
+                </button>
+              </div>
+            </div>
+            <div style={{ overflowY:"auto", flex:1, padding:"6px 0" }}>
+              {requestCandidates.length === 0 ? (
+                <div style={{ padding:28, textAlign:"center", fontSize:12, color:T.mu }}>
+                  검색 결과가 없습니다.
+                </div>
+              ) : requestCandidates.map(s => {
+                const checked = !!requestSelected[s.id];
+                return (
+                  <label key={s.id} style={{ display:"flex", alignItems:"center", gap:10,
+                    padding:"8px 18px", cursor:"pointer", background: checked ? T.pbg : "transparent" }}>
+                    <input type="checkbox" checked={checked}
+                      onChange={() => setRequestSelected(p => ({ ...p, [s.id]: !p[s.id] }))}
+                      style={{ width:15, height:15, cursor:"pointer" }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:T.tx }}>{s.name}</div>
+                      <div style={{ fontSize:11, color:T.mu }}>{s.phone || "연락처 없음"}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            <div style={{ padding:"12px 18px", borderTop:`1px solid ${T.bd}`, display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <Btn size="sm" variant="ghost" onClick={() => setShowRequestPrint(false)}>취소</Btn>
+              <Btn size="sm" onClick={() => {
+                if (requestSelectedCount === 0) {
+                  alert("선택된 훈련생이 없습니다. 수강증명서를 요청한 사람을 검색해 체크하세요.");
+                  return;
+                }
+                printAttendanceSheet(sheetCourse, requestSelectedList, allDates, attData, instructorName, {
+                  heading: "출 석 부 (수강증명서 요청)",
+                  kindLabel: "출석부 (수강증명서 요청)",
+                });
+                setShowRequestPrint(false);
+              }}>
+                선택한 {requestSelectedCount}명 인쇄
+              </Btn>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -5751,7 +5879,7 @@ const shouldIncludeBreakInHours = (course) => {
     if (normalized === 'true' || normalized === '1' || normalized === 'y') return true;
   }
   if (typeof raw === 'number') return raw !== 0;
-  return false; // 기본값: 점심/휴게시간 자동 차감
+  return true; // 기본값: 쉬는시간을 수업시간에 포함 (13:00~17:00 → 4시간)
 };
 
 // 과정 수업 시작/종료 시각을 분(minute) 단위로 반환 (시간 범위 클리핑용)
@@ -5819,8 +5947,8 @@ const applyManualHoursAdjustment = (baseHours, record = {}) => {
 // scheduleMinutes: { schedStart, schedEnd } (분 단위) — 수업시간 범위 내로 입/퇴실 클리핑
 const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
   if (record.status === 'A') return applyManualHoursAdjustment(0, record);
-  let checkInMin  = parseTimeToMinutes(record.check_in);
-  let checkOutMin = parseTimeToMinutes(record.check_out);
+  let checkInMin  = parseTimeToMinutes(record.check_in ?? record.checkIn);
+  let checkOutMin = parseTimeToMinutes(record.check_out ?? record.checkOut);
   if ((record.status === 'O' || record.status === 'L') && scheduleMinutes) {
     if (checkInMin === null) checkInMin = scheduleMinutes.schedStart;
     if (checkOutMin === null) checkOutMin = scheduleMinutes.schedEnd;
@@ -5842,8 +5970,21 @@ const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, sched
   }
   const stayMinutes = checkOutMin - checkInMin;
   const safeBreak = normalizeBreakMinutes(breakMinutes);
-  const appliedBreak = includeBreakInHours ? 0 : Math.min(safeBreak, stayMinutes);
-  const diffMinutes = Math.max(0, stayMinutes - appliedBreak);
+  let diffMinutes;
+  if (includeBreakInHours) {
+    // 쉬는시간 포함: 체류 + 쉬는시간, 예정 수업시간을 넘지 않음
+    // 예: 13:00~17:00(4h) · 16:30 퇴실 → 3.5h + 휴식 → 만점 4h
+    const credited = stayMinutes + safeBreak;
+    if (scheduleMinutes) {
+      const schedSpan = scheduleMinutes.schedEnd - scheduleMinutes.schedStart;
+      diffMinutes = Math.max(0, Math.min(schedSpan, credited));
+    } else {
+      diffMinutes = Math.max(0, stayMinutes);
+    }
+  } else {
+    const appliedBreak = Math.min(safeBreak, stayMinutes);
+    diffMinutes = Math.max(0, stayMinutes - appliedBreak);
+  }
   const autoHours = Math.round((diffMinutes / 60) * 100) / 100;
   return applyManualHoursAdjustment(autoHours, record);
 };
@@ -5944,7 +6085,7 @@ const recalculateHoursAndRate = async (studentId, courseId) => {
     if (!student || !course) return;
 
     const { data: attRecords, error } = await sbGet("attendance",
-      `select=*&student_id=eq.${studentId}&course_id=eq.${courseId}`);
+      `select=*&student_id=in.(${siblingStudentIds(student, window._studentsRef?.current).join(",")})&course_id=eq.${courseId}`);
     if (error) throw error;
 
     const cutoffDate = (student.enrollmentStatus === '조기취업' || student.enrollmentStatus === '중도탈락')
@@ -5987,7 +6128,7 @@ const showAttendanceHourBasis = async (student, course) => {
   try {
     if (!student || !course) return;
     const { data: attRecords, error } = await sbGet("attendance",
-      `select=*&student_id=eq.${Number(student.id)}&course_id=eq.${Number(course.id)}&order=date.asc`);
+      `select=*&student_id=in.(${siblingStudentIds(student, window._studentsRef?.current).join(",")})&course_id=eq.${Number(course.id)}&order=date.asc`);
     if (error) throw error;
 
     const cutoffDate = (student.enrollmentStatus === '조기취업' || student.enrollmentStatus === '중도탈락')
@@ -6046,11 +6187,9 @@ const batchRecalculateAllHours = async (students, courses, overridesArg = null) 
   for (const course of courses) {
     const courseStudents = students.filter(s => sameId(s.cid, course.id));
     if (courseStudents.length === 0) continue;
-    const studentIds = courseStudents.map(s => Number(s.id)).filter(Boolean);
-    const studentFilter = studentIds.length ? `&student_id=in.(${studentIds.join(",")})` : "";
     const { data, error } = await sbGet(
       "attendance",
-      `select=id,course_id,student_id,date,status,check_in,check_out&course_id=eq.${Number(course.id)}${studentFilter}&order=date.asc&limit=10000`
+      `select=id,course_id,student_id,date,status,check_in,check_out,manual_add_hours,manual_deduct_hours&course_id=eq.${Number(course.id)}&order=date.asc&limit=10000`
     );
     if (error) {
       console.error("일괄 재계산 — 출결 조회 실패:", course.name, error);
@@ -6067,7 +6206,8 @@ const batchRecalculateAllHours = async (students, courses, overridesArg = null) 
     // 해당 학생 + 해당 과정의 출결만 필터
     const courseAttendance = attendanceByCourse.get(Number(course.id)) || [];
     if (courseAttendance.length === 0) continue;
-    const records = courseAttendance.filter(a => sameId(a.student_id, student.id));
+    const siblingIds = siblingStudentIds(student, students);
+    const records = courseAttendance.filter(a => siblingIds.some(id => sameId(a.student_id, id)));
 
     const cutoffDate = (student.enrollmentStatus === '조기취업' || student.enrollmentStatus === '중도탈락')
       ? student.statusChangeDate

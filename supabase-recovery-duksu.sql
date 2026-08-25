@@ -2,6 +2,10 @@
 -- Supabase SQL Editor에서 위에서부터 순서대로 실행
 -- 초등피지컬 행이 없으면 수료 상태로 추가하고, AI입문 행은 그대로 둡니다.
 
+-- 0) person_id가 없는 예전 DB면 컬럼부터 추가 (기존 데이터 유지)
+ALTER TABLE students ADD COLUMN IF NOT EXISTS person_id BIGINT;
+UPDATE students SET person_id = id WHERE person_id IS NULL;
+
 -- 1) 대상자/과정 확인
 SELECT id, person_id, name, cid, enrollment_status, status_change_date, dropout_reason
 FROM students
@@ -40,24 +44,19 @@ elem AS (
   LIMIT 1
 )
 INSERT INTO students (
-  cid, person_id, name, gender, birth, id_back, phone, phone2, addr_city, addr_detail,
-  edu, major, career, cert, status, unemp, disabled, veteran,
-  itv_date, itv_score, itv_grade, itv_pass, memo, rate,
-  enrollment_status, accumulated_hours, status_change_date, dropout_reason, employer_name
+  cid, person_id, name, gender, birth, phone,
+  enrollment_status, rate, accumulated_hours
 )
 SELECT
   e.id,
   COALESCE(s.person_id, s.id),
   s.name,
-  s.gender, s.birth, s.id_back, s.phone, s.phone2, s.addr_city, s.addr_detail,
-  s.edu, s.major, s.career, s.cert, s.status, s.unemp, s.disabled, s.veteran,
-  s.itv_date, s.itv_score, s.itv_grade, s.itv_pass, s.memo,
-  0,
+  s.gender,
+  s.birth,
+  s.phone,
   '수료',
   0,
-  COALESCE(s.status_change_date, CURRENT_DATE::text),
-  NULL,
-  s.employer_name
+  0
 FROM source_row s
 CROSS JOIN elem e
 WHERE NOT EXISTS (
@@ -81,3 +80,4 @@ SELECT id, person_id, name, cid, enrollment_status, status_change_date, dropout_
 FROM students
 WHERE dropout_reason ILIKE '%이력보존%'
 ORDER BY id DESC;
+

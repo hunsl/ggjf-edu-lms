@@ -9,7 +9,7 @@
       const ok = storage.getItem(k) === "1";
       storage.removeItem(k);
       return ok;
-    } catch (e) {
+    } catch {
       return false;
     }
   };
@@ -21,7 +21,7 @@
       if (!_sessionOk) return _mem["s_" + k] || null;
       try {
         return sessionStorage.getItem(k);
-      } catch (e) {
+      } catch {
         return _mem["s_" + k] || null;
       }
     },
@@ -32,7 +32,7 @@
       }
       try {
         sessionStorage.setItem(k, v);
-      } catch (e) {
+      } catch {
         _mem["s_" + k] = v;
       }
     },
@@ -43,7 +43,7 @@
       }
       try {
         sessionStorage.removeItem(k);
-      } catch (e) {
+      } catch {
         delete _mem["s_" + k];
       }
     }
@@ -53,7 +53,7 @@
       if (!_localOk) return _mem["l_" + k] || null;
       try {
         return localStorage.getItem(k);
-      } catch (e) {
+      } catch {
         return _mem["l_" + k] || null;
       }
     },
@@ -64,7 +64,7 @@
       }
       try {
         localStorage.setItem(k, v);
-      } catch (e) {
+      } catch {
         _mem["l_" + k] = v;
       }
     },
@@ -75,7 +75,7 @@
       }
       try {
         localStorage.removeItem(k);
-      } catch (e) {
+      } catch {
         delete _mem["l_" + k];
       }
     }
@@ -153,7 +153,7 @@
     return { data: null, error: null };
   };
   const fmtSaveError = (err) => {
-    const msg = (err == null ? void 0 : err.message) || JSON.stringify(err);
+    const msg = err?.message || JSON.stringify(err);
     if (msg.includes("schema cache") || msg.includes("Could not find")) {
       return `${msg}
 
@@ -201,16 +201,16 @@
     const n = parseFloat(v);
     return isFinite(n) ? n : null;
   };
-  const makePersonKey = (s) => (((s == null ? void 0 : s.name) || "") + "|" + ((s == null ? void 0 : s.birth) || "")).trim().toLowerCase();
+  const makePersonKey = (s) => ((s?.name || "") + "|" + (s?.birth || "")).trim().toLowerCase();
   const personIdOf = (s) => {
-    const n = Number((s == null ? void 0 : s.personId) || (s == null ? void 0 : s.id));
+    const n = Number(s?.personId || s?.id);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
   const personGroupKey = (s) => {
     const pid = personIdOf(s);
-    if ((s == null ? void 0 : s.personId) && pid) return "id:" + pid;
+    if (s?.personId && pid) return "id:" + pid;
     const k = makePersonKey(s);
-    return k && k !== "|" ? "key:" + k : "row:" + ((s == null ? void 0 : s.id) || "");
+    return k && k !== "|" ? "key:" + k : "row:" + (s?.id || "");
   };
   const samePerson = (a, b) => {
     if (!a || !b) return false;
@@ -225,7 +225,7 @@
   };
   const siblingStudentIds = (student, all = []) => {
     const ids = /* @__PURE__ */ new Set();
-    const selfId = Number(student == null ? void 0 : student.id);
+    const selfId = Number(student?.id);
     if (Number.isFinite(selfId) && selfId > 0) ids.add(selfId);
     (all || []).forEach((s) => {
       if (samePerson(s, student) || personIdOf(s) && personIdOf(student) && personIdOf(s) === personIdOf(student)) {
@@ -236,19 +236,19 @@
     return [...ids];
   };
   const resolvePersonId = (student, all) => {
-    if (student == null ? void 0 : student.personId) return personIdOf(student);
-    const match = (all || []).find((s) => s.id !== (student == null ? void 0 : student.id) && samePerson(s, student));
+    if (student?.personId) return personIdOf(student);
+    const match = (all || []).find((s) => s.id !== student?.id && samePerson(s, student));
     return personIdOf(match) || null;
   };
   const matchesStudentKeyword = (student, keyword) => {
     const raw = String(keyword || "").trim();
     if (!raw) return true;
-    const name = String((student == null ? void 0 : student.name) || "").toLowerCase();
+    const name = String(student?.name || "").toLowerCase();
     if (name.includes(raw.toLowerCase())) return true;
     const digits = raw.replace(/[^0-9]/g, "");
     if (!digits) return false;
-    const phone = String((student == null ? void 0 : student.phone) || "").replace(/[^0-9]/g, "");
-    const phone2 = String((student == null ? void 0 : student.phone2) || (student == null ? void 0 : student.phoneEmer) || "").replace(/[^0-9]/g, "");
+    const phone = String(student?.phone || "").replace(/[^0-9]/g, "");
+    const phone2 = String(student?.phone2 || student?.phoneEmer || "").replace(/[^0-9]/g, "");
     return phone.includes(digits) || phone2.includes(digits);
   };
   const toStudent = (r) => r ? {
@@ -294,7 +294,6 @@
     return s || null;
   };
   const fromStudent = (s) => {
-    var _a, _b;
     return {
       cid: s.cid ? Number(s.cid) : null,
       name: s.name,
@@ -318,68 +317,62 @@
       itv_grade: s.itvGrade || "",
       itv_pass: !!s.itvPass,
       memo: s.memo || "",
-      rate: (_a = toNum(s.rate)) != null ? _a : 0,
+      rate: toNum(s.rate) ?? 0,
       enrollment_status: s.enrollmentStatus || "\uC7AC\uD559\uC911",
-      accumulated_hours: (_b = toNum(s.accumulatedHours)) != null ? _b : 0,
+      accumulated_hours: toNum(s.accumulatedHours) ?? 0,
       status_change_date: s.statusChangeDate || null,
       dropout_reason: s.dropoutReason || null,
       employer_name: s.employerName || null,
       person_id: s.personId ? Number(s.personId) : null
     };
   };
-  const toCourse = (r) => {
-    var _a;
-    return r ? {
-      id: Number(r.id),
-      cat: r.cat,
-      cc: r.cc,
-      name: r.name,
-      code: r.code,
-      dateFrom: r.date_from || "",
-      dateTo: r.date_to || "",
-      period: r.period || "",
-      method: r.method || "\uB300\uBA74",
-      hours: r.hours || 0,
-      tgt: r.tgt || 20,
-      cGoal: r.c_goal || 18,
-      eGoal: r.e_goal || 12,
-      schedDays: r.sched_days || "",
-      schedTimeFrom: r.sched_time_from || "09:00",
-      schedTimeTo: r.sched_time_to || "13:00",
-      breakMinutes: (_a = toNum(r.break_minutes)) != null ? _a : 60,
-      includeBreakInHours: r.include_break_in_hours !== false,
-      notes: r.notes || "",
-      pdfName: r.pdf_name || "",
-      pdfData: r.pdf_data || "",
-      links: r.links || []
-    } : null;
-  };
-  const fromCourse = (c) => {
-    var _a;
-    return {
-      cat: c.cat,
-      cc: c.cc,
-      name: c.name,
-      code: c.code,
-      date_from: c.dateFrom || null,
-      date_to: c.dateTo || null,
-      period: c.period || "",
-      method: c.method,
-      hours: c.hours || 0,
-      tgt: c.tgt || 20,
-      c_goal: c.cGoal || 18,
-      e_goal: c.eGoal || 12,
-      sched_days: c.schedDays || "",
-      sched_time_from: c.schedTimeFrom || null,
-      sched_time_to: c.schedTimeTo || null,
-      break_minutes: (_a = toNum(c.breakMinutes)) != null ? _a : 60,
-      include_break_in_hours: c.includeBreakInHours !== false,
-      notes: c.notes || "",
-      pdf_name: c.pdfName || "",
-      pdf_data: c.pdfData || "",
-      links: c.links || []
-    };
-  };
+  const toCourse = (r) => r ? {
+    id: Number(r.id),
+    cat: r.cat,
+    cc: r.cc,
+    name: r.name,
+    code: r.code,
+    dateFrom: r.date_from || "",
+    dateTo: r.date_to || "",
+    period: r.period || "",
+    method: r.method || "\uB300\uBA74",
+    hours: r.hours || 0,
+    tgt: r.tgt || 20,
+    cGoal: r.c_goal || 18,
+    eGoal: r.e_goal || 12,
+    schedDays: r.sched_days || "",
+    schedTimeFrom: r.sched_time_from || "09:00",
+    schedTimeTo: r.sched_time_to || "13:00",
+    breakMinutes: toNum(r.break_minutes) ?? 60,
+    includeBreakInHours: r.include_break_in_hours !== false,
+    notes: r.notes || "",
+    pdfName: r.pdf_name || "",
+    pdfData: r.pdf_data || "",
+    links: r.links || []
+  } : null;
+  const fromCourse = (c) => ({
+    cat: c.cat,
+    cc: c.cc,
+    name: c.name,
+    code: c.code,
+    date_from: c.dateFrom || null,
+    date_to: c.dateTo || null,
+    period: c.period || "",
+    method: c.method,
+    hours: c.hours || 0,
+    tgt: c.tgt || 20,
+    c_goal: c.cGoal || 18,
+    e_goal: c.eGoal || 12,
+    sched_days: c.schedDays || "",
+    sched_time_from: c.schedTimeFrom || null,
+    sched_time_to: c.schedTimeTo || null,
+    break_minutes: toNum(c.breakMinutes) ?? 60,
+    include_break_in_hours: c.includeBreakInHours !== false,
+    notes: c.notes || "",
+    pdf_name: c.pdfName || "",
+    pdf_data: c.pdfData || "",
+    links: c.links || []
+  });
   const toAccount = (r) => r ? {
     id: r.id,
     name: r.name || "",
@@ -683,7 +676,7 @@
           return;
         }
       }
-    } catch (e) {
+    } catch {
     }
     try {
       const { data, error } = await sbGet("holidays", "select=date&order=date");
@@ -692,7 +685,7 @@
         _holidaySet = new Set(dates);
         try {
           safeLocal.set("gjf_holidays", JSON.stringify({ data: dates, ts: Date.now() }));
-        } catch (e) {
+        } catch {
         }
       }
     } catch (e) {
@@ -701,8 +694,7 @@
   };
   const isHoliday = (dateStr) => _holidaySet.has(dateStr);
   const isCancelledOverride = (courseId, dateStr) => {
-    var _a;
-    const ovs = ((_a = window._overridesRef) == null ? void 0 : _a.current) || [];
+    const ovs = window._overridesRef?.current || [];
     if (!courseId || !dateStr) return false;
     return ovs.some((o) => o.courseId === Number(courseId) && o.date === dateStr && o.type === "cancelled");
   };
@@ -1038,16 +1030,15 @@
     }
   ];
   const buildCourseDates = (course) => {
-    var _a, _b, _c;
     const getLocalStr = (d) => {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
       const day = String(d.getDate()).padStart(2, "0");
       return `${y}-${m}-${day}`;
     };
-    const dateFrom = (_a = course == null ? void 0 : course.dateFrom) != null ? _a : course == null ? void 0 : course.date_from;
-    const dateTo = (_b = course == null ? void 0 : course.dateTo) != null ? _b : course == null ? void 0 : course.date_to;
-    const schedDaysRaw = (_c = course == null ? void 0 : course.schedDays) != null ? _c : course == null ? void 0 : course.sched_days;
+    const dateFrom = course?.dateFrom ?? course?.date_from;
+    const dateTo = course?.dateTo ?? course?.date_to;
+    const schedDaysRaw = course?.schedDays ?? course?.sched_days;
     if (!dateFrom) return [getLocalStr(/* @__PURE__ */ new Date())];
     const today = /* @__PURE__ */ new Date();
     today.setHours(0, 0, 0, 0);
@@ -1065,13 +1056,13 @@
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       if (allowedDows.has(d.getDay())) {
         const ds = getLocalStr(d);
-        if (!isHoliday(ds) && !isCancelledOverride(course == null ? void 0 : course.id, ds)) out.push(ds);
+        if (!isHoliday(ds) && !isCancelledOverride(course?.id, ds)) out.push(ds);
       }
     }
     return out.length ? out : [getLocalStr(today)];
   };
   const formatCoursePeriod = (c) => {
-    if (!(c == null ? void 0 : c.dateFrom)) return "\uAE30\uAC04 \uBBF8\uC815";
+    if (!c?.dateFrom) return "\uAE30\uAC04 \uBBF8\uC815";
     const fmt = (d) => {
       const [y, m, day] = (d || "").split("-");
       return `${y}.${String(+m)}.${String(+day)}`;
@@ -1244,7 +1235,7 @@
     a.download = "\uD6C8\uB828\uC0DD_\uB4F1\uB85D\uC591\uC2DD_2026.xlsx";
     a.click();
   };
-  const isDropoutStudent = (s) => ((s == null ? void 0 : s.enrollmentStatus) || "") === "\uC911\uB3C4\uD0C8\uB77D";
+  const isDropoutStudent = (s) => (s?.enrollmentStatus || "") === "\uC911\uB3C4\uD0C8\uB77D";
   const localDateStr = (d = /* @__PURE__ */ new Date()) => {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -1269,7 +1260,6 @@
     useEffect(() => {
       let cancelled = false;
       const load = async () => {
-        var _a, _b, _c;
         try {
           const [iRes, rRes, bRes] = await Promise.all([
             sbGet("instructors", "select=*&order=id"),
@@ -1277,11 +1267,11 @@
             sbGet("room_bookings", "select=*&order=id")
           ]);
           if (!cancelled) {
-            if (!iRes.error && ((_a = iRes.data) == null ? void 0 : _a.length)) setInstructors(iRes.data.map(toInstructor));
-            if (!rRes.error && ((_b = rRes.data) == null ? void 0 : _b.length)) setDashRooms(rRes.data.map(toRoom));
-            if (!bRes.error && ((_c = bRes.data) == null ? void 0 : _c.length)) setBookings2(bRes.data.map(toBooking));
+            if (!iRes.error && iRes.data?.length) setInstructors(iRes.data.map(toInstructor));
+            if (!rRes.error && rRes.data?.length) setDashRooms(rRes.data.map(toRoom));
+            if (!bRes.error && bRes.data?.length) setBookings2(bRes.data.map(toBooking));
           }
-        } catch (e) {
+        } catch {
         }
         try {
           const attRes = await sbGet("attendance", `select=student_id,status&date=eq.${todayStr}`);
@@ -1305,7 +1295,7 @@
               setLastLiveLoad(/* @__PURE__ */ new Date());
             }
           }
-        } catch (e) {
+        } catch {
         }
       };
       load();
@@ -1324,7 +1314,7 @@
       let ref = 0;
       const joinRef = String(++ref);
       const send = (obj) => {
-        if ((ws == null ? void 0 : ws.readyState) === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+        if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
       };
       const connect = () => {
         if (intentionallyClosed) return;
@@ -1353,7 +1343,7 @@
           try {
             const msg = JSON.parse(event.data);
             if (msg.event === "postgres_changes") setLoadTick((t) => t + 1);
-          } catch (e) {
+          } catch {
           }
         };
         ws.onclose = () => {
@@ -1369,7 +1359,7 @@
       return () => {
         intentionallyClosed = true;
         clearInterval(heartbeatId);
-        ws == null ? void 0 : ws.close();
+        ws?.close();
       };
     }, [todayStr]);
     const DAY_MAP2 = { \uC77C: 0, \uC6D4: 1, \uD654: 2, \uC218: 3, \uBAA9: 4, \uAE08: 5, \uD1A0: 6 };
@@ -1606,7 +1596,7 @@
         fontSize: 12,
         fontWeight: 900,
         color: s.rate < 70 ? T.danger : T.warn
-      } }, s.rate), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.tx } }, s.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c == null ? void 0 : c.name)), /* @__PURE__ */ React.createElement(Chip, { label: s.rate < 70 ? "\uC704\uD5D8" : "\uC8FC\uC758", bg: s.rate < 70 ? "#FEE2E2" : "#FEF3C7", color: s.rate < 70 ? T.danger : T.warn }));
+      } }, s.rate), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.tx } }, s.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c?.name)), /* @__PURE__ */ React.createElement(Chip, { label: s.rate < 70 ? "\uC704\uD5D8" : "\uC8FC\uC758", bg: s.rate < 70 ? "#FEE2E2" : "#FEF3C7", color: s.rate < 70 ? T.danger : T.warn }));
     }))), /* @__PURE__ */ React.createElement(Card, { style: { padding: 22, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, marginBottom: 14, display: "flex", gap: 8, alignItems: "center" } }, /* @__PURE__ */ React.createElement(Icon, { n: "cal", s: 15 }), " \uC804\uCCB4 \uAC1C\uC124 \uACFC\uC815 \uC9C4\uD589\uB960", /* @__PURE__ */ React.createElement("span", { style: {
       marginLeft: 6,
       fontSize: 11,
@@ -1624,13 +1614,12 @@
       fontWeight: 700,
       whiteSpace: "nowrap"
     } }, h)))), /* @__PURE__ */ React.createElement("tbody", null, courseProgress.map((c) => {
-      var _a;
       const fillPct = c.tgt > 0 ? Math.min(100, Math.round(c.enrolled / c.tgt * 100)) : 0;
       const stColor = c.status === "\uC9C4\uD589\uC911" ? T.ok : c.status === "\uC885\uB8CC" ? T.mu : T.info;
       const stBg = c.status === "\uC9C4\uD589\uC911" ? "#F0FDF4" : c.status === "\uC885\uB8CC" ? T.s2 : "#EFF6FF";
       const courseInst = instructors.filter((i) => (i.cids || []).includes(c.id));
       const bk = bookings.find((b) => b.courseId === c.id && b.start <= todayStr && b.end >= todayStr);
-      const roomName = bk ? ((_a = dashRooms.find((r) => r.id === bk.roomId)) == null ? void 0 : _a.name) || "" : "";
+      const roomName = bk ? dashRooms.find((r) => r.id === bk.roomId)?.name || "" : "";
       return /* @__PURE__ */ React.createElement("tr", { key: c.id, style: {
         borderBottom: `1px solid ${T.bd}`,
         background: c.isActive ? `${T.pbg}60` : "transparent"
@@ -1683,7 +1672,6 @@
   };
   const CAT_LIST = Object.keys(CAT_COLORS);
   const CourseModal = ({ course, onSave, onClose, isNew = false }) => {
-    var _a, _b, _c;
     const empty = {
       cat: "\uB298\uBD04\uAC15\uC0AC\uC591\uC131",
       cc: "#EA580C",
@@ -1718,7 +1706,7 @@
       schedDays: course.schedDays || "",
       schedTimeFrom: course.schedTimeFrom || "09:00",
       schedTimeTo: course.schedTimeTo || "13:00",
-      breakMinutes: (_a = toNum(course.breakMinutes)) != null ? _a : 60,
+      breakMinutes: toNum(course.breakMinutes) ?? 60,
       includeBreakInHours: course.includeBreakInHours !== false
     } : empty);
     const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -1733,10 +1721,7 @@
       background: T.s2
     };
     const pdfRef = useRef();
-    const getNumericFieldValue = (key) => {
-      var _a2;
-      return key === "breakMinutes" ? (_a2 = form[key]) != null ? _a2 : "" : form[key] || "";
-    };
+    const getNumericFieldValue = (key) => key === "breakMinutes" ? form[key] ?? "" : form[key] || "";
     const parseNumericFieldValue = (key, rawValue) => {
       if (rawValue === "") return key === "breakMinutes" ? "" : 0;
       return +rawValue;
@@ -1926,7 +1911,7 @@
         padding: "6px 10px",
         borderRadius: 6,
         border: "1px solid #FDE68A"
-      } }, /* @__PURE__ */ React.createElement("b", null, "\u2465 \uC218\uAC15\uAE30\uAC04 \uBBF8\uB9AC\uBCF4\uAE30:"), " ", form.dateFrom && form.dateTo ? `${form.dateFrom} ~ ${form.dateTo}` : form.dateFrom || form.dateTo || "(\uAE30\uAC04 \uBBF8\uC785\uB825)", form.schedDays ? ` / \uB9E4\uC8FC ${form.schedDays}` : "", form.schedTimeFrom && form.schedTimeTo ? ` ${form.schedTimeFrom} \u223C ${form.schedTimeTo}` : "", ` / \uD734\uC2DD ${(_b = form.breakMinutes) != null ? _b : 60}\uBD84`)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement(
+      } }, /* @__PURE__ */ React.createElement("b", null, "\u2465 \uC218\uAC15\uAE30\uAC04 \uBBF8\uB9AC\uBCF4\uAE30:"), " ", form.dateFrom && form.dateTo ? `${form.dateFrom} ~ ${form.dateTo}` : form.dateFrom || form.dateTo || "(\uAE30\uAC04 \uBBF8\uC785\uB825)", form.schedDays ? ` / \uB9E4\uC8FC ${form.schedDays}` : "", form.schedTimeFrom && form.schedTimeTo ? ` ${form.schedTimeFrom} \u223C ${form.schedTimeTo}` : "", ` / \uD734\uC2DD ${form.breakMinutes ?? 60}\uBD84`)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement(
         "input",
         {
           type: "checkbox",
@@ -2018,7 +2003,7 @@
         alignItems: "center",
         justifyContent: "center",
         gap: 8
-      } }, /* @__PURE__ */ React.createElement(Icon, { n: "upload", s: 16 }), " ", pdfUploading ? "\uC5C5\uB85C\uB4DC \uC911\u2026" : "PDF \uD30C\uC77C \uC120\uD0DD (\uAC15\uC758\uACC4\uD68D\uC11C / \uC218\uC5C5\uC77C\uC815\uD45C)")), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 14px", borderRadius: 10, background: T.s2, border: `1px solid ${T.bd}`, borderLeft: `4px solid ${form.cc || T.p}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 4 } }, "\uBBF8\uB9AC\uBCF4\uAE30"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx } }, form.name || "(\uACFC\uC815\uBA85 \uC5C6\uC74C)"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 2 } }, form.code, " \xB7 ", formatCoursePeriod(form), " \xB7 ", form.method, " \xB7 ", form.hours || 0, "\uC2DC\uAC04 \xB7 \uD734\uC2DD ", (_c = form.breakMinutes) != null ? _c : 60, "\uBD84"))), /* @__PURE__ */ React.createElement("div", { style: { padding: "13px 22px", borderTop: `1px solid ${T.bd}`, display: "flex", justifyContent: "flex-end", gap: 8, background: T.s2 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { onClick: async () => {
+      } }, /* @__PURE__ */ React.createElement(Icon, { n: "upload", s: 16 }), " ", pdfUploading ? "\uC5C5\uB85C\uB4DC \uC911\u2026" : "PDF \uD30C\uC77C \uC120\uD0DD (\uAC15\uC758\uACC4\uD68D\uC11C / \uC218\uC5C5\uC77C\uC815\uD45C)")), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 14px", borderRadius: 10, background: T.s2, border: `1px solid ${T.bd}`, borderLeft: `4px solid ${form.cc || T.p}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 4 } }, "\uBBF8\uB9AC\uBCF4\uAE30"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx } }, form.name || "(\uACFC\uC815\uBA85 \uC5C6\uC74C)"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 2 } }, form.code, " \xB7 ", formatCoursePeriod(form), " \xB7 ", form.method, " \xB7 ", form.hours || 0, "\uC2DC\uAC04 \xB7 \uD734\uC2DD ", form.breakMinutes ?? 60, "\uBD84"))), /* @__PURE__ */ React.createElement("div", { style: { padding: "13px 22px", borderTop: `1px solid ${T.bd}`, display: "flex", justifyContent: "flex-end", gap: 8, background: T.s2 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { onClick: async () => {
         if (!form.name || !form.code) return alert("\uACFC\uC815\uBA85\uACFC \uACFC\uC815\uCF54\uB4DC\uB294 \uD544\uC218\uC785\uB2C8\uB2E4.");
         await onSave({ ...form, id: form.id ? form.id : void 0 });
         onClose();
@@ -2036,10 +2021,10 @@
       setEdit({});
     };
     const loadFullCourse = async (c) => {
-      if (!(c == null ? void 0 : c.id) || c.pdfData) return c;
+      if (!c?.id || c.pdfData) return c;
       try {
         const { data, error } = await sbGet("courses", `select=*&id=eq.${c.id}&limit=1`);
-        if (!error && (data == null ? void 0 : data[0])) return toCourse(data[0]);
+        if (!error && data?.[0]) return toCourse(data[0]);
       } catch (err) {
         console.warn("PDF \uB370\uC774\uD130 \uB85C\uB4DC \uC2E4\uD328:", err);
       }
@@ -2051,7 +2036,7 @@
     };
     const previewPdf = async (c) => {
       const full = await loadFullCourse(c);
-      if (!(full == null ? void 0 : full.pdfData)) return alert("\uCCA8\uBD80 PDF\uB97C \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+      if (!full?.pdfData) return alert("\uCCA8\uBD80 PDF\uB97C \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
       const w = window.open();
       w.document.write(`<iframe src="${full.pdfData}" style="width:100%;height:100vh;border:none;"/>`);
     };
@@ -2085,73 +2070,70 @@
       transition: "all .15s",
       background: cat === c ? T.p : T.s3,
       color: cat === c ? "#fff" : T.mu
-    } }, c))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 12 } }, list.map((c) => {
-      var _a;
-      return /* @__PURE__ */ React.createElement("div", { key: c.id, className: "course-card", style: {
-        background: T.s,
-        borderRadius: 12,
-        padding: 18,
-        border: `1px solid ${T.bd}`,
-        borderLeft: `4px solid ${c.cc}`,
-        boxShadow: "0 1px 4px rgba(0,0,0,.05)",
-        position: "relative"
-      } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 12, right: 12, display: "flex", gap: 5 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => openEdit(c), style: { width: 26, height: 26, borderRadius: 6, border: "none", background: T.pbg, color: T.p, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement(Icon, { n: "edit", s: 12 })), /* @__PURE__ */ React.createElement("button", { onClick: () => handleDelete(c), style: { width: 26, height: 26, borderRadius: 6, border: "none", background: "#FEF2F2", color: T.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement(Icon, { n: "x", s: 12 }))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8, paddingRight: 60 } }, /* @__PURE__ */ React.createElement(Chip, { label: c.cat, bg: `${c.cc}15`, color: c.cc }), /* @__PURE__ */ React.createElement(Chip, { label: c.method || "-", bg: T.s3, color: T.mu })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, lineHeight: 1.45, marginBottom: 3, paddingRight: 60 } }, c.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 10 } }, c.code, " \xB7 ", formatCoursePeriod(c), " \xB7 ", c.hours > 0 ? `${c.hours}\uC2DC\uAC04` : "\uBBF8\uC815", " \xB7 \uD734\uC2DD ", (_a = toNum(c.breakMinutes)) != null ? _a : 60, "\uBD84", c.schedDays && /* @__PURE__ */ React.createElement("span", { style: { color: T.p, marginLeft: 6 } }, "\u{1F4C5} ", c.schedDays), c.schedTimeFrom && c.schedTimeTo && /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, marginLeft: 4 } }, c.schedTimeFrom, "\u223C", c.schedTimeTo)), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5, marginBottom: 12 } }, [{ l: "\uAD50\uC721\uBAA9\uD45C", v: c.tgt }, { l: "\uC218\uB8CC\uBAA9\uD45C", v: c.cGoal }, { l: "\uCDE8\uC5C5\uBAA9\uD45C", v: c.eGoal }].map(({ l, v }) => /* @__PURE__ */ React.createElement("div", { key: l, style: { textAlign: "center", padding: "7px 4px", background: T.s2, borderRadius: 6, border: `1px solid ${T.bd}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: T.tx } }, v), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: T.mu, marginTop: 1 } }, l)))), c.pdfName && /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          onClick: () => previewPdf(c),
-          style: {
-            width: "100%",
-            padding: "7px 10px",
-            borderRadius: 7,
-            border: `1px solid ${T.pl}60`,
-            background: T.pbg,
-            color: T.p,
-            cursor: "pointer",
-            fontSize: 11,
-            fontWeight: 600,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            marginBottom: 8
-          }
-        },
-        /* @__PURE__ */ React.createElement("span", null, "\u{1F4D5}"),
-        " ",
-        c.pdfName || "\uCCA8\uBD80 PDF \uBBF8\uB9AC\uBCF4\uAE30"
-      ), (c.links || []).filter((l) => l.url).length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, (c.links || []).filter((l) => l.url).map((lk, i) => /* @__PURE__ */ React.createElement(
-        "a",
-        {
-          key: i,
-          href: lk.url,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          style: {
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "5px 8px",
-            borderRadius: 6,
-            background: T.s2,
-            border: `1px solid ${T.bd}`,
-            color: T.p,
-            textDecoration: "none",
-            fontSize: 11,
-            fontWeight: 600
-          }
-        },
-        /* @__PURE__ */ React.createElement(Icon, { n: "info", s: 12 }),
-        /* @__PURE__ */ React.createElement("span", { style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lk.label || lk.url),
-        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: T.mu } }, "\u2197")
-      ))), c.notes && /* @__PURE__ */ React.createElement("div", { style: {
-        marginTop: 8,
-        padding: "7px 10px",
-        borderRadius: 7,
-        background: T.s3,
-        fontSize: 11,
-        color: T.mu,
-        lineHeight: 1.5
-      } }, "\u{1F4DD} ", c.notes));
-    }), /* @__PURE__ */ React.createElement("div", { onClick: openNew, className: "course-card", style: {
+    } }, c))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 12 } }, list.map((c) => /* @__PURE__ */ React.createElement("div", { key: c.id, className: "course-card", style: {
+      background: T.s,
+      borderRadius: 12,
+      padding: 18,
+      border: `1px solid ${T.bd}`,
+      borderLeft: `4px solid ${c.cc}`,
+      boxShadow: "0 1px 4px rgba(0,0,0,.05)",
+      position: "relative"
+    } }, /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 12, right: 12, display: "flex", gap: 5 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => openEdit(c), style: { width: 26, height: 26, borderRadius: 6, border: "none", background: T.pbg, color: T.p, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement(Icon, { n: "edit", s: 12 })), /* @__PURE__ */ React.createElement("button", { onClick: () => handleDelete(c), style: { width: 26, height: 26, borderRadius: 6, border: "none", background: "#FEF2F2", color: T.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement(Icon, { n: "x", s: 12 }))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8, paddingRight: 60 } }, /* @__PURE__ */ React.createElement(Chip, { label: c.cat, bg: `${c.cc}15`, color: c.cc }), /* @__PURE__ */ React.createElement(Chip, { label: c.method || "-", bg: T.s3, color: T.mu })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, lineHeight: 1.45, marginBottom: 3, paddingRight: 60 } }, c.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 10 } }, c.code, " \xB7 ", formatCoursePeriod(c), " \xB7 ", c.hours > 0 ? `${c.hours}\uC2DC\uAC04` : "\uBBF8\uC815", " \xB7 \uD734\uC2DD ", toNum(c.breakMinutes) ?? 60, "\uBD84", c.schedDays && /* @__PURE__ */ React.createElement("span", { style: { color: T.p, marginLeft: 6 } }, "\u{1F4C5} ", c.schedDays), c.schedTimeFrom && c.schedTimeTo && /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, marginLeft: 4 } }, c.schedTimeFrom, "\u223C", c.schedTimeTo)), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5, marginBottom: 12 } }, [{ l: "\uAD50\uC721\uBAA9\uD45C", v: c.tgt }, { l: "\uC218\uB8CC\uBAA9\uD45C", v: c.cGoal }, { l: "\uCDE8\uC5C5\uBAA9\uD45C", v: c.eGoal }].map(({ l, v }) => /* @__PURE__ */ React.createElement("div", { key: l, style: { textAlign: "center", padding: "7px 4px", background: T.s2, borderRadius: 6, border: `1px solid ${T.bd}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: T.tx } }, v), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: T.mu, marginTop: 1 } }, l)))), c.pdfName && /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => previewPdf(c),
+        style: {
+          width: "100%",
+          padding: "7px 10px",
+          borderRadius: 7,
+          border: `1px solid ${T.pl}60`,
+          background: T.pbg,
+          color: T.p,
+          cursor: "pointer",
+          fontSize: 11,
+          fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 8
+        }
+      },
+      /* @__PURE__ */ React.createElement("span", null, "\u{1F4D5}"),
+      " ",
+      c.pdfName || "\uCCA8\uBD80 PDF \uBBF8\uB9AC\uBCF4\uAE30"
+    ), (c.links || []).filter((l) => l.url).length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, (c.links || []).filter((l) => l.url).map((lk, i) => /* @__PURE__ */ React.createElement(
+      "a",
+      {
+        key: i,
+        href: lk.url,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "5px 8px",
+          borderRadius: 6,
+          background: T.s2,
+          border: `1px solid ${T.bd}`,
+          color: T.p,
+          textDecoration: "none",
+          fontSize: 11,
+          fontWeight: 600
+        }
+      },
+      /* @__PURE__ */ React.createElement(Icon, { n: "info", s: 12 }),
+      /* @__PURE__ */ React.createElement("span", { style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lk.label || lk.url),
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: T.mu } }, "\u2197")
+    ))), c.notes && /* @__PURE__ */ React.createElement("div", { style: {
+      marginTop: 8,
+      padding: "7px 10px",
+      borderRadius: 7,
+      background: T.s3,
+      fontSize: 11,
+      color: T.mu,
+      lineHeight: 1.5
+    } }, "\u{1F4DD} ", c.notes))), /* @__PURE__ */ React.createElement("div", { onClick: openNew, className: "course-card", style: {
       background: T.s2,
       borderRadius: 12,
       padding: 18,
@@ -2176,13 +2158,13 @@
     } }, /* @__PURE__ */ React.createElement(Icon, { n: "plus", s: 20 })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.mu } }, "\uC0C8 \uACFC\uC815 \uCD94\uAC00"))));
   };
   const AddCourseEnrollmentModal = ({ student, students, courses, onSave, onClose }) => {
-    var _a;
     const enrolledCids = new Set(
       students.filter((s) => samePerson(s, student)).map((s) => Number(s.cid))
     );
     const available = courses.filter((c) => !enrolledCids.has(Number(c.id)));
-    const [cid, setCid] = useState(((_a = available[0]) == null ? void 0 : _a.id) || "");
+    const [cid, setCid] = useState(available[0]?.id || "");
     const [enrollmentStatus, setEnrollmentStatus] = useState("\uC7AC\uD559\uC911");
+    const [statusChangeDate, setStatusChangeDate] = useState(localDateStr());
     const [saving, setSaving] = useState(false);
     const selStyle = {
       width: "100%",
@@ -2198,22 +2180,25 @@
     const submit = async () => {
       if (!cid) return alert("\uCD94\uAC00\uD560 \uACFC\uC815\uC744 \uC120\uD0DD\uD558\uC138\uC694.");
       if (enrolledCids.has(Number(cid))) return alert("\uC774\uBBF8 \uC774 \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.");
+      const needsCutoffDate = enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" || enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D";
+      if (enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" && !statusChangeDate) return alert("\uC870\uAE30\uCDE8\uC5C5\uC77C\uC744 \uC120\uD0DD\uD558\uC138\uC694.");
       setSaving(true);
       try {
-        const { id, rate, accumulatedHours, enrollmentStatus: _es, statusChangeDate, dropoutReason, cid: _cid, ...rest } = student;
+        const { id, rate, accumulatedHours, enrollmentStatus: _es, statusChangeDate: _date, dropoutReason, cid: _cid, ...rest } = student;
         await onSave({
           ...rest,
           cid: Number(cid),
           personId: personIdOf(student),
           enrollmentStatus,
+          status: enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" ? "\uCDE8\uC5C5" : rest.status || "\uBBF8\uCDE8\uC5C5",
           rate: 0,
           accumulatedHours: 0,
-          statusChangeDate: enrollmentStatus === "\uC218\uB8CC" || enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC" ? localDateStr() : null,
+          statusChangeDate: needsCutoffDate ? statusChangeDate : enrollmentStatus === "\uC218\uB8CC" || enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC" ? localDateStr() : null,
           dropoutReason: null
         });
         onClose();
       } catch (e) {
-        alert("\uCD94\uAC00 \uB4F1\uB85D \uC624\uB958: " + ((e == null ? void 0 : e.message) || e));
+        alert("\uCD94\uAC00 \uB4F1\uB85D \uC624\uB958: " + (e?.message || e));
       } finally {
         setSaving(false);
       }
@@ -2242,7 +2227,11 @@
         maxWidth: "96vw",
         boxShadow: "0 24px 64px rgba(0,0,0,.28)",
         overflow: "hidden"
-      } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 20px", background: `linear-gradient(135deg,${T.sb},${T.p})` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#fff" } }, "\uB2E4\uB978 \uACFC\uC815 \uCD94\uAC00 \uB4F1\uB85D"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,.7)", marginTop: 3 } }, student.name, " \xB7 \uAE30\uC874 \uACFC\uC815 \uC774\uB825\uC740 \uADF8\uB300\uB85C \uC720\uC9C0\uB429\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement("div", { style: { padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 } }, available.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: T.mu, lineHeight: 1.6 } }, "\uB4F1\uB85D\uD560 \uC218 \uC788\uB294 \uB0A8\uC740 \uACFC\uC815\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC774\uBBF8 \uBAA8\uB4E0 \uACFC\uC815\uC5D0 \uC774\uB825\uC774 \uC788\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(FLD, { label: "\uCD94\uAC00\uD560 \uACFC\uC815", required: true }, /* @__PURE__ */ React.createElement("select", { value: cid, onChange: (e) => setCid(+e.target.value), style: selStyle }, available.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.code, " \u2014 ", c.name)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uC774 \uACFC\uC815\uC758 \uB4F1\uB85D\uC0C1\uD0DC" }, /* @__PURE__ */ React.createElement("select", { value: enrollmentStatus, onChange: (e) => setEnrollmentStatus(e.target.value), style: selStyle }, ENROLLMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.55, padding: "8px 10px", background: T.s2, borderRadius: 8 } }, "\uC218\uB8CC\uD55C \uACFC\uC815\uC744 \uB098\uC911\uC5D0 \uB123\uB294 \uACBD\uC6B0 \uC0C1\uD0DC\uB97C ", /* @__PURE__ */ React.createElement("b", { style: { color: T.tx } }, "\uC218\uB8CC"), "\uB85C \uB450\uBA74 \uB429\uB2C8\uB2E4. \uCD9C\uC11D\uB960\xB7\uB204\uC801\uC2DC\uAC04\uC740 \uACF5\uB780(0)\uC73C\uB85C \uB450\uACE0 \uC774\uB825\uB9CC \uC0B4\uB9BD\uB2C8\uB2E4."))), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 20px", borderTop: `1px solid ${T.bd}`, display: "flex", justifyContent: "flex-end", gap: 8, background: T.s2 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uCDE8\uC18C"), available.length > 0 && /* @__PURE__ */ React.createElement(Btn, { onClick: submit, disabled: saving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " ", saving ? "\uB4F1\uB85D \uC911..." : "\uCD94\uAC00 \uB4F1\uB85D")))
+      } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 20px", background: `linear-gradient(135deg,${T.sb},${T.p})` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#fff" } }, "\uB2E4\uB978 \uACFC\uC815 \uCD94\uAC00 \uB4F1\uB85D"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,.7)", marginTop: 3 } }, student.name, " \xB7 \uAE30\uC874 \uACFC\uC815 \uC774\uB825\uC740 \uADF8\uB300\uB85C \uC720\uC9C0\uB429\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement("div", { style: { padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 } }, available.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: T.mu, lineHeight: 1.6 } }, "\uB4F1\uB85D\uD560 \uC218 \uC788\uB294 \uB0A8\uC740 \uACFC\uC815\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC774\uBBF8 \uBAA8\uB4E0 \uACFC\uC815\uC5D0 \uC774\uB825\uC774 \uC788\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(FLD, { label: "\uCD94\uAC00\uD560 \uACFC\uC815", required: true }, /* @__PURE__ */ React.createElement("select", { value: cid, onChange: (e) => setCid(+e.target.value), style: selStyle }, available.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.code, " \u2014 ", c.name)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uC774 \uACFC\uC815\uC758 \uB4F1\uB85D\uC0C1\uD0DC" }, /* @__PURE__ */ React.createElement("select", { value: enrollmentStatus, onChange: (e) => {
+        const value = e.target.value;
+        setEnrollmentStatus(value);
+        if ((value === "\uC870\uAE30\uCDE8\uC5C5" || value === "\uC911\uB3C4\uD0C8\uB77D") && !statusChangeDate) setStatusChangeDate(localDateStr());
+      }, style: selStyle }, ENROLLMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), (enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" || enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D") && /* @__PURE__ */ React.createElement(FLD, { label: enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" ? "\uC870\uAE30\uCDE8\uC5C5\uC77C" : "\uC911\uB3C4\uD0C8\uB77D\uC77C", required: enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" }, /* @__PURE__ */ React.createElement("input", { type: "date", value: statusChangeDate, onChange: (e) => setStatusChangeDate(e.target.value), style: selStyle })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.55, padding: "8px 10px", background: T.s2, borderRadius: 8 } }, "\uC218\uB8CC\uD55C \uACFC\uC815\uC744 \uB098\uC911\uC5D0 \uB123\uB294 \uACBD\uC6B0 \uC0C1\uD0DC\uB97C ", /* @__PURE__ */ React.createElement("b", { style: { color: T.tx } }, "\uC218\uB8CC"), "\uB85C \uB450\uBA74 \uB429\uB2C8\uB2E4. \uCD9C\uC11D\uB960\xB7\uB204\uC801\uC2DC\uAC04\uC740 \uACF5\uB780(0)\uC73C\uB85C \uB450\uACE0 \uC774\uB825\uB9CC \uC0B4\uB9BD\uB2C8\uB2E4."))), /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 20px", borderTop: `1px solid ${T.bd}`, display: "flex", justifyContent: "flex-end", gap: 8, background: T.s2 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: onClose }, "\uCDE8\uC18C"), available.length > 0 && /* @__PURE__ */ React.createElement(Btn, { onClick: submit, disabled: saving }, /* @__PURE__ */ React.createElement(Icon, { n: "check", s: 13 }), " ", saving ? "\uB4F1\uB85D \uC911..." : "\uCD94\uAC00 \uB4F1\uB85D")))
     );
   };
   const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onNew, currentUser }) => {
@@ -2287,7 +2276,7 @@
             `select=date,check_in,check_out,status&student_id=eq.${studentId}&order=date.asc`
           );
           if (!cancelled) setAttRecords(error ? [] : data || []);
-        } catch (e) {
+        } catch {
           if (!cancelled) setAttRecords([]);
         }
         if (!cancelled) setAttLoading(false);
@@ -2303,7 +2292,6 @@
     );
     const selectedCourse = selectedStudent ? courses.find((c) => sameId(c.id, selectedStudent.cid)) : null;
     useEffect(() => {
-      var _a;
       if (!selectedStudent) {
         setWorkspaceForm(null);
         setWorkspaceAtt([]);
@@ -2311,7 +2299,7 @@
       }
       setWorkspaceForm({
         ...selectedStudent,
-        cid: selectedStudent.cid || ((_a = courses[0]) == null ? void 0 : _a.id) || 1,
+        cid: selectedStudent.cid || courses[0]?.id || 1,
         enrollmentStatus: selectedStudent.enrollmentStatus || "\uC7AC\uD559\uC911",
         status: getEffectiveEmploymentStatus(selectedStudent)
       });
@@ -2332,7 +2320,7 @@
             `select=date,check_in,check_out,status&student_id=eq.${studentId}&order=date.asc`
           );
           if (!cancelled) setWorkspaceAtt(error ? [] : data || []);
-        } catch (e) {
+        } catch {
           if (!cancelled) setWorkspaceAtt([]);
         }
         if (!cancelled) setWorkspaceAttLoading(false);
@@ -2345,10 +2333,30 @@
     const saveWorkspace = async () => {
       if (!selectedStudent || !workspaceForm) return;
       if (!String(workspaceForm.name || "").trim()) return alert("\uC774\uB984\uC740 \uD544\uC218 \uC785\uB825 \uD56D\uBAA9\uC785\uB2C8\uB2E4.");
+      const nextStatus = workspaceForm.enrollmentStatus || "\uC7AC\uD559\uC911";
+      const nextDate = String(workspaceForm.statusChangeDate || "").slice(0, 10);
+      if (nextStatus === "\uC870\uAE30\uCDE8\uC5C5" && !nextDate) return alert("\uC870\uAE30\uCDE8\uC5C5\uC77C\uC744 \uC120\uD0DD\uD558\uC138\uC694. \uB4F1\uB85D\uC0C1\uD0DC \uD0ED\uC5D0\uC11C \uB0A0\uC9DC\uB97C \uC9C0\uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.");
+      const payload = {
+        ...selectedStudent,
+        ...workspaceForm,
+        cid: Number(workspaceForm.cid),
+        statusChangeDate: nextDate || workspaceForm.statusChangeDate || null,
+        status: nextStatus === "\uC870\uAE30\uCDE8\uC5C5" ? "\uCDE8\uC5C5" : workspaceForm.status || selectedStudent.status || "\uBBF8\uCDE8\uC5C5"
+      };
+      const prevStatus = selectedStudent.enrollmentStatus || "\uC7AC\uD559\uC911";
+      const prevDate = String(selectedStudent.statusChangeDate || "").slice(0, 10);
+      const cutoffTouched = ["\uC870\uAE30\uCDE8\uC5C5", "\uC911\uB3C4\uD0C8\uB77D"].includes(prevStatus) || ["\uC870\uAE30\uCDE8\uC5C5", "\uC911\uB3C4\uD0C8\uB77D"].includes(nextStatus);
       setWorkspaceSaving(true);
       try {
-        await onUpdate({ ...selectedStudent, ...workspaceForm, cid: Number(workspaceForm.cid) });
-        alert(`${workspaceForm.name} \uC815\uBCF4\uAC00 \uC800\uC7A5\uB418\uC5C8\uC2B5\uB2C8\uB2E4.`);
+        await onUpdate(payload);
+        if (cutoffTouched && (prevStatus !== nextStatus || prevDate !== nextDate)) {
+          const ref = window._studentsRef;
+          if (ref?.current) {
+            ref.current = ref.current.map((s) => sameId(s.id, payload.id) ? { ...s, ...payload } : s);
+          }
+          await recalculateHoursAndRate(payload.id, payload.cid);
+        }
+        alert(`${payload.name} \uC815\uBCF4\uAC00 \uC800\uC7A5\uB418\uC5C8\uC2B5\uB2C8\uB2E4.`);
       } finally {
         setWorkspaceSaving(false);
       }
@@ -2366,7 +2374,7 @@
       const joinRef = String(++refCount);
       let subIds = [];
       const send = (obj) => {
-        if ((currentWs == null ? void 0 : currentWs.readyState) === WebSocket.OPEN) currentWs.send(JSON.stringify(obj));
+        if (currentWs?.readyState === WebSocket.OPEN) currentWs.send(JSON.stringify(obj));
       };
       const connect = () => {
         if (intentionallyClosed) return;
@@ -2400,18 +2408,17 @@
           }, 25e3);
         };
         ws.onmessage = (event) => {
-          var _a, _b, _c, _d, _e;
           try {
             const msg = JSON.parse(event.data);
             if (msg.event === "phx_reply" && msg.ref === joinRef) {
-              subIds = (((_b = (_a = msg.payload) == null ? void 0 : _a.response) == null ? void 0 : _b.postgres_changes) || []).map((c) => c.id);
+              subIds = (msg.payload?.response?.postgres_changes || []).map((c) => c.id);
               return;
             }
-            if (msg.event === "postgres_changes" && ((_c = msg.payload) == null ? void 0 : _c.data)) {
+            if (msg.event === "postgres_changes" && msg.payload?.data) {
               const ids = msg.payload.ids || [];
               if (subIds.length > 0 && !ids.some((id) => subIds.includes(id))) return;
               const { type: evType, record: nr } = msg.payload.data;
-              if ((evType === "INSERT" || evType === "UPDATE") && Number(nr == null ? void 0 : nr.student_id) === studentId) {
+              if ((evType === "INSERT" || evType === "UPDATE") && Number(nr?.student_id) === studentId) {
                 setAttRecords((prev) => {
                   const idx = prev.findIndex((r) => r.date === nr.date);
                   const updated = { date: nr.date, check_in: nr.check_in, check_out: nr.check_out, status: nr.status };
@@ -2422,14 +2429,11 @@
                   }
                   return [...prev, updated].sort((a, b) => a.date.localeCompare(b.date));
                 });
-              } else if (evType === "DELETE" && Number((_e = (_d = msg.payload.data) == null ? void 0 : _d.old_record) == null ? void 0 : _e.student_id) === studentId) {
-                setAttRecords((prev) => prev.filter((r) => {
-                  var _a2;
-                  return r.date !== ((_a2 = msg.payload.data.old_record) == null ? void 0 : _a2.date);
-                }));
+              } else if (evType === "DELETE" && Number(msg.payload.data?.old_record?.student_id) === studentId) {
+                setAttRecords((prev) => prev.filter((r) => r.date !== msg.payload.data.old_record?.date));
               }
             }
-          } catch (e) {
+          } catch {
           }
         };
         ws.onerror = () => {
@@ -2448,7 +2452,7 @@
         intentionallyClosed = true;
         clearInterval(heartbeatId);
         heartbeatId = null;
-        currentWs == null ? void 0 : currentWs.close();
+        currentWs?.close();
       };
     }, [attModal]);
     const filtered = useMemo(() => students.filter((s) => {
@@ -2735,10 +2739,9 @@
       fontWeight: 600,
       transition: "all .15s"
     } }, /* @__PURE__ */ React.createElement(Icon, { n: "alert", s: 13 }), " \uC704\uD5D8\uB9CC"), /* @__PURE__ */ React.createElement("button", { onClick: async () => {
-      var _a, _b;
       const count = await batchRecalculateAllHours(
-        ((_a = window._studentsRef) == null ? void 0 : _a.current) || students,
-        ((_b = window._coursesRef) == null ? void 0 : _b.current) || courses
+        window._studentsRef?.current || students,
+        window._coursesRef?.current || courses
       ).catch((e) => {
         console.error(e);
         return 0;
@@ -2791,7 +2794,6 @@
       fontWeight: 700,
       whiteSpace: "nowrap"
     } }, h)))), /* @__PURE__ */ React.createElement("tbody", null, filtered.map((s) => {
-      var _a, _b, _c;
       const c = courses.find((x) => x.id === s.cid);
       const hiddenRate = isDropoutStudent(s);
       const col = hiddenRate ? T.mu : rateColor(s.rate);
@@ -2807,7 +2809,7 @@
         s.disabled && { l: "\uC7A5\uC560", bg: "#F5F3FF", c: "#7C3AED" },
         s.veteran && { l: "\uBCF4\uD6C8", bg: "#ECFDF5", c: "#059669" }
       ].filter(Boolean);
-      const gradeColor = (g) => (g == null ? void 0 : g.startsWith("A")) ? T.ok : (g == null ? void 0 : g.startsWith("B")) ? T.warn : T.danger;
+      const gradeColor = (g) => g?.startsWith("A") ? T.ok : g?.startsWith("B") ? T.warn : T.danger;
       return /* @__PURE__ */ React.createElement(
         "tr",
         {
@@ -2835,12 +2837,12 @@
           justifyContent: "center",
           fontSize: 11,
           fontWeight: 900
-        } }, (_a = s.name) == null ? void 0 : _a[0]), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, whiteSpace: "nowrap" } }, s.name, /* @__PURE__ */ React.createElement("span", { style: {
+        } }, s.name?.[0]), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, whiteSpace: "nowrap" } }, s.name, /* @__PURE__ */ React.createElement("span", { style: {
           marginLeft: 5,
           fontSize: 10,
           fontWeight: 600,
           color: s.gender === "\uC5EC" ? "#BE185D" : "#1D4ED8"
-        } }, s.gender || ""), (((_b = multiCourseMap.get(personGroupKey(s))) == null ? void 0 : _b.length) || 1) > 1 && /* @__PURE__ */ React.createElement("span", { title: "\uB3D9\uC77C\uC778\uC774 \uC5EC\uB7EC \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB428", style: {
+        } }, s.gender || ""), (multiCourseMap.get(personGroupKey(s))?.length || 1) > 1 && /* @__PURE__ */ React.createElement("span", { title: "\uB3D9\uC77C\uC778\uC774 \uC5EC\uB7EC \uACFC\uC815\uC5D0 \uB4F1\uB85D\uB428", style: {
           marginLeft: 5,
           fontSize: 9,
           fontWeight: 800,
@@ -2858,8 +2860,8 @@
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap"
-        } }, c == null ? void 0 : c.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, marginTop: 1 } }, /* @__PURE__ */ React.createElement("span", { style: { color: c == null ? void 0 : c.cc, fontWeight: 700 } }, c == null ? void 0 : c.code), /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, marginLeft: 4 } }, formatCoursePeriod(c)))),
-        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: T.tx, whiteSpace: "nowrap" } }, s.addrCity || ((_c = s.addr) == null ? void 0 : _c.split(" ")[0]) || "-")),
+        } }, c?.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, marginTop: 1 } }, /* @__PURE__ */ React.createElement("span", { style: { color: c?.cc, fontWeight: 700 } }, c?.code), /* @__PURE__ */ React.createElement("span", { style: { color: T.mu, marginLeft: 4 } }, formatCoursePeriod(c)))),
+        /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: T.tx, whiteSpace: "nowrap" } }, s.addrCity || s.addr?.split(" ")[0] || "-")),
         /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.tx, whiteSpace: "nowrap" } }, s.phone || "-")),
         /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: T.tx } }, s.edu || "-"), s.major && s.major !== "-" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, s.major), s.career && s.career !== "\uC5C6\uC74C" && /* @__PURE__ */ React.createElement("div", { style: {
           fontSize: 10,
@@ -2887,7 +2889,8 @@
         /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
           const es = s.enrollmentStatus || "\uC7AC\uD559\uC911";
           const sc = STATUS_COLORS[es] || { bg: T.s3, color: T.mu };
-          return /* @__PURE__ */ React.createElement(Chip, { label: es, bg: sc.bg, color: sc.color, size: 11 });
+          const cutoff = isAttendanceCutoffStatus(es) ? String(s.statusChangeDate || "").slice(0, 10) : "";
+          return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Chip, { label: es, bg: sc.bg, color: sc.color, size: 11 }), cutoff && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: sc.color, marginTop: 3, fontWeight: 700 } }, cutoff));
         })()),
         /* @__PURE__ */ React.createElement("td", { style: { padding: "11px 12px", textAlign: "center" } }, (() => {
           const emp = getEffectiveEmploymentStatus(s);
@@ -2990,7 +2993,7 @@
           justifyContent: "center"
         } }, /* @__PURE__ */ React.createElement(Icon, { n: "x", s: 13 }))))
       );
-    })))), filtered.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4")), selectedStudent && workspaceForm && /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden", position: "sticky", top: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "14px 16px", background: `linear-gradient(135deg,${T.sb},${T.p})`, color: "#fff" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, selectedStudent.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, opacity: 0.72, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, (selectedCourse == null ? void 0 : selectedCourse.code) || "-", " \xB7 ", (selectedCourse == null ? void 0 : selectedCourse.name) || "\uACFC\uC815 \uC5C6\uC74C")), /* @__PURE__ */ React.createElement("button", { onClick: () => setSelectedStudentId(null), title: "\uD328\uB110 \uB2EB\uAE30", style: {
+    })))), filtered.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: T.mu, fontSize: 13 } }, "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4")), selectedStudent && workspaceForm && /* @__PURE__ */ React.createElement(Card, { style: { overflow: "hidden", position: "sticky", top: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "14px 16px", background: `linear-gradient(135deg,${T.sb},${T.p})`, color: "#fff" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, selectedStudent.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, opacity: 0.72, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, selectedCourse?.code || "-", " \xB7 ", selectedCourse?.name || "\uACFC\uC815 \uC5C6\uC74C")), /* @__PURE__ */ React.createElement("button", { onClick: () => setSelectedStudentId(null), title: "\uD328\uB110 \uB2EB\uAE30", style: {
       width: 28,
       height: 28,
       borderRadius: 7,
@@ -3022,7 +3025,28 @@
         fontSize: 11,
         fontWeight: 800
       } }, label);
-    })), /* @__PURE__ */ React.createElement("div", { style: { padding: 14, maxHeight: "calc(100vh - 260px)", overflowY: "auto" } }, workspaceTab === "profile" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uC774\uB984", required: true }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.name || "", onChange: (e) => setWorkspace("name", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC131\uBCC4" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.gender || "\uB0A8", onChange: (e) => setWorkspace("gender", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, /* @__PURE__ */ React.createElement("option", null, "\uB0A8"), /* @__PURE__ */ React.createElement("option", null, "\uC5EC")))), /* @__PURE__ */ React.createElement(FLD, { label: "\uACFC\uC815" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.cid || "", onChange: (e) => setWorkspace("cid", +e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, courses.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.code, " \xB7 ", c.name)))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uC5F0\uB77D\uCC98" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.phone || "", onChange: (e) => setWorkspace("phone", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uBE44\uC0C1\uC5F0\uB77D\uCC98" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.phone2 || "", onChange: (e) => setWorkspace("phone2", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uAC70\uC8FC \uC2DC\xB7\uAD70" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.addrCity || "", onChange: (e) => setWorkspace("addrCity", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC0DD\uB144\uC6D4\uC77C" }, /* @__PURE__ */ React.createElement("input", { type: "date", value: workspaceForm.birth || "", onChange: (e) => setWorkspace("birth", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uCD5C\uC885\uD559\uB825" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.edu || "", onChange: (e) => setWorkspace("edu", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC804\uACF5" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.major || "", onChange: (e) => setWorkspace("major", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement(FLD, { label: "\uACBD\uB825" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.career || "", onChange: (e) => setWorkspace("career", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uD2B9\uC774\uC0AC\uD56D \xB7 \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement("textarea", { value: workspaceForm.memo || "", onChange: (e) => setWorkspace("memo", e.target.value), rows: 4, style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2, resize: "vertical", fontFamily: "inherit" } }))), workspaceTab === "status" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 } }, [["\uB4F1\uB85D\uC0C1\uD0DC", workspaceForm.enrollmentStatus || "\uC7AC\uD559\uC911"], ["\uCD9C\uC11D\uB960", isDropoutStudent(workspaceForm) ? "\uC911\uB3C4\uD0C8\uB77D" : `${workspaceForm.rate || 0}%`], ["\uB204\uC801\uC2DC\uAC04", `${(workspaceForm.accumulatedHours || 0).toFixed(1)}h`]].map(([k, v]) => /* @__PURE__ */ React.createElement("div", { key: k, style: { border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 9px", background: T.s2 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, k), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx, fontWeight: 850, marginTop: 3 } }, v)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uB4F1\uB85D\uC0C1\uD0DC \uC9C1\uC811 \uC218\uC815" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.enrollmentStatus || "\uC7AC\uD559\uC911", onChange: (e) => setWorkspace("enrollmentStatus", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, ENROLLMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement("button", { onClick: () => setStatusTarget({ student: selectedStudent, course: selectedCourse }), disabled: !selectedCourse, style: {
+    })), /* @__PURE__ */ React.createElement("div", { style: { padding: 14, maxHeight: "calc(100vh - 260px)", overflowY: "auto" } }, workspaceTab === "profile" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uC774\uB984", required: true }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.name || "", onChange: (e) => setWorkspace("name", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC131\uBCC4" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.gender || "\uB0A8", onChange: (e) => setWorkspace("gender", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, /* @__PURE__ */ React.createElement("option", null, "\uB0A8"), /* @__PURE__ */ React.createElement("option", null, "\uC5EC")))), /* @__PURE__ */ React.createElement(FLD, { label: "\uACFC\uC815" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.cid || "", onChange: (e) => setWorkspace("cid", +e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, courses.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.code, " \xB7 ", c.name)))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uC5F0\uB77D\uCC98" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.phone || "", onChange: (e) => setWorkspace("phone", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uBE44\uC0C1\uC5F0\uB77D\uCC98" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.phone2 || "", onChange: (e) => setWorkspace("phone2", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uAC70\uC8FC \uC2DC\xB7\uAD70" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.addrCity || "", onChange: (e) => setWorkspace("addrCity", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC0DD\uB144\uC6D4\uC77C" }, /* @__PURE__ */ React.createElement("input", { type: "date", value: workspaceForm.birth || "", onChange: (e) => setWorkspace("birth", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uCD5C\uC885\uD559\uB825" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.edu || "", onChange: (e) => setWorkspace("edu", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC804\uACF5" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.major || "", onChange: (e) => setWorkspace("major", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }))), /* @__PURE__ */ React.createElement(FLD, { label: "\uACBD\uB825" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.career || "", onChange: (e) => setWorkspace("career", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uD2B9\uC774\uC0AC\uD56D \xB7 \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement("textarea", { value: workspaceForm.memo || "", onChange: (e) => setWorkspace("memo", e.target.value), rows: 4, style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2, resize: "vertical", fontFamily: "inherit" } }))), workspaceTab === "status" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 } }, [["\uB4F1\uB85D\uC0C1\uD0DC", workspaceForm.enrollmentStatus || "\uC7AC\uD559\uC911"], ["\uCD9C\uC11D\uB960", isDropoutStudent(workspaceForm) ? "\uC911\uB3C4\uD0C8\uB77D" : `${workspaceForm.rate || 0}%`], ["\uB204\uC801\uC2DC\uAC04", `${(workspaceForm.accumulatedHours || 0).toFixed(1)}h`]].map(([k, v]) => /* @__PURE__ */ React.createElement("div", { key: k, style: { border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 9px", background: T.s2 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, k), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx, fontWeight: 850, marginTop: 3 } }, v)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uB4F1\uB85D\uC0C1\uD0DC \uC9C1\uC811 \uC218\uC815" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.enrollmentStatus || "\uC7AC\uD559\uC911", onChange: (e) => {
+      const value = e.target.value;
+      setWorkspaceForm((p) => {
+        const base = { ...p || selectedStudent || {}, enrollmentStatus: value };
+        if (value === "\uC870\uAE30\uCDE8\uC5C5") {
+          if (!base.statusChangeDate) base.statusChangeDate = localDateStr();
+          base.status = "\uCDE8\uC5C5";
+        }
+        if (value === "\uC911\uB3C4\uD0C8\uB77D" && !base.statusChangeDate) base.statusChangeDate = localDateStr();
+        return base;
+      });
+    }, style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, ENROLLMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), (workspaceForm.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" || workspaceForm.enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D") && (() => {
+      const isEarly = workspaceForm.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5";
+      const picked = String(workspaceForm.statusChangeDate || "").slice(0, 10);
+      const courseFrom = selectedCourse?.dateFrom || "";
+      const courseTo = selectedCourse?.dateTo || "";
+      const outOfRange = !!(picked && (courseFrom && picked < courseFrom || courseTo && picked > courseTo));
+      const proportional = isEarly && picked && selectedCourse ? getProportionalCourseHours(selectedCourse, picked) : null;
+      const fullHours = selectedCourse ? getTotalCourseHours(selectedCourse) : 0;
+      const fieldStyle = { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: "#fff" };
+      return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(FLD, { label: isEarly ? "\uC870\uAE30\uCDE8\uC5C5\uC77C" : "\uC911\uB3C4\uD0C8\uB77D\uC77C", required: isEarly }, /* @__PURE__ */ React.createElement("input", { type: "date", value: picked, onChange: (e) => setWorkspace("statusChangeDate", e.target.value), style: fieldStyle })), isEarly && /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5 \uAE30\uC5C5\uBA85" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.employerName || "", onChange: (e) => setWorkspace("employerName", e.target.value), placeholder: "\uCDE8\uC5C5\uCC98", style: fieldStyle })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: outOfRange ? T.danger : isEarly ? "#6B21A8" : T.mu, lineHeight: 1.6, padding: "8px 10px", borderRadius: 8, background: isEarly ? "#F3E8FF" : T.s2 } }, isEarly ? `\uC120\uD0DD\uD55C \uB0A0\uC9DC \uC774\uD6C4 \uCD9C\uACB0\uC740 \uC81C\uC678\uB418\uACE0, \uACFC\uC815\uC2DC\uAC04\uC740 \uADF8\uB0A0\uAE4C\uC9C0 \uBE44\uB840 \uACC4\uC0B0\uB429\uB2C8\uB2E4.${proportional != null ? ` \uAE30\uC900 ${proportional}h / \uC804\uCCB4 ${fullHours}h.` : ""}` : "\uC120\uD0DD\uD55C \uB0A0\uC9DC \uC774\uD6C4 \uCD9C\uACB0\uC740 \uC778\uC815\uB418\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.", courseFrom && courseTo ? ` \uACFC\uC815 \uAE30\uAC04 ${courseFrom} ~ ${courseTo}.` : "", outOfRange ? " \uC120\uD0DD\uD55C \uB0A0\uC9DC\uAC00 \uACFC\uC815 \uAE30\uAC04 \uBC16\uC785\uB2C8\uB2E4." : ""));
+    })(), /* @__PURE__ */ React.createElement("button", { onClick: () => setStatusTarget({ student: selectedStudent, course: selectedCourse }), disabled: !selectedCourse, style: {
       padding: "8px 12px",
       borderRadius: 8,
       border: `1px solid #15803D`,
@@ -3032,7 +3056,7 @@
       opacity: selectedCourse ? 1 : 0.55,
       fontSize: 12,
       fontWeight: 850
-    } }, "\uC774\uB825 \uB0A8\uAE30\uBA70 \uC0C1\uD0DC\uBCC0\uACBD"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.6 } }, "\uC911\uB3C4\uD0C8\uB77D \uC0AC\uC720\uB098 \uC870\uAE30\uCDE8\uC5C5 \uAE30\uC5C5\uBA85\uCC98\uB7FC \uC774\uB825\uC774 \uD544\uC694\uD55C \uBCC0\uACBD\uC740 \uC0C1\uD0DC\uBCC0\uACBD \uC808\uCC28 \uBC84\uD2BC\uC744 \uC0AC\uC6A9\uD558\uBA74 \uB429\uB2C8\uB2E4.")), workspaceTab === "after" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5\uC5EC\uBD80" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.status || "\uBBF8\uCDE8\uC5C5", onChange: (e) => setWorkspace("status", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, EMPLOYMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5 \uAE30\uC5C5\uBA85" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.employerName || "", onChange: (e) => setWorkspace("employerName", e.target.value), placeholder: "\uCDE8\uC5C5\uCC98 \uB610\uB294 \uC608\uC815 \uAE30\uC5C5", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC790\uACA9\uC99D" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.cert || "", onChange: (e) => setWorkspace("cert", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC0AC\uD6C4\uAD00\uB9AC \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement("textarea", { value: workspaceForm.memo || "", onChange: (e) => setWorkspace("memo", e.target.value), rows: 5, placeholder: "\uCDE8\uC5C5\uC0C1\uB2F4, \uC5F0\uB77D \uACB0\uACFC, \uC99D\uBE59 \uC694\uCCAD \uB4F1", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2, resize: "vertical", fontFamily: "inherit" } })), /* @__PURE__ */ React.createElement("button", { onClick: () => setEmploymentTarget(selectedStudent), style: { padding: "8px 12px", borderRadius: 8, border: `1px solid #0F766E`, background: "#F0FDFA", color: "#0F766E", cursor: "pointer", fontSize: 12, fontWeight: 850 } }, "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815 \uCC3D \uC5F4\uAE30")), workspaceTab === "attendance" && /* @__PURE__ */ React.createElement("div", null, workspaceAttLoading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911...") : workspaceAtt.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, workspaceAtt.slice(-12).reverse().map((r, i) => /* @__PURE__ */ React.createElement("div", { key: `${r.date}-${i}`, style: { display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center", border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 10px", background: T.s2 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx, fontWeight: 800 } }, r.date), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, r.check_in ? r.check_in.slice(0, 5) : "--:--", " / ", r.check_out ? r.check_out.slice(0, 5) : "--:--")), /* @__PURE__ */ React.createElement(Chip, { label: { O: "\uCD9C\uC11D", A: "\uACB0\uC11D", L: "\uC9C0\uAC01", U: "\uBBF8\uD655\uC778" }[r.status || "U"] || r.status, bg: r.status === "O" ? "#DCFCE7" : r.status === "A" ? "#FEE2E2" : T.s3, color: r.status === "O" ? "#15803D" : r.status === "A" ? T.danger : T.mu, size: 10 }))))), workspaceTab === "courses" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.mu, fontWeight: 700, marginBottom: 2 } }, selectedStudent.name, "\uB2D8\uC774 \uB4F1\uB85D\uB41C \uBAA8\uB4E0 \uACFC\uC815"), (multiCourseMap.get(personGroupKey(selectedStudent)) || [selectedStudent]).map((rec) => {
+    } }, "\uC774\uB825 \uB0A8\uAE30\uBA70 \uC0C1\uD0DC\uBCC0\uACBD"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.6 } }, "\uC870\uAE30\uCDE8\uC5C5\uC77C\uC740 \uC5EC\uAE30\uC11C \uBC14\uB85C \uACE0\uB97C \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uBCC0\uACBD \uC774\uB825\uC744 \uB0A8\uAE30\uB824\uBA74 \uC0C1\uD0DC\uBCC0\uACBD \uC808\uCC28 \uBC84\uD2BC\uC744 \uC0AC\uC6A9\uD558\uC138\uC694.")), workspaceTab === "after" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5\uC5EC\uBD80" }, /* @__PURE__ */ React.createElement("select", { value: workspaceForm.status || "\uBBF8\uCDE8\uC5C5", onChange: (e) => setWorkspace("status", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } }, EMPLOYMENT_STATUSES.map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v)))), /* @__PURE__ */ React.createElement(FLD, { label: "\uCDE8\uC5C5 \uAE30\uC5C5\uBA85" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.employerName || "", onChange: (e) => setWorkspace("employerName", e.target.value), placeholder: "\uCDE8\uC5C5\uCC98 \uB610\uB294 \uC608\uC815 \uAE30\uC5C5", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC790\uACA9\uC99D" }, /* @__PURE__ */ React.createElement("input", { value: workspaceForm.cert || "", onChange: (e) => setWorkspace("cert", e.target.value), style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2 } })), /* @__PURE__ */ React.createElement(FLD, { label: "\uC0AC\uD6C4\uAD00\uB9AC \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement("textarea", { value: workspaceForm.memo || "", onChange: (e) => setWorkspace("memo", e.target.value), rows: 5, placeholder: "\uCDE8\uC5C5\uC0C1\uB2F4, \uC5F0\uB77D \uACB0\uACFC, \uC99D\uBE59 \uC694\uCCAD \uB4F1", style: { width: "100%", padding: "8px 10px", border: `1px solid ${T.bd}`, borderRadius: 8, background: T.s2, resize: "vertical", fontFamily: "inherit" } })), /* @__PURE__ */ React.createElement("button", { onClick: () => setEmploymentTarget(selectedStudent), style: { padding: "8px 12px", borderRadius: 8, border: `1px solid #0F766E`, background: "#F0FDFA", color: "#0F766E", cursor: "pointer", fontSize: 12, fontWeight: 850 } }, "\uCDE8\uC5C5\uC815\uBCF4 \uBE60\uB978 \uC218\uC815 \uCC3D \uC5F4\uAE30")), workspaceTab === "attendance" && /* @__PURE__ */ React.createElement("div", null, workspaceAttLoading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911...") : workspaceAtt.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: 24, textAlign: "center", color: T.mu, fontSize: 12 } }, "\uCD9C\uACB0 \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, workspaceAtt.slice(-12).reverse().map((r, i) => /* @__PURE__ */ React.createElement("div", { key: `${r.date}-${i}`, style: { display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center", border: `1px solid ${T.bd}`, borderRadius: 8, padding: "8px 10px", background: T.s2 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx, fontWeight: 800 } }, r.date), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, r.check_in ? r.check_in.slice(0, 5) : "--:--", " / ", r.check_out ? r.check_out.slice(0, 5) : "--:--")), /* @__PURE__ */ React.createElement(Chip, { label: { O: "\uCD9C\uC11D", A: "\uACB0\uC11D", L: "\uC9C0\uAC01", U: "\uBBF8\uD655\uC778" }[r.status || "U"] || r.status, bg: r.status === "O" ? "#DCFCE7" : r.status === "A" ? "#FEE2E2" : T.s3, color: r.status === "O" ? "#15803D" : r.status === "A" ? T.danger : T.mu, size: 10 }))))), workspaceTab === "courses" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.mu, fontWeight: 700, marginBottom: 2 } }, selectedStudent.name, "\uB2D8\uC774 \uB4F1\uB85D\uB41C \uBAA8\uB4E0 \uACFC\uC815"), (multiCourseMap.get(personGroupKey(selectedStudent)) || [selectedStudent]).map((rec) => {
       const c = courses.find((x) => x.id === rec.cid);
       const isCurrent = rec.id === selectedStudent.id;
       const esColor = STATUS_COLORS[rec.enrollmentStatus || "\uC7AC\uD559\uC911"] || { bg: T.s3, color: T.mu };
@@ -3041,7 +3065,7 @@
         borderRadius: 10,
         padding: "11px 13px",
         background: isCurrent ? T.pbg : T.s2
-      } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: T.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, (c == null ? void 0 : c.name) || `\uACFC\uC815 ID ${rec.cid}`, isCurrent && /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 6, fontSize: 9, background: T.p, color: "#fff", borderRadius: 8, padding: "1px 6px" } }, "\uD604\uC7AC")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, marginTop: 2 } }, c == null ? void 0 : c.code, " \xB7 ", (c == null ? void 0 : c.dateFrom) || "", " ~ ", (c == null ? void 0 : c.dateTo) || "")), /* @__PURE__ */ React.createElement(Chip, { label: rec.enrollmentStatus || "\uC7AC\uD559\uC911", bg: esColor.bg, color: esColor.color, size: 10 })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu } }, "\uCD9C\uC11D\uB960"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 800, color: rec.rate >= 80 ? "#15803D" : rec.rate >= 70 ? T.warn : T.danger } }, rec.rate, "%"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu, marginLeft: 8 } }, "\uB204\uC801"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.tx, fontWeight: 700 } }, (rec.accumulatedHours || 0).toFixed(1), "h"), !isCurrent && /* @__PURE__ */ React.createElement("button", { onClick: () => setSelectedStudentId(rec.id), style: {
+      } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: T.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c?.name || `\uACFC\uC815 ID ${rec.cid}`, isCurrent && /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 6, fontSize: 9, background: T.p, color: "#fff", borderRadius: 8, padding: "1px 6px" } }, "\uD604\uC7AC")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, marginTop: 2 } }, c?.code, " \xB7 ", c?.dateFrom || "", " ~ ", c?.dateTo || "")), /* @__PURE__ */ React.createElement(Chip, { label: rec.enrollmentStatus || "\uC7AC\uD559\uC911", bg: esColor.bg, color: esColor.color, size: 10 })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu } }, "\uCD9C\uC11D\uB960"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 800, color: rec.rate >= 80 ? "#15803D" : rec.rate >= 70 ? T.warn : T.danger } }, rec.rate, "%"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu, marginLeft: 8 } }, "\uB204\uC801"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.tx, fontWeight: 700 } }, (rec.accumulatedHours || 0).toFixed(1), "h"), !isCurrent && /* @__PURE__ */ React.createElement("button", { onClick: () => setSelectedStudentId(rec.id), style: {
         marginLeft: "auto",
         padding: "3px 9px",
         borderRadius: 7,
@@ -3109,7 +3133,7 @@
           justifyContent: "space-between",
           alignItems: "center",
           flexShrink: 0
-        } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#fff" } }, "\u{1F4CB} \uD6C8\uB828\uC0DD \uC0C1\uC138 \u2014 ", attModal.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,.65)", marginTop: 2 } }, (modalCourse == null ? void 0 : modalCourse.name) || "-", " \xB7 \uAE30\uBCF8\uC815\uBCF4 / \uCD9C\uACB0\uD604\uD669")), /* @__PURE__ */ React.createElement("button", { onClick: () => setAttModal(null), style: {
+        } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#fff" } }, "\u{1F4CB} \uD6C8\uB828\uC0DD \uC0C1\uC138 \u2014 ", attModal.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,.65)", marginTop: 2 } }, modalCourse?.name || "-", " \xB7 \uAE30\uBCF8\uC815\uBCF4 / \uCD9C\uACB0\uD604\uD669")), /* @__PURE__ */ React.createElement("button", { onClick: () => setAttModal(null), style: {
           width: 28,
           height: 28,
           borderRadius: 6,
@@ -3267,8 +3291,8 @@
       return [isNaN(h) ? defH : h, isNaN(m) ? defM : m];
     };
     const initTimes = (c) => {
-      const [sh, sm] = parseHM(c == null ? void 0 : c.schedTimeFrom, 9, 0);
-      const [eh, em] = parseHM(c == null ? void 0 : c.schedTimeTo, 13, 0);
+      const [sh, sm] = parseHM(c?.schedTimeFrom, 9, 0);
+      const [eh, em] = parseHM(c?.schedTimeTo, 13, 0);
       return { sh, sm, eh, em };
     };
     const initC = courses[3] || courses[0];
@@ -3299,7 +3323,7 @@
     useEffect(() => {
       if (!courses.length) return;
       const cur = courseRef.current;
-      const updated = courses.find((c) => c.id === (cur == null ? void 0 : cur.id));
+      const updated = courses.find((c) => c.id === cur?.id);
       if (!updated) {
         handleCourseChange(courses[0]);
       } else if (updated.dateFrom !== cur.dateFrom || updated.dateTo !== cur.dateTo || updated.schedDays !== cur.schedDays || updated.schedTimeFrom !== cur.schedTimeFrom || updated.schedTimeTo !== cur.schedTimeTo) {
@@ -3321,8 +3345,7 @@
     const qrData = `${pageBase}?mode=checkin&cid=${course.id}&date=${date}&type=${qrType}&t=${encodeURIComponent(qrToken)}`;
     const qrColor = qrType === "in" ? "#2563EB" : "#9A3412";
     const getQrDataUrl = () => {
-      var _a;
-      const canvas = (_a = qrContainerRef.current) == null ? void 0 : _a.querySelector("canvas");
+      const canvas = qrContainerRef.current?.querySelector("canvas");
       if (!canvas) return null;
       return canvas.toDataURL("image/png");
     };
@@ -3466,7 +3489,7 @@
       const joinRef = String(++refCount);
       let subIds = [];
       const send = (obj) => {
-        if ((currentWs == null ? void 0 : currentWs.readyState) === WebSocket.OPEN) currentWs.send(JSON.stringify(obj));
+        if (currentWs?.readyState === WebSocket.OPEN) currentWs.send(JSON.stringify(obj));
       };
       const connect = () => {
         if (intentionallyClosed) return;
@@ -3501,24 +3524,23 @@
           }, 25e3);
         };
         ws.onmessage = (event) => {
-          var _a, _b, _c, _d;
           try {
             const msg = JSON.parse(event.data);
             if (msg.event === "phx_reply" && msg.ref === joinRef) {
-              if (((_a = msg.payload) == null ? void 0 : _a.status) === "ok") {
-                subIds = (((_b = msg.payload.response) == null ? void 0 : _b.postgres_changes) || []).map((c) => c.id);
+              if (msg.payload?.status === "ok") {
+                subIds = (msg.payload.response?.postgres_changes || []).map((c) => c.id);
                 console.log(`\u2705 [\uCD9C\uACB0 Realtime] \uAD6C\uB3C5 \uD655\uC778 (${date}) IDs:`, subIds);
               } else {
-                console.error(`\u274C [\uCD9C\uACB0 Realtime] \uAD6C\uB3C5 \uC2E4\uD328:`, (_c = msg.payload) == null ? void 0 : _c.response);
+                console.error(`\u274C [\uCD9C\uACB0 Realtime] \uAD6C\uB3C5 \uC2E4\uD328:`, msg.payload?.response);
               }
               return;
             }
-            if (msg.event === "postgres_changes" && ((_d = msg.payload) == null ? void 0 : _d.data)) {
+            if (msg.event === "postgres_changes" && msg.payload?.data) {
               const ids = msg.payload.ids || [];
               if (subIds.length > 0 && !ids.some((id) => subIds.includes(id))) return;
               const { type: eventType, record: newRecord } = msg.payload.data;
               if (eventType === "INSERT" || eventType === "UPDATE") {
-                if ((newRecord == null ? void 0 : newRecord.date) !== date) return;
+                if (newRecord?.date !== date) return;
                 setRecords((prev) => {
                   const existing = prev[newRecord.student_id] || {};
                   const upd = { ...existing, status: newRecord.status || existing.status || "U" };
@@ -3553,7 +3575,7 @@
         intentionallyClosed = true;
         clearInterval(heartbeatId);
         heartbeatId = null;
-        currentWs == null ? void 0 : currentWs.close();
+        currentWs?.close();
       };
     }, [course, date]);
     const calcStatus = (inMins, outMins) => {
@@ -3799,17 +3821,14 @@
       { v: absentCnt, l: "\uACB0\uC11D", c: T.danger },
       { v: unconfirmedCnt, l: "\uBBF8\uD655\uC778", c: T.mu }
     ].map(({ v, l, c }) => /* @__PURE__ */ React.createElement("div", { key: l, style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: c } }, v), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: T.mu } }, l))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: T.mu } }, "/ ", courseStudents.length, "\uBA85"), /* @__PURE__ */ React.createElement("button", { onClick: async () => {
-      const absentStudents = courseStudents.filter((s) => {
-        var _a, _b;
-        return !((_a = records[s.id]) == null ? void 0 : _a.checkIn) && ((_b = records[s.id]) == null ? void 0 : _b.status) !== "A";
-      });
+      const absentStudents = courseStudents.filter((s) => !records[s.id]?.checkIn && records[s.id]?.status !== "A");
       if (absentStudents.length === 0) {
         alert("\uBBF8\uD655\uC778 \uC778\uC6D0\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.");
         return;
       }
       if (!window.confirm(`\uBBF8\uD655\uC778 ${absentStudents.length}\uBA85\uC744 \uACB0\uC11D\uC73C\uB85C \uC77C\uAD04 \uCC98\uB9AC\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?`)) return;
       try {
-        const courseIdNum = Number(course == null ? void 0 : course.id);
+        const courseIdNum = Number(course?.id);
         if (!courseIdNum) {
           alert("\uACFC\uC815 \uC815\uBCF4 \uC624\uB958: course_id \uC5C6\uC74C");
           return;
@@ -4031,15 +4050,14 @@
       fontWeight: 700,
       borderBottom: `1px solid ${T.bd}`
     } }, h)))), /* @__PURE__ */ React.createElement("tbody", null, courseStudents.map((s) => {
-      var _a, _b;
       const row = manualAtt[s.id] || {};
       const curStatus = row.status || "";
       const curIn = row.inTime || "";
       const curOut = row.outTime || "";
       const curReason = row.reason || "";
       const curAbsType = row.absenceType || "personal";
-      const curManualAdd = (_a = row.manualAddHours) != null ? _a : 0;
-      const curManualDeduct = (_b = row.manualDeductHours) != null ? _b : 0;
+      const curManualAdd = row.manualAddHours ?? 0;
+      const curManualDeduct = row.manualDeductHours ?? 0;
       const curManualReason = row.manualReason || "";
       const curManualMemo = row.manualMemo || "";
       const saved = row.saved === true;
@@ -4065,7 +4083,7 @@
           const inTime = curIn || (curStatus && curStatus !== "A" ? defaultTime : null);
           const calcMins = inTime ? timeToMins(inTime) : null;
           const rowStatus = curStatus || (inTime ? "O" : "U");
-          const courseIdNum = Number(course == null ? void 0 : course.id);
+          const courseIdNum = Number(course?.id);
           if (!courseIdNum) {
             alert("\uACFC\uC815 \uC815\uBCF4 \uC624\uB958: course_id \uC5C6\uC74C");
             console.error("\u274C course_id \uC5C6\uC74C", course);
@@ -4188,7 +4206,7 @@
           const includeBreakInHours = shouldIncludeBreakInHours(course);
           const defaultScheduleMinutes = getCourseScheduleMinutes(course);
           const effectiveScheduleMinutes = getOverrideScheduleMinutes(selectedDateOverride, defaultScheduleMinutes);
-          const statusForCalc = (selectedDateOverride == null ? void 0 : selectedDateOverride.type) === "cancelled" ? "A" : curStatus || "O";
+          const statusForCalc = selectedDateOverride?.type === "cancelled" ? "A" : curStatus || "O";
           const daily = calculateDailyHours(
             {
               check_in: curIn,
@@ -4397,7 +4415,7 @@
         }
       }
       try {
-        const courseIdNum = Number(course == null ? void 0 : course.id);
+        const courseIdNum = Number(course?.id);
         if (!courseIdNum) {
           alert("\uACFC\uC815 \uC815\uBCF4 \uC624\uB958: course_id \uC5C6\uC74C");
           console.error("\u274C course_id \uC5C6\uC74C", course);
@@ -4523,39 +4541,36 @@
       cursor: "pointer",
       fontSize: 11,
       fontWeight: 700
-    } }, "+ \uCD94\uAC00")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, [...overrides].sort((a, b) => a.date.localeCompare(b.date)).map((ov) => {
-      var _a, _b;
-      return /* @__PURE__ */ React.createElement("div", { key: ov.id, style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "8px 12px",
-        borderRadius: 8,
-        background: typeBg[ov.type],
-        border: `1px solid ${typeColor[ov.type]}30`
-      } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: T.tx, minWidth: 70 } }, ov.date.slice(5)), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: typeColor[ov.type] } }, typeLabels[ov.type]), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, ov.type === "cancelled" ? "\u2014" : `${(_a = ov.timeFrom) == null ? void 0 : _a.slice(0, 5)}~${(_b = ov.timeTo) == null ? void 0 : _b.slice(0, 5)}`), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: T.tx } }, ov.hours, "h"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu, flex: 1 } }, ov.reason), /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          onClick: () => {
-            if (window.confirm("\uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?")) onDelete(ov.id);
-          },
-          style: {
-            width: 22,
-            height: 22,
-            borderRadius: 5,
-            border: "none",
-            background: "#FEF2F2",
-            color: T.danger,
-            cursor: "pointer",
-            fontSize: 11,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center"
-          }
+    } }, "+ \uCD94\uAC00")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, [...overrides].sort((a, b) => a.date.localeCompare(b.date)).map((ov) => /* @__PURE__ */ React.createElement("div", { key: ov.id, style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "8px 12px",
+      borderRadius: 8,
+      background: typeBg[ov.type],
+      border: `1px solid ${typeColor[ov.type]}30`
+    } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: T.tx, minWidth: 70 } }, ov.date.slice(5)), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: typeColor[ov.type] } }, typeLabels[ov.type]), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: T.mu } }, ov.type === "cancelled" ? "\u2014" : `${ov.timeFrom?.slice(0, 5)}~${ov.timeTo?.slice(0, 5)}`), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: T.tx } }, ov.hours, "h"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu, flex: 1 } }, ov.reason), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => {
+          if (window.confirm("\uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?")) onDelete(ov.id);
         },
-        "\xD7"
-      ));
-    })), showModal && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, padding: "14px 16px", borderRadius: 10, background: T.s2, border: `1px solid ${T.bd}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.tx, marginBottom: 10 } }, "\u{1F4C5} \uC77C\uC815 \uC608\uC678 \uCD94\uAC00"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uB0A0\uC9DC"), /* @__PURE__ */ React.createElement("input", { type: "date", value: form.date, onChange: (e) => set("date", e.target.value), style: { ...inp, width: "100%" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uC720\uD615"), /* @__PURE__ */ React.createElement("select", { value: form.type, onChange: (e) => set("type", e.target.value), style: { ...inp, width: "100%", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("option", { value: "cancelled" }, "\u{1F6AB} \uC790\uCCB4 \uD734\uAC15"), /* @__PURE__ */ React.createElement("option", { value: "extended" }, "\u{1F504} \uBCF4\uAC15 (\uC2DC\uAC04\uC5F0\uC7A5)"), /* @__PURE__ */ React.createElement("option", { value: "shortened" }, "\u23F1\uFE0F \uB2E8\uCD95 \uC218\uC5C5")))), form.type !== "cancelled" && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uC2DC\uC791 \uC2DC\uAC04"), /* @__PURE__ */ React.createElement("input", { type: "time", value: form.timeFrom, onChange: (e) => set("timeFrom", e.target.value), style: { ...inp, width: "100%" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uC885\uB8CC \uC2DC\uAC04"), /* @__PURE__ */ React.createElement("input", { type: "time", value: form.timeTo, onChange: (e) => set("timeTo", e.target.value), style: { ...inp, width: "100%" } }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uC0AC\uC720"), /* @__PURE__ */ React.createElement(
+        style: {
+          width: 22,
+          height: 22,
+          borderRadius: 5,
+          border: "none",
+          background: "#FEF2F2",
+          color: T.danger,
+          cursor: "pointer",
+          fontSize: 11,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }
+      },
+      "\xD7"
+    )))), showModal && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, padding: "14px 16px", borderRadius: 10, background: T.s2, border: `1px solid ${T.bd}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.tx, marginBottom: 10 } }, "\u{1F4C5} \uC77C\uC815 \uC608\uC678 \uCD94\uAC00"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uB0A0\uC9DC"), /* @__PURE__ */ React.createElement("input", { type: "date", value: form.date, onChange: (e) => set("date", e.target.value), style: { ...inp, width: "100%" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uC720\uD615"), /* @__PURE__ */ React.createElement("select", { value: form.type, onChange: (e) => set("type", e.target.value), style: { ...inp, width: "100%", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("option", { value: "cancelled" }, "\u{1F6AB} \uC790\uCCB4 \uD734\uAC15"), /* @__PURE__ */ React.createElement("option", { value: "extended" }, "\u{1F504} \uBCF4\uAC15 (\uC2DC\uAC04\uC5F0\uC7A5)"), /* @__PURE__ */ React.createElement("option", { value: "shortened" }, "\u23F1\uFE0F \uB2E8\uCD95 \uC218\uC5C5")))), form.type !== "cancelled" && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uC2DC\uC791 \uC2DC\uAC04"), /* @__PURE__ */ React.createElement("input", { type: "time", value: form.timeFrom, onChange: (e) => set("timeFrom", e.target.value), style: { ...inp, width: "100%" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uC885\uB8CC \uC2DC\uAC04"), /* @__PURE__ */ React.createElement("input", { type: "time", value: form.timeTo, onChange: (e) => set("timeTo", e.target.value), style: { ...inp, width: "100%" } }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 10, color: T.mu, display: "block", marginBottom: 4 } }, "\uC0AC\uC720"), /* @__PURE__ */ React.createElement(
       "input",
       {
         value: form.reason,
@@ -4566,16 +4581,15 @@
     )), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setShowModal(false), style: { padding: "6px 14px", borderRadius: 7, border: `1px solid ${T.bd}`, background: T.s2, color: T.mu, cursor: "pointer", fontSize: 11 } }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement("button", { onClick: handleSave, style: { padding: "6px 14px", borderRadius: 7, border: "none", background: T.p, color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 700 } }, "\uC800\uC7A5"))));
   };
   const buildCourseDatesAll = (course) => {
-    var _a, _b, _c;
     const getLocalStr = (d) => {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
       const day = String(d.getDate()).padStart(2, "0");
       return `${y}-${m}-${day}`;
     };
-    const dateFrom = (_a = course == null ? void 0 : course.dateFrom) != null ? _a : course == null ? void 0 : course.date_from;
-    const dateTo = (_b = course == null ? void 0 : course.dateTo) != null ? _b : course == null ? void 0 : course.date_to;
-    const schedDaysRaw = (_c = course == null ? void 0 : course.schedDays) != null ? _c : course == null ? void 0 : course.sched_days;
+    const dateFrom = course?.dateFrom ?? course?.date_from;
+    const dateTo = course?.dateTo ?? course?.date_to;
+    const schedDaysRaw = course?.schedDays ?? course?.sched_days;
     if (!dateFrom) return [];
     const start = new Date(dateFrom);
     start.setHours(0, 0, 0, 0);
@@ -4590,7 +4604,7 @@
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       if (allowedDows.has(d.getDay())) {
         const ds = getLocalStr(d);
-        if (!isHoliday(ds) && !isCancelledOverride(course == null ? void 0 : course.id, ds)) out.push(ds);
+        if (!isHoliday(ds) && !isCancelledOverride(course?.id, ds)) out.push(ds);
       }
     }
     return out;
@@ -4601,21 +4615,21 @@
   };
   const isAttendanceCutoffStatus = (status) => status === "\uC911\uB3C4\uD0C8\uB77D" || status === "\uC870\uAE30\uCDE8\uC5C5";
   const isAttendanceDateLocked = (student, date) => {
-    const status = (student == null ? void 0 : student.enrollmentStatus) || "\uC7AC\uD559\uC911";
-    const cutoffDate = (student == null ? void 0 : student.statusChangeDate) || "";
+    const status = student?.enrollmentStatus || "\uC7AC\uD559\uC911";
+    const cutoffDate = student?.statusChangeDate || "";
     return !!(date && cutoffDate && isAttendanceCutoffStatus(status) && date > cutoffDate);
   };
   const getAttendanceStatusMeta = (student) => {
-    const status = (student == null ? void 0 : student.enrollmentStatus) || "\uC7AC\uD559\uC911";
+    const status = student?.enrollmentStatus || "\uC7AC\uD559\uC911";
     if (!status || status === "\uC7AC\uD559\uC911") return null;
-    const cutoffDate = (student == null ? void 0 : student.statusChangeDate) || "";
+    const cutoffDate = student?.statusChangeDate || "";
     const cutoffLabel = cutoffDate && cutoffDate.length >= 10 ? cutoffDate.slice(5) : "";
-    const sc = (STATUS_COLORS == null ? void 0 : STATUS_COLORS[status]) || { bg: "#E5E7EB", color: "#475569" };
+    const sc = STATUS_COLORS?.[status] || { bg: "#E5E7EB", color: "#475569" };
     const label = cutoffLabel && isAttendanceCutoffStatus(status) ? `${status} ${cutoffLabel}` : status;
     return { status, cutoffDate, cutoffLabel, label, shortLabel: status, colors: sc };
   };
   const getAttendanceSheetTotalHours = (course, student) => {
-    if ((student == null ? void 0 : student.enrollmentStatus) === "\uC870\uAE30\uCDE8\uC5C5" && (student == null ? void 0 : student.statusChangeDate)) {
+    if (student?.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" && student?.statusChangeDate) {
       return getProportionalCourseHours(course, student.statusChangeDate);
     }
     return getTotalCourseHours(course);
@@ -4646,8 +4660,7 @@
     courseStudents.forEach((s) => {
       let cnt = 0;
       dates.forEach((d) => {
-        var _a;
-        if (d <= todayStr && !isAttendanceDateLocked(s, d) && ((_a = attMap[`${s.id}_${d}`]) == null ? void 0 : _a.status) === "O") cnt++;
+        if (d <= todayStr && !isAttendanceDateLocked(s, d) && attMap[`${s.id}_${d}`]?.status === "O") cnt++;
       });
       totalAttMap[s.id] = cnt;
     });
@@ -4835,7 +4848,7 @@
         try {
           const { data } = await sbGet("instructors", "select=*&order=id");
           if (data) setInstructors(data.map(toInstructor));
-        } catch (e) {
+        } catch {
         }
       })();
     }, []);
@@ -4876,14 +4889,14 @@
       setRequestSelected({});
       setRequestSearch("");
       setShowRequestPrint(false);
-    }, [sheetCourse == null ? void 0 : sheetCourse.id]);
+    }, [sheetCourse?.id]);
     const allDates = buildCourseDatesAll(sheetCourse);
-    const courseStudents = students.filter((s) => s.cid === (sheetCourse == null ? void 0 : sheetCourse.id));
+    const courseStudents = students.filter((s) => s.cid === sheetCourse?.id);
     const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const totalCourseHours = getTotalCourseHours(sheetCourse);
     const breakMinutes = getCourseBreakMinutes(sheetCourse);
     const includeBreakInHours = shouldIncludeBreakInHours(sheetCourse);
-    const instNames = instructors.filter((i) => (i.cids || []).includes(sheetCourse == null ? void 0 : sheetCourse.id)).map((i) => i.name);
+    const instNames = instructors.filter((i) => (i.cids || []).includes(sheetCourse?.id)).map((i) => i.name);
     const instructorName = instNames.join(", ");
     const fmtDateShort = (d) => {
       const [, m, dd] = d.split("-");
@@ -4903,7 +4916,7 @@
     const requestSelectedList = courseStudents.filter((s) => requestSelected[s.id]);
     const requestSelectedCount = requestSelectedList.length;
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, { style: { padding: "14px 18px", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu, marginBottom: 6, fontWeight: 600 } }, "\uCD9C\uC11D\uBD80 \u2014 \uACFC\uC815 \uC120\uD0DD"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 } }, courses.map((c) => {
-      const active = (sheetCourse == null ? void 0 : sheetCourse.id) === c.id;
+      const active = sheetCourse?.id === c.id;
       return /* @__PURE__ */ React.createElement(
         "button",
         {
@@ -4938,7 +4951,7 @@
       flexWrap: "wrap",
       borderTop: `1px solid ${T.bd}`,
       paddingTop: 10
-    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx } }, /* @__PURE__ */ React.createElement("b", null, sheetCourse == null ? void 0 : sheetCourse.name), " \xB7 ", formatCoursePeriod(sheetCourse), " \xB7 \uCD1D ", formatHourText(totalCourseHours), "\uC2DC\uAC04 \xB7 \uD734\uC2DD ", breakMinutes, "\uBD84 ", includeBreakInHours ? "\uD3EC\uD568" : "\uC81C\uC678"), instructorName && /* @__PURE__ */ React.createElement(Chip, { label: `\uAC15\uC0AC: ${instructorName}`, bg: T.pbg, color: T.p }), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement(
+    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.tx } }, /* @__PURE__ */ React.createElement("b", null, sheetCourse?.name), " \xB7 ", formatCoursePeriod(sheetCourse), " \xB7 \uCD1D ", formatHourText(totalCourseHours), "\uC2DC\uAC04 \xB7 \uD734\uC2DD ", breakMinutes, "\uBD84 ", includeBreakInHours ? "\uD3EC\uD568" : "\uC81C\uC678"), instructorName && /* @__PURE__ */ React.createElement(Chip, { label: `\uAC15\uC0AC: ${instructorName}`, bg: T.pbg, color: T.p }), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -5006,14 +5019,8 @@
       whiteSpace: "nowrap",
       background: d === today ? "#FFFBEB" : T.s2
     } }, /* @__PURE__ */ React.createElement("div", null, fmtDateShort(d)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 8, color: T.mu, fontWeight: 400 } }, getDow(d)))), /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 4px", fontSize: 10, color: T.mu, fontWeight: 700, borderBottom: `1px solid ${T.bd}`, textAlign: "center", minWidth: 44 } }, "\uCD9C\uC11D", /* @__PURE__ */ React.createElement("br", null), "\uC77C\uC218"))), /* @__PURE__ */ React.createElement("tbody", null, pageStudents.map((s, idx) => {
-      const presentDays = allDates.filter((d) => {
-        var _a;
-        return !isAttendanceDateLocked(s, d) && ((_a = attData[`${s.id}_${d}`]) == null ? void 0 : _a.status) === "O";
-      }).length;
-      const absentDays = allDates.filter((d) => {
-        var _a;
-        return !(d > today) && !isAttendanceDateLocked(s, d) && ((_a = attData[`${s.id}_${d}`]) == null ? void 0 : _a.status) === "A";
-      }).length;
+      const presentDays = allDates.filter((d) => !isAttendanceDateLocked(s, d) && attData[`${s.id}_${d}`]?.status === "O").length;
+      const absentDays = allDates.filter((d) => !(d > today) && !isAttendanceDateLocked(s, d) && attData[`${s.id}_${d}`]?.status === "A").length;
       const statusMeta = getAttendanceStatusMeta(s);
       const totalHoursForStudent = getAttendanceSheetTotalHours(sheetCourse, s);
       const rowBg = absentDays >= 3 ? "#FFF8F8" : void 0;
@@ -5234,9 +5241,8 @@
       incomplete: acc.incomplete + s.incomplete
     }), { total: 0, confirmed: 0, pending: 0, dropout: 0, autoComplete: 0, incomplete: 0 });
     const preferredCourse = () => {
-      var _a, _b;
-      const withConfirmed = (_a = courseStats.find((s) => s.confirmed > 0)) == null ? void 0 : _a.course;
-      const withStudents = (_b = courseStats.find((s) => s.total > 0)) == null ? void 0 : _b.course;
+      const withConfirmed = courseStats.find((s) => s.confirmed > 0)?.course;
+      const withStudents = courseStats.find((s) => s.total > 0)?.course;
       return withConfirmed || withStudents || courses[0];
     };
     useEffect(() => {
@@ -5308,7 +5314,7 @@
         }
         alert("\uC218\uB8CC \uD655\uC815\uC774 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4. DB\uC5D0 \uC800\uC7A5\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
       } catch (e) {
-        alert("\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4: " + ((e == null ? void 0 : e.message) || e));
+        alert("\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4: " + (e?.message || e));
       } finally {
         setConfirming(false);
       }
@@ -5392,14 +5398,13 @@
       fontWeight: 700,
       borderBottom: `1px solid #BBF7D0`
     } }, h)))), /* @__PURE__ */ React.createElement("tbody", null, confirmedList.map((s) => {
-      var _a, _b;
       const sTotal = s.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC" && s.statusChangeDate ? getProportionalCourseHours(course, s.statusChangeDate) : getTotalCourseHours(course);
       return /* @__PURE__ */ React.createElement("tr", { key: s.id, style: { borderBottom: `1px solid #DCFCE7`, opacity: 0.85 } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 16px", fontSize: 13, fontWeight: 700, color: T.tx } }, s.name, /* @__PURE__ */ React.createElement(
         Chip,
         {
           label: s.enrollmentStatus,
-          bg: ((_a = STATUS_COLORS[s.enrollmentStatus]) == null ? void 0 : _a.bg) || "#DCFCE7",
-          color: ((_b = STATUS_COLORS[s.enrollmentStatus]) == null ? void 0 : _b.color) || "#15803D",
+          bg: STATUS_COLORS[s.enrollmentStatus]?.bg || "#DCFCE7",
+          color: STATUS_COLORS[s.enrollmentStatus]?.color || "#15803D",
           size: 10,
           style: { marginLeft: 6 }
         }
@@ -5412,7 +5417,6 @@
       fontWeight: 700,
       borderBottom: `1px solid ${T.bd}`
     } }, h)))), /* @__PURE__ */ React.createElement("tbody", null, list.map((s) => {
-      var _a, _b;
       const autoBase = s.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" && s.rate >= threshold ? "\uC870\uAE30\uCDE8\uC5C5 \uC218\uB8CC" : s.rate >= threshold ? "\uC218\uB8CC" : "\uBBF8\uC218\uB8CC";
       const final = get(s);
       const changed = overrides[s.id] !== void 0 && overrides[s.id] !== autoBase;
@@ -5422,8 +5426,8 @@
         Chip,
         {
           label: s.enrollmentStatus,
-          bg: ((_a = STATUS_COLORS[s.enrollmentStatus]) == null ? void 0 : _a.bg) || T.s3,
-          color: ((_b = STATUS_COLORS[s.enrollmentStatus]) == null ? void 0 : _b.color) || T.mu,
+          bg: STATUS_COLORS[s.enrollmentStatus]?.bg || T.s3,
+          color: STATUS_COLORS[s.enrollmentStatus]?.color || T.mu,
           size: 10,
           style: { marginLeft: 6 }
         }
@@ -5497,12 +5501,10 @@
     return Number.isFinite(n) && n >= 0 ? n : DEFAULT_BREAK_MINUTES;
   };
   const getCourseBreakMinutes = (course) => {
-    var _a;
-    return normalizeBreakMinutes((_a = course == null ? void 0 : course.breakMinutes) != null ? _a : course == null ? void 0 : course.break_minutes);
+    return normalizeBreakMinutes(course?.breakMinutes ?? course?.break_minutes);
   };
   const shouldIncludeBreakInHours = (course) => {
-    var _a;
-    const raw = (_a = course == null ? void 0 : course.includeBreakInHours) != null ? _a : course == null ? void 0 : course.include_break_in_hours;
+    const raw = course?.includeBreakInHours ?? course?.include_break_in_hours;
     if (typeof raw === "boolean") return raw;
     if (typeof raw === "string") {
       const normalized = raw.trim().toLowerCase();
@@ -5513,8 +5515,8 @@
     return true;
   };
   const getCourseScheduleMinutes = (course) => {
-    const schedStart = parseTimeToMinutes(course == null ? void 0 : course.schedTimeFrom);
-    const schedEnd = parseTimeToMinutes(course == null ? void 0 : course.schedTimeTo);
+    const schedStart = parseTimeToMinutes(course?.schedTimeFrom);
+    const schedEnd = parseTimeToMinutes(course?.schedTimeTo);
     if (schedStart === null || schedEnd === null || schedEnd <= schedStart) return null;
     return { schedStart, schedEnd };
   };
@@ -5533,8 +5535,8 @@
   };
   const getScheduledDailyHours = (course, includeBreakInHours = true) => {
     return getHoursFromScheduleRange(
-      parseTimeToMinutes(course == null ? void 0 : course.schedTimeFrom),
-      parseTimeToMinutes(course == null ? void 0 : course.schedTimeTo),
+      parseTimeToMinutes(course?.schedTimeFrom),
+      parseTimeToMinutes(course?.schedTimeTo),
       getCourseBreakMinutes(course),
       includeBreakInHours
     );
@@ -5560,16 +5562,14 @@
     return Number.isFinite(n) && n > 0 ? n : 0;
   };
   const applyManualHoursAdjustment = (baseHours, record = {}) => {
-    var _a, _b;
-    const add = normalizeManualHours((_a = record.manual_add_hours) != null ? _a : record.manualAddHours);
-    const deduct = normalizeManualHours((_b = record.manual_deduct_hours) != null ? _b : record.manualDeductHours);
+    const add = normalizeManualHours(record.manual_add_hours ?? record.manualAddHours);
+    const deduct = normalizeManualHours(record.manual_deduct_hours ?? record.manualDeductHours);
     return Math.round(Math.max(0, baseHours + add - deduct) * 100) / 100;
   };
   const calculateDailyHours = (record, breakMinutes = DEFAULT_BREAK_MINUTES, scheduleMinutes = null, includeBreakInHours = true) => {
-    var _a, _b;
     if (record.status === "A") return applyManualHoursAdjustment(0, record);
-    let checkInMin = parseTimeToMinutes((_a = record.check_in) != null ? _a : record.checkIn);
-    let checkOutMin = parseTimeToMinutes((_b = record.check_out) != null ? _b : record.checkOut);
+    let checkInMin = parseTimeToMinutes(record.check_in ?? record.checkIn);
+    let checkOutMin = parseTimeToMinutes(record.check_out ?? record.checkOut);
     if ((record.status === "O" || record.status === "L") && scheduleMinutes) {
       if (checkInMin === null) checkInMin = scheduleMinutes.schedStart;
       if (checkOutMin === null) checkOutMin = scheduleMinutes.schedEnd;
@@ -5617,7 +5617,7 @@
         continue;
       }
       const override = overridesByDate ? overridesByDate.get(recordDate) : null;
-      if ((override == null ? void 0 : override.type) === "cancelled") {
+      if (override?.type === "cancelled") {
         details.push({ ...record, date: recordDate, hours: 0, calcReason: "\uD734\uAC15\uC77C \uC81C\uC678" });
         continue;
       }
@@ -5642,8 +5642,7 @@
     return { accumulatedHours: Math.round(totalHours * 100) / 100, invalidRecords, details };
   };
   const getCourseOverrideMap = (course) => {
-    var _a;
-    const ovs = (((_a = window._overridesRef) == null ? void 0 : _a.current) || []).filter((o) => sameId(o.courseId, course == null ? void 0 : course.id));
+    const ovs = (window._overridesRef?.current || []).filter((o) => sameId(o.courseId, course?.id));
     return new Map(ovs.map((o) => [normalizeDateStr(o.date), o]));
   };
   const getTotalCourseHours = (course, cutoffDate = null, overrideMapArg = null) => {
@@ -5678,14 +5677,13 @@
     return Math.min(rounded, 100);
   };
   const recalculateHoursAndRate = async (studentId, courseId) => {
-    var _a, _b, _c, _d, _e;
     try {
-      const student = (_b = (_a = window._studentsRef) == null ? void 0 : _a.current) == null ? void 0 : _b.find((s) => sameId(s.id, studentId));
-      const course = (_d = (_c = window._coursesRef) == null ? void 0 : _c.current) == null ? void 0 : _d.find((c) => sameId(c.id, courseId));
+      const student = window._studentsRef?.current?.find((s) => sameId(s.id, studentId));
+      const course = window._coursesRef?.current?.find((c) => sameId(c.id, courseId));
       if (!student || !course) return;
       const { data: attRecords, error } = await sbGet(
         "attendance",
-        `select=*&student_id=in.(${siblingStudentIds(student, (_e = window._studentsRef) == null ? void 0 : _e.current).join(",")})&course_id=eq.${courseId}`
+        `select=*&student_id=in.(${siblingStudentIds(student, window._studentsRef?.current).join(",")})&course_id=eq.${courseId}`
       );
       if (error) throw error;
       const cutoffDate = student.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" || student.enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D" ? student.statusChangeDate : null;
@@ -5718,12 +5716,11 @@
     }
   };
   const showAttendanceHourBasis = async (student, course) => {
-    var _a;
     try {
       if (!student || !course) return;
       const { data: attRecords, error } = await sbGet(
         "attendance",
-        `select=*&student_id=in.(${siblingStudentIds(student, (_a = window._studentsRef) == null ? void 0 : _a.current).join(",")})&course_id=eq.${Number(course.id)}&order=date.asc`
+        `select=*&student_id=in.(${siblingStudentIds(student, window._studentsRef?.current).join(",")})&course_id=eq.${Number(course.id)}&order=date.asc`
       );
       if (error) throw error;
       const cutoffDate = student.enrollmentStatus === "\uC870\uAE30\uCDE8\uC5C5" || student.enrollmentStatus === "\uC911\uB3C4\uD0C8\uB77D" ? student.statusChangeDate : null;
@@ -5766,10 +5763,9 @@ ${invalidLines.join("\n")}` : null
     }
   };
   const batchRecalculateAllHours = async (students, courses, overridesArg = null) => {
-    var _a;
     if (!students || students.length === 0) return 0;
     if (!courses || courses.length === 0) return 0;
-    const allOverrides = overridesArg || ((_a = window._overridesRef) == null ? void 0 : _a.current) || [];
+    const allOverrides = overridesArg || window._overridesRef?.current || [];
     const overridesByCourse = /* @__PURE__ */ new Map();
     for (const ov of allOverrides) {
       const cid = Number(ov.courseId);
@@ -5871,9 +5867,8 @@ ${invalidLines.join("\n")}` : null
     return allowed ? allowed.includes(toStatus) : false;
   };
   const changeEnrollmentStatus = async (params) => {
-    var _a, _b;
     const { studentId, courseId, newStatus, changeDate, dropoutReason, reasonDetail, employerName, changedBy } = params;
-    const student = (_b = (_a = window._studentsRef) == null ? void 0 : _a.current) == null ? void 0 : _b.find((s) => sameId(s.id, studentId));
+    const student = window._studentsRef?.current?.find((s) => sameId(s.id, studentId));
     if (!student) throw new Error("\uD559\uC0DD\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
     const prevStatus = student.enrollmentStatus || "\uC7AC\uD559\uC911";
     if (!isValidTransition(prevStatus, newStatus))
@@ -5935,12 +5930,12 @@ ${invalidLines.join("\n")}` : null
       const [y, m, day] = d.split("-");
       return `${y}.${String(m).padStart(2, "0")}.${String(day).padStart(2, "0")}.`;
     };
-    const period = (c == null ? void 0 : c.dateFrom) ? `${fmtDot(c.dateFrom)}~${c.dateTo ? fmtDot(c.dateTo) : ""}` : "\uAE30\uAC04 \uBBF8\uC815";
+    const period = c?.dateFrom ? `${fmtDot(c.dateFrom)}~${c.dateTo ? fmtDot(c.dateTo) : ""}` : "\uAE30\uAC04 \uBBF8\uC815";
     const hours = (() => {
-      const h = Number((c == null ? void 0 : c.hours) || 0);
+      const h = Number(c?.hours || 0);
       return h > 0 ? `${formatHourText(h)}\uC2DC\uAC04` : "\uC2DC\uAC04 \uBBF8\uC815";
     })();
-    const completeDate = (c == null ? void 0 : c.dateTo) ? fmtDot(c.dateTo) : "\uC218\uB8CC\uC77C \uBBF8\uC815";
+    const completeDate = c?.dateTo ? fmtDot(c.dateTo) : "\uC218\uB8CC\uC77C \uBBF8\uC815";
     const issueDateText = issueDate || "\u3000\u3000\uB144\u3000\u3000\uC6D4\u3000\u3000\uC77C";
     const currentYear = String((/* @__PURE__ */ new Date()).getFullYear());
     const issueYear = (() => {
@@ -6574,14 +6569,14 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
   const loadCertHistory = () => {
     try {
       return JSON.parse(safeLocal.get(CERT_HIST_KEY) || "[]");
-    } catch (e) {
+    } catch {
       return [];
     }
   };
   const saveCertHistory = (hist) => {
     try {
       safeLocal.set(CERT_HIST_KEY, JSON.stringify(hist));
-    } catch (e) {
+    } catch {
     }
   };
   const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
@@ -6607,36 +6602,33 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
     const [certDbStatus, setCertDbStatus] = useState("loading");
     const [certDbError, setCertDbError] = useState("");
     const issueStatusLabel = (status) => status === "\uCDE8\uC18C" ? "\uCDE8\uC18C" : "\uC815\uC0C1";
-    const normalizeHistoryRecord = (r) => {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B;
-      return {
-        id: r.id,
-        studentId: (_a = r.student_id) != null ? _a : r.studentId,
-        studentName: (_b = r.student_name) != null ? _b : r.studentName,
-        courseId: (_c = r.course_id) != null ? _c : r.courseId,
-        courseName: (_d = r.course_name) != null ? _d : r.courseName,
-        docType: (_e = r.doc_type) != null ? _e : r.docType,
-        certNo: (_f = r.cert_no) != null ? _f : r.certNo,
-        fullNo: (_g = r.full_no) != null ? _g : r.fullNo,
-        issueDate: (_h = r.issue_date) != null ? _h : r.issueDate,
-        issuedAt: (_i = r.issued_at) != null ? _i : r.issuedAt,
-        issueReason: ((_j = r.issue_reason) != null ? _j : r.issueReason) || "\uCD5C\uCD08\uBC1C\uAE09",
-        issueChannel: ((_k = r.issue_channel) != null ? _k : r.issueChannel) || "\uBBF8\uB9AC\uBCF4\uAE30",
-        issueStatus: issueStatusLabel((_l = r.issue_status) != null ? _l : r.issueStatus),
-        completionStatus: ((_m = r.completion_status) != null ? _m : r.completionStatus) || "\uBBF8\uC815",
-        attendanceRate: Number((_o = (_n = r.attendance_rate) != null ? _n : r.attendanceRate) != null ? _o : 0),
-        issuedBy: ((_p = r.issued_by) != null ? _p : r.issuedBy) || "\uC2DC\uC2A4\uD15C",
-        originalIssueId: ((_q = r.original_issue_id) != null ? _q : r.originalIssueId) || "",
-        cancelledAt: ((_r = r.cancelled_at) != null ? _r : r.cancelledAt) || "",
-        cancelReason: ((_s = r.cancel_reason) != null ? _s : r.cancelReason) || "",
-        cancelledBy: ((_t = r.cancelled_by) != null ? _t : r.cancelledBy) || "",
-        adminMemo: ((_u = r.admin_memo) != null ? _u : r.adminMemo) || "",
-        printCount: Number((_w = (_v = r.print_count) != null ? _v : r.printCount) != null ? _w : 0),
-        pdfCount: Number((_y = (_x = r.pdf_count) != null ? _x : r.pdfCount) != null ? _y : 0),
-        imageCount: Number((_A = (_z = r.image_count) != null ? _z : r.imageCount) != null ? _A : 0),
-        lastOutputAt: ((_B = r.last_output_at) != null ? _B : r.lastOutputAt) || ""
-      };
-    };
+    const normalizeHistoryRecord = (r) => ({
+      id: r.id,
+      studentId: r.student_id ?? r.studentId,
+      studentName: r.student_name ?? r.studentName,
+      courseId: r.course_id ?? r.courseId,
+      courseName: r.course_name ?? r.courseName,
+      docType: r.doc_type ?? r.docType,
+      certNo: r.cert_no ?? r.certNo,
+      fullNo: r.full_no ?? r.fullNo,
+      issueDate: r.issue_date ?? r.issueDate,
+      issuedAt: r.issued_at ?? r.issuedAt,
+      issueReason: (r.issue_reason ?? r.issueReason) || "\uCD5C\uCD08\uBC1C\uAE09",
+      issueChannel: (r.issue_channel ?? r.issueChannel) || "\uBBF8\uB9AC\uBCF4\uAE30",
+      issueStatus: issueStatusLabel(r.issue_status ?? r.issueStatus),
+      completionStatus: (r.completion_status ?? r.completionStatus) || "\uBBF8\uC815",
+      attendanceRate: Number(r.attendance_rate ?? r.attendanceRate ?? 0),
+      issuedBy: (r.issued_by ?? r.issuedBy) || "\uC2DC\uC2A4\uD15C",
+      originalIssueId: (r.original_issue_id ?? r.originalIssueId) || "",
+      cancelledAt: (r.cancelled_at ?? r.cancelledAt) || "",
+      cancelReason: (r.cancel_reason ?? r.cancelReason) || "",
+      cancelledBy: (r.cancelled_by ?? r.cancelledBy) || "",
+      adminMemo: (r.admin_memo ?? r.adminMemo) || "",
+      printCount: Number(r.print_count ?? r.printCount ?? 0),
+      pdfCount: Number(r.pdf_count ?? r.pdfCount ?? 0),
+      imageCount: Number(r.image_count ?? r.imageCount ?? 0),
+      lastOutputAt: (r.last_output_at ?? r.lastOutputAt) || ""
+    });
     const [certHistory, setCertHistory] = useState(loadCertHistory);
     const [lastSyncedAt, setLastSyncedAt] = useState(null);
     const loadFromDB = React.useCallback(async () => {
@@ -6730,8 +6722,8 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
     const eligible = docType === "cert" ? certEligible : attendEligible;
     const docSeries = (dt) => dt === "cert" ? "\uBD81\uBD80\uAD50\uC721\uD300" : dt === "parti" ? "\uBD81\uBD80-\uCC38\uC5EC" : "\uBD81\uBD80-\uC218\uAC15";
     const normalizeCertNo = (value, fallback = "001") => {
-      const num = parseInt(String(value != null ? value : "").replace(/\D/g, ""), 10);
-      const base = parseInt(String(fallback != null ? fallback : "001").replace(/\D/g, ""), 10);
+      const num = parseInt(String(value ?? "").replace(/\D/g, ""), 10);
+      const base = parseInt(String(fallback ?? "001").replace(/\D/g, ""), 10);
       const safe = Number.isFinite(num) && num > 0 ? num : Number.isFinite(base) && base > 0 ? base : 1;
       return String(safe).padStart(3, "0");
     };
@@ -6790,8 +6782,8 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         issueStatus: "\uC815\uC0C1",
         completionStatus: s.enrollmentStatus || "\uC7AC\uD559\uC911",
         attendanceRate: Number(s.rate || 0),
-        issuedBy: (currentUser == null ? void 0 : currentUser.name) || "\uC2DC\uC2A4\uD15C",
-        originalIssueId: isReissue ? (latest == null ? void 0 : latest.originalIssueId) || (latest == null ? void 0 : latest.id) || (latestAny == null ? void 0 : latestAny.id) || "" : "",
+        issuedBy: currentUser?.name || "\uC2DC\uC2A4\uD15C",
+        originalIssueId: isReissue ? latest?.originalIssueId || latest?.id || latestAny?.id || "" : "",
         cancelledAt: "",
         cancelReason: "",
         cancelledBy: "",
@@ -6854,10 +6846,10 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         setCertHistory(nextHist);
         saveCertHistory(nextHist);
         saveCertIssuanceToDB(issuedRec);
-        addAudit == null ? void 0 : addAudit(
+        addAudit?.(
           issuedRec.issueReason === "\uCD5C\uCD08\uBC1C\uAE09" ? "\uC99D\uBA85\uC11C \uBC1C\uAE09" : "\uC99D\uBA85\uC11C \uC7AC\uBC1C\uAE09",
           `${issuedRec.studentName} \xB7 ${issuedRec.fullNo} \xB7 ${issuedRec.docType}`,
-          currentUser == null ? void 0 : currentUser.name
+          currentUser?.name
         );
       }
       window._pendingPreviewMeta = {
@@ -6962,7 +6954,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         await saveCertIssuanceToDB(rec);
       }
       if (newRecords.length > 0) {
-        addAudit == null ? void 0 : addAudit("\uC99D\uBA85\uC11C \uC77C\uAD04\uBC1C\uAE09", `${DOC_TYPE_NAMES[docType] || docType} ${newRecords.length}\uAC74 \uCC98\uB9AC`, currentUser == null ? void 0 : currentUser.name);
+        addAudit?.("\uC99D\uBA85\uC11C \uC77C\uAD04\uBC1C\uAE09", `${DOC_TYPE_NAMES[docType] || docType} ${newRecords.length}\uAC74 \uCC98\uB9AC`, currentUser?.name);
       }
     };
     const handleBatchRenumber = async () => {
@@ -6994,7 +6986,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
           full_no: u.fullNo
         }).catch((e) => console.warn("\uC77C\uAD04\uBC88\uD638 DB \uBC18\uC601 \uC2E4\uD328:", e))
       ));
-      addAudit == null ? void 0 : addAudit("\uC218\uB8CC\uC99D \uBC88\uD638 \uC77C\uAD04\uC218\uC815", `${course.name} ${updates.length}\uAC74`, currentUser == null ? void 0 : currentUser.name);
+      addAudit?.("\uC218\uB8CC\uC99D \uBC88\uD638 \uC77C\uAD04\uC218\uC815", `${course.name} ${updates.length}\uAC74`, currentUser?.name);
       alert(`\u2705 \uC218\uB8CC\uC99D \uBC88\uD638 ${updates.length}\uAC74\uC744 \uC77C\uAD04 \uC218\uC815\uD588\uC2B5\uB2C8\uB2E4.`);
     };
     const fmtDate = (raw) => {
@@ -7029,7 +7021,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       const nextHist = certHistory.map((r) => r.id === targetId ? nextRec : r);
       setCertHistory(nextHist);
       saveCertHistory(nextHist);
-      if ((selectedHistory == null ? void 0 : selectedHistory.id) === targetId) {
+      if (selectedHistory?.id === targetId) {
         setSelectedHistory(nextRec);
         setMemoDraft(nextRec.adminMemo || "");
       }
@@ -7054,7 +7046,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       } catch (e) {
         console.warn("\uBC1C\uAE09\uC774\uB825 DB \uAC31\uC2E0 \uC624\uB958:", e);
       }
-      addAudit == null ? void 0 : addAudit(auditAction, auditDetail || `${nextRec.studentName} \xB7 ${nextRec.fullNo}`, currentUser == null ? void 0 : currentUser.name);
+      addAudit?.(auditAction, auditDetail || `${nextRec.studentName} \xB7 ${nextRec.fullNo}`, currentUser?.name);
     };
     const handleToggleCancel = async (rec) => {
       if (historyBusyId) return;
@@ -7075,7 +7067,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
             issueStatus: "\uCDE8\uC18C",
             cancelledAt: (/* @__PURE__ */ new Date()).toISOString(),
             cancelReason: reason.trim() || "\uAD00\uB9AC\uC790 \uCDE8\uC18C",
-            cancelledBy: (currentUser == null ? void 0 : currentUser.name) || "\uC2DC\uC2A4\uD15C"
+            cancelledBy: currentUser?.name || "\uC2DC\uC2A4\uD15C"
           }, "\uC99D\uBA85\uC11C \uBC1C\uAE09\uCDE8\uC18C", `${rec.studentName} \xB7 ${rec.fullNo}`);
         }
       } finally {
@@ -7089,7 +7081,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
     };
     useEffect(() => {
       const handler = async (evt) => {
-        const d = (evt == null ? void 0 : evt.detail) || {};
+        const d = evt?.detail || {};
         if (!d.certIssueId) return;
         const target = certHistory.find((r) => r.id === d.certIssueId);
         if (!target) return;
@@ -7291,7 +7283,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       setCertHistory((prev) => {
         const next = prev.filter((r) => r.docType !== docType);
         saveCertHistory(next);
-        addAudit == null ? void 0 : addAudit("\uC99D\uBA85\uC11C \uC774\uB825 \uCD08\uAE30\uD654", `${DOC_TYPE_NAMES[docType] || docType}`, currentUser == null ? void 0 : currentUser.name);
+        addAudit?.("\uC99D\uBA85\uC11C \uC774\uB825 \uCD08\uAE30\uD654", `${DOC_TYPE_NAMES[docType] || docType}`, currentUser?.name);
         return next;
       });
       sbDelete("cert_issuances", `doc_type=eq.${encodeURIComponent(docType)}`).then(({ error }) => {
@@ -7531,20 +7523,19 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
     const handlePrint = () => {
       if (!iframeRef.current || !iframeRef.current.contentWindow) return;
       iframeRef.current.contentWindow.print();
-      if (meta == null ? void 0 : meta.certIssueId) {
+      if (meta?.certIssueId) {
         window.dispatchEvent(new CustomEvent("cert-print-action", { detail: { ...meta, action: "print" } }));
       }
     };
     const handlePDF = async () => {
-      var _a, _b;
       if (!iframeRef.current) return;
       setExporting(true);
       try {
-        const el = (_b = (_a = iframeRef.current.contentDocument) == null ? void 0 : _a.body) == null ? void 0 : _b.firstElementChild;
+        const el = iframeRef.current.contentDocument?.body?.firstElementChild;
         if (el) {
           const fname = generatePrintFilename(docType, "", "", "pdf");
           await generatePDF(el, { orientation, filename: fname });
-          if (meta == null ? void 0 : meta.certIssueId) {
+          if (meta?.certIssueId) {
             window.dispatchEvent(new CustomEvent("cert-print-action", { detail: { ...meta, action: "pdf" } }));
           }
         }
@@ -7554,11 +7545,10 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       setExporting(false);
     };
     const handleImage = async () => {
-      var _a, _b;
       if (!iframeRef.current) return;
       setExporting(true);
       try {
-        const el = (_b = (_a = iframeRef.current.contentDocument) == null ? void 0 : _a.body) == null ? void 0 : _b.firstElementChild;
+        const el = iframeRef.current.contentDocument?.body?.firstElementChild;
         if (!el) {
           setExporting(false);
           return;
@@ -7572,7 +7562,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         a.href = canvas.toDataURL("image/png");
         a.download = generatePrintFilename(docType, "", "", "png");
         a.click();
-        if (meta == null ? void 0 : meta.certIssueId) {
+        if (meta?.certIssueId) {
           window.dispatchEvent(new CustomEvent("cert-print-action", { detail: { ...meta, action: "image" } }));
         }
       } catch (err) {
@@ -7721,7 +7711,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
           dropoutReason: newStatus === "\uC911\uB3C4\uD0C8\uB77D" ? dropoutReason : null,
           reasonDetail: newStatus === "\uC911\uB3C4\uD0C8\uB77D" && dropoutReason === "\uAE30\uD0C0" ? reasonDetail : null,
           employerName: newStatus === "\uC870\uAE30\uCDE8\uC5C5" ? employerName : null,
-          changedBy: (currentUser == null ? void 0 : currentUser.name) || "\uC2DC\uC2A4\uD15C"
+          changedBy: currentUser?.name || "\uC2DC\uC2A4\uD15C"
         });
         if (result.warning && !window.confirm(result.warning)) {
           setSaving(false);
@@ -7805,7 +7795,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
           fontSize: 12,
           transition: "all .15s"
         } }, st);
-      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\uBCC0\uACBD\uC77C ", /* @__PURE__ */ React.createElement("span", { style: { color: T.danger } }, "*")), /* @__PURE__ */ React.createElement("input", { type: "date", value: changeDate, onChange: (e) => setChangeDate(e.target.value), style: inp })), newStatus === "\uC911\uB3C4\uD0C8\uB77D" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\uD0C8\uB77D \uC0AC\uC720 ", /* @__PURE__ */ React.createElement("span", { style: { color: T.danger } }, "*")), /* @__PURE__ */ React.createElement("select", { value: dropoutReason, onChange: (e) => setDropoutReason(e.target.value), style: inp }, DROPOUT_REASONS.map((r) => /* @__PURE__ */ React.createElement("option", { key: r, value: r }, r)))), dropoutReason === "\uAE30\uD0C0" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\uAE30\uD0C0 \uC0AC\uC720 \uC0C1\uC138 ", /* @__PURE__ */ React.createElement("span", { style: { color: T.danger } }, "*")), /* @__PURE__ */ React.createElement(
+      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, newStatus === "\uC870\uAE30\uCDE8\uC5C5" ? "\uC870\uAE30\uCDE8\uC5C5\uC77C" : newStatus === "\uC911\uB3C4\uD0C8\uB77D" ? "\uC911\uB3C4\uD0C8\uB77D\uC77C" : "\uBCC0\uACBD\uC77C", " ", /* @__PURE__ */ React.createElement("span", { style: { color: T.danger } }, "*")), /* @__PURE__ */ React.createElement("input", { type: "date", value: changeDate, onChange: (e) => setChangeDate(e.target.value), style: inp }), newStatus === "\uC870\uAE30\uCDE8\uC5C5" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#6B21A8", marginTop: 5, lineHeight: 1.5 } }, "\uC774 \uB0A0\uC9DC \uC774\uD6C4 \uCD9C\uACB0\uC740 \uC81C\uC678\uB418\uACE0, \uC218\uB8CC \uAE30\uC900 \uC2DC\uAC04\uC740 \uADF8\uB0A0\uAE4C\uC9C0 \uBE44\uB840 \uACC4\uC0B0\uB429\uB2C8\uB2E4.", course?.dateFrom && course?.dateTo ? ` \uACFC\uC815 \uAE30\uAC04 ${course.dateFrom} ~ ${course.dateTo}.` : "")), newStatus === "\uC911\uB3C4\uD0C8\uB77D" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\uD0C8\uB77D \uC0AC\uC720 ", /* @__PURE__ */ React.createElement("span", { style: { color: T.danger } }, "*")), /* @__PURE__ */ React.createElement("select", { value: dropoutReason, onChange: (e) => setDropoutReason(e.target.value), style: inp }, DROPOUT_REASONS.map((r) => /* @__PURE__ */ React.createElement("option", { key: r, value: r }, r)))), dropoutReason === "\uAE30\uD0C0" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\uAE30\uD0C0 \uC0AC\uC720 \uC0C1\uC138 ", /* @__PURE__ */ React.createElement("span", { style: { color: T.danger } }, "*")), /* @__PURE__ */ React.createElement(
         "input",
         {
           value: reasonDetail,
@@ -7966,9 +7956,8 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
     );
   };
   const EditModal = ({ student, onSave, onClose, isNew = false, courses = COURSES, allStudents = [] }) => {
-    var _a, _b;
     const empty = {
-      cid: ((_a = courses[0]) == null ? void 0 : _a.id) || 1,
+      cid: courses[0]?.id || 1,
       name: "",
       gender: "\uB0A8",
       birth: "",
@@ -7998,7 +7987,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       if (t.getMonth() < b.getMonth() || t.getMonth() === b.getMonth() && t.getDate() < b.getDate()) a--;
       return isNaN(a) ? "" : `\uB9CC ${a}\uC138`;
     })();
-    const gradeColor = (g) => (g == null ? void 0 : g.startsWith("A")) ? T.ok : (g == null ? void 0 : g.startsWith("B")) ? T.warn : T.danger;
+    const gradeColor = (g) => g?.startsWith("A") ? T.ok : g?.startsWith("B") ? T.warn : T.danger;
     const selStyle = {
       width: "100%",
       padding: "8px 10px",
@@ -8159,7 +8148,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
         fontSize: 16,
         fontWeight: 900,
         color: "#fff"
-      } }, form.itvGrade || "?"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: T.tx } }, form.name || "(\uC774\uB984 \uC5C6\uC74C)", " \xB7 ", form.itvScore || "-", "\uC810 \xB7 ", form.itvPass ? "\uD569\uACA9" : "\uBD88\uD569\uACA9"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 2 } }, (_b = courses.find((c) => c.id === form.cid)) == null ? void 0 : _b.name, " \xB7 ", form.itvDate || "-"))), /* @__PURE__ */ React.createElement(FLD, { label: "\uD2B9\uC774\uC0AC\uD56D \xB7 \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement(
+      } }, form.itvGrade || "?"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: T.tx } }, form.name || "(\uC774\uB984 \uC5C6\uC74C)", " \xB7 ", form.itvScore || "-", "\uC810 \xB7 ", form.itvPass ? "\uD569\uACA9" : "\uBD88\uD569\uACA9"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginTop: 2 } }, courses.find((c) => c.id === form.cid)?.name, " \xB7 ", form.itvDate || "-"))), /* @__PURE__ */ React.createElement(FLD, { label: "\uD2B9\uC774\uC0AC\uD56D \xB7 \uBA54\uBAA8" }, /* @__PURE__ */ React.createElement(
         "textarea",
         {
           value: form.memo || "",
@@ -8603,14 +8592,8 @@ ${selectedCourseName}
       const wb = XLSX.utils.book_new();
       const rows = instructors.map((inst) => {
         const sched = calcInstSchedule(inst);
-        const courseNames = (inst.cids || []).map((cid) => {
-          var _a;
-          return ((_a = courses.find((c) => c.id === cid)) == null ? void 0 : _a.name) || "";
-        }).filter(Boolean).join(", ");
-        const courseCodes = (inst.cids || []).map((cid) => {
-          var _a;
-          return ((_a = courses.find((c) => c.id === cid)) == null ? void 0 : _a.code) || "";
-        }).filter(Boolean).join(", ");
+        const courseNames = (inst.cids || []).map((cid) => courses.find((c) => c.id === cid)?.name || "").filter(Boolean).join(", ");
+        const courseCodes = (inst.cids || []).map((cid) => courses.find((c) => c.id === cid)?.code || "").filter(Boolean).join(", ");
         return {
           "\uC774\uB984": inst.name,
           "\uAD6C\uBD84": inst.type,
@@ -8663,7 +8646,7 @@ ${selectedCourseName}
     };
     const handleSave = async (inst) => {
       const isSchemaErr = (e, col) => {
-        const m = (e == null ? void 0 : e.message) || (e == null ? void 0 : e.hint) || JSON.stringify(e);
+        const m = e?.message || e?.hint || JSON.stringify(e);
         return m.includes("schema cache") && m.includes(col);
       };
       const doSave = async (body) => isNew ? sbInsert("instructors", body) : sbUpdate("instructors", `id=eq.${inst.id}`, body);
@@ -8795,53 +8778,50 @@ ${selectedCourseName}
           setEdit({});
         } }, /* @__PURE__ */ React.createElement(Icon, { n: "plus", s: 13 }), " \uAC15\uC0AC \uCD94\uAC00"))
       }
-    ), /* @__PURE__ */ React.createElement(SyncPanel, { dbStatus, rtStatus, lastOp, count: instructors.length }), /* @__PURE__ */ React.createElement(Card, { style: { padding: "14px 18px", marginBottom: 14, background: todayInstructors.length > 0 ? T.pbg : T.s2 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: todayInstructors.length > 0 ? T.p : T.mu, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } }, "\u{1F393} \uC624\uB298 \uAC15\uC758 \uAC15\uC0AC", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 600, color: T.mu } }, "(", (/* @__PURE__ */ new Date()).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" }), ")")), todayInstructors.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, todayInstructors.map(({ inst, todayCourses, courseCount }) => {
-      var _a, _b, _c, _d;
-      return /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          key: inst.id,
-          onClick: () => {
-            setExpandedId(inst.id);
-            setTimeout(() => {
-              const el = document.getElementById(`inst-card-${inst.id}`);
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 100);
-          },
-          style: {
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 5,
-            padding: "5px 12px",
-            borderRadius: 20,
-            border: "none",
-            cursor: "pointer",
-            background: T.s,
-            boxShadow: "0 1px 3px rgba(0,0,0,.08)",
-            fontSize: 12,
-            fontWeight: 700,
-            color: T.tx,
-            transition: "all .15s"
-          }
+    ), /* @__PURE__ */ React.createElement(SyncPanel, { dbStatus, rtStatus, lastOp, count: instructors.length }), /* @__PURE__ */ React.createElement(Card, { style: { padding: "14px 18px", marginBottom: 14, background: todayInstructors.length > 0 ? T.pbg : T.s2 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: todayInstructors.length > 0 ? T.p : T.mu, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } }, "\u{1F393} \uC624\uB298 \uAC15\uC758 \uAC15\uC0AC", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 600, color: T.mu } }, "(", (/* @__PURE__ */ new Date()).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" }), ")")), todayInstructors.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, todayInstructors.map(({ inst, todayCourses, courseCount }) => /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: inst.id,
+        onClick: () => {
+          setExpandedId(inst.id);
+          setTimeout(() => {
+            const el = document.getElementById(`inst-card-${inst.id}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 100);
         },
-        /* @__PURE__ */ React.createElement("span", { style: {
-          width: 22,
-          height: 22,
-          borderRadius: 7,
-          flexShrink: 0,
-          background: `${typeColors[inst.type] || T.p}18`,
-          color: typeColors[inst.type] || T.p,
-          display: "flex",
+        style: {
+          display: "inline-flex",
           alignItems: "center",
-          justifyContent: "center",
-          fontSize: 10,
-          fontWeight: 900
-        } }, inst.name[0]),
-        inst.name,
-        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu, fontWeight: 600 } }, "\xB7 ", courseCount > 1 ? `${courseCount}\uACFC\uC815` : ((_b = (_a = todayCourses[0]) == null ? void 0 : _a.course) == null ? void 0 : _b.code) || ""),
-        ((_d = (_c = todayCourses[0]) == null ? void 0 : _c.course) == null ? void 0 : _d.schedTimeFrom) && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: T.p, fontWeight: 600 } }, todayCourses[0].course.schedTimeFrom, "~", todayCourses[0].course.schedTimeTo)
-      );
-    })) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.mu } }, "\uC624\uB298 \uC608\uC815\uB41C \uAC15\uC758 \uAC15\uC0AC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement(Card, { style: { padding: "12px 16px", marginBottom: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(
+          gap: 5,
+          padding: "5px 12px",
+          borderRadius: 20,
+          border: "none",
+          cursor: "pointer",
+          background: T.s,
+          boxShadow: "0 1px 3px rgba(0,0,0,.08)",
+          fontSize: 12,
+          fontWeight: 700,
+          color: T.tx,
+          transition: "all .15s"
+        }
+      },
+      /* @__PURE__ */ React.createElement("span", { style: {
+        width: 22,
+        height: 22,
+        borderRadius: 7,
+        flexShrink: 0,
+        background: `${typeColors[inst.type] || T.p}18`,
+        color: typeColors[inst.type] || T.p,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 10,
+        fontWeight: 900
+      } }, inst.name[0]),
+      inst.name,
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: T.mu, fontWeight: 600 } }, "\xB7 ", courseCount > 1 ? `${courseCount}\uACFC\uC815` : todayCourses[0]?.course?.code || ""),
+      todayCourses[0]?.course?.schedTimeFrom && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: T.p, fontWeight: 600 } }, todayCourses[0].course.schedTimeFrom, "~", todayCourses[0].course.schedTimeTo)
+    ))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: T.mu } }, "\uC624\uB298 \uC608\uC815\uB41C \uAC15\uC758 \uAC15\uC0AC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement(Card, { style: { padding: "12px 16px", marginBottom: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(
       "input",
       {
         value: search,
@@ -8953,7 +8933,7 @@ ${selectedCourseName}
             borderRadius: 12,
             background: `${c.cc}12`,
             color: c.cc
-          } }, c.code, (cd == null ? void 0 : cd.hasToday) && /* @__PURE__ */ React.createElement("span", { style: {
+          } }, c.code, cd?.hasToday && /* @__PURE__ */ React.createElement("span", { style: {
             width: 5,
             height: 5,
             borderRadius: "50%",
@@ -9020,7 +9000,7 @@ ${selectedCourseName}
           const dtKey = `${inst.id}-${cd.course.id}`;
           const showDates = dateToggleIds[dtKey];
           const monthGroups = groupDatesByMonth(cd.dates);
-          const isEditingThis = (editingCustomDates == null ? void 0 : editingCustomDates.instId) === inst.id && (editingCustomDates == null ? void 0 : editingCustomDates.courseId) === cd.course.id;
+          const isEditingThis = editingCustomDates?.instId === inst.id && editingCustomDates?.courseId === cd.course.id;
           const allMonthGroups = groupDatesByMonth(cd.allCourseDates || cd.dates);
           return /* @__PURE__ */ React.createElement("div", { key: cd.course.id, style: {
             marginBottom: 12,
@@ -9296,7 +9276,6 @@ ${selectedCourseName}
     { id: 16, floor: 3, name: "\uBD84\uC784\uD1A0\uC758\uC2E4", addr: "3\uCE35", capacity: 15, equip: "\uC6D0\uD615 \uD14C\uC774\uBE14\xB7\uD654\uC774\uD2B8\uBCF4\uB4DC" }
   ];
   const BookModal = ({ init, onClose, rooms, bookings, courses, setBookings, onSave, onDelete }) => {
-    var _a, _b, _c;
     const inp = {
       width: "100%",
       padding: "8px 10px",
@@ -9307,11 +9286,11 @@ ${selectedCourseName}
       color: T.tx,
       background: T.s2
     };
-    const firstCourseId = ((_a = courses[0]) == null ? void 0 : _a.id) || 1;
+    const firstCourseId = courses[0]?.id || 1;
     const empty = {
-      roomId: ((_b = rooms[0]) == null ? void 0 : _b.id) || 1,
+      roomId: rooms[0]?.id || 1,
       courseId: firstCourseId,
-      label: ((_c = courses[0]) == null ? void 0 : _c.name) || "",
+      label: courses[0]?.name || "",
       start: "",
       end: "",
       color: getCourseColor(firstCourseId, courses)
@@ -9319,7 +9298,7 @@ ${selectedCourseName}
     };
     const [form, setForm] = useState(init || empty);
     const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-    const isEdit = !!(init == null ? void 0 : init.id);
+    const isEdit = !!init?.id;
     const daysOverlap = (daysA, daysB) => {
       if (!daysA || !daysB) return true;
       const setA = new Set(daysA.split(/[,\s]+/).map((d) => d.trim()).filter(Boolean));
@@ -9336,7 +9315,7 @@ ${selectedCourseName}
     const getCourseSchedule = (courseId) => courses.find((c) => c.id === courseId) || {};
     const conflicts = form.start && form.end && form.roomId ? bookings.filter((b) => {
       if (b.roomId !== form.roomId) return false;
-      if (b.id === (init == null ? void 0 : init.id)) return false;
+      if (b.id === init?.id) return false;
       if (b.start > form.end || b.end < form.start) return false;
       const bCourse = getCourseSchedule(b.courseId);
       const fCourse = getCourseSchedule(form.courseId);
@@ -9410,7 +9389,7 @@ ${selectedCourseName}
         setForm((p) => ({
           ...p,
           courseId: cid,
-          label: (c == null ? void 0 : c.name) || "",
+          label: c?.name || "",
           color: getCourseColor(cid, courses)
           // ← 과정 선택 시 색상 자동 설정
         }));
@@ -9499,7 +9478,7 @@ ${conflicts.map((b) => `\u2022 ${b.label} (${b.start}~${b.end})`).join("\n")}
     const empty = { floor: 1, name: "", addr: "", capacity: 20, equip: "" };
     const [form, setForm] = useState(room || empty);
     const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-    const isEdit = !!(room == null ? void 0 : room.id);
+    const isEdit = !!room?.id;
     return /* @__PURE__ */ React.createElement(
       "div",
       {
@@ -9675,7 +9654,6 @@ ${conflicts.map((b) => `\u2022 ${b.label} (${b.start}~${b.end})`).join("\n")}
       borderRadius: 6,
       overflow: "hidden"
     } }, /* @__PURE__ */ React.createElement("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, room.name)), Array.from({ length: daysInMonth }).map((_, dayIdx) => {
-      var _a;
       const ds = dateStr(dayIdx + 1);
       const dayBooks = bookings.filter((b) => b.roomId === room.id && b.start <= ds && b.end >= ds);
       const conflict = dayBooks.length > 1;
@@ -9687,7 +9665,7 @@ ${conflicts.map((b) => `\u2022 ${b.label} (${b.start}~${b.end})`).join("\n")}
           onClick: () => {
             if (dayBooks.length > 0 && onEditBook) onEditBook(dayBooks[0]);
           },
-          title: conflict ? "\u26A0\uFE0F \uC911\uBCF5 \uC608\uC57D!" : ((_a = dayBooks[0]) == null ? void 0 : _a.label) || "",
+          title: conflict ? "\u26A0\uFE0F \uC911\uBCF5 \uC608\uC57D!" : dayBooks[0]?.label || "",
           style: {
             height: 28,
             borderRadius: 4,
@@ -9790,8 +9768,8 @@ ${conflicts.map((b) => `\u2022 ${b.label} (${b.start}~${b.end})`).join("\n")}
       };
     }, []);
     const _roomErrMsg = (err, prefix) => {
-      const m = (err == null ? void 0 : err.message) || String(err);
-      const is404 = (err == null ? void 0 : err.code) === "42P01" || m.includes("does not exist") || m.includes("404");
+      const m = err?.message || String(err);
+      const is404 = err?.code === "42P01" || m.includes("does not exist") || m.includes("404");
       if (is404) {
         return `${prefix}: 'rooms' \uD14C\uC774\uBE14\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.
 Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD589\uD558\uC138\uC694.`;
@@ -9834,8 +9812,8 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
         } else {
           const { data, error } = await sbInsert("room_bookings", fromBooking(book));
           if (error) {
-            const m = (error == null ? void 0 : error.message) || String(error);
-            if (m.includes("does not exist") || m.includes("404") || (error == null ? void 0 : error.code) === "42P01") {
+            const m = error?.message || String(error);
+            if (m.includes("does not exist") || m.includes("404") || error?.code === "42P01") {
               console.warn("\u26A0\uFE0F room_bookings \uD14C\uC774\uBE14 \uC5C6\uC74C \u2014 \uB85C\uCEEC \uC800\uC7A5.");
               alert("\uAC15\uC758\uC2E4 \uC608\uC57D \uD14C\uC774\uBE14\uC774 \uC5C6\uC5B4 \uC774\uBC88 \uC138\uC158\uC5D0\uB9CC \uC784\uC2DC \uC800\uC7A5\uB429\uB2C8\uB2E4.\nSupabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD589\uD558\uBA74 \uC601\uAD6C \uC800\uC7A5\uB429\uB2C8\uB2E4.");
               setBookings((p) => [...p, { ...book, id: Date.now() }]);
@@ -10209,7 +10187,7 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
             background: "#FEE2E2",
             padding: "1px 5px",
             borderRadius: 3
-          } }, "\uC911\uBCF5")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, r == null ? void 0 : r.name, " \xB7 ", b.start, " ~ ", b.end)),
+          } }, "\uC911\uBCF5")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu } }, r?.name, " \xB7 ", b.start, " ~ ", b.end)),
           /* @__PURE__ */ React.createElement(Icon, { n: "edit", s: 12 })
         );
       })));
@@ -10232,9 +10210,8 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
     ));
   };
   const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) => {
-    var _a;
     const [tab, setTab] = useState("status");
-    const [selCid, setSelCid] = useState(((_a = courses[0]) == null ? void 0 : _a.id) || 0);
+    const [selCid, setSelCid] = useState(courses[0]?.id || 0);
     const [confirmAll, setConfirmAll] = useState(false);
     const [confirmCourse, setConfirmCourse] = useState(false);
     const stats = courses.map((c) => {
@@ -10257,9 +10234,9 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
           "\uC8FC\uBBFC\uB4F1\uB85D\uBC88\uD638": idNum,
           "\uC5F0\uB77D\uCC98": s.phone,
           "\uAC70\uC8FC\uC2DC\uAD70": s.addrCity || "",
-          "\uACFC\uC815\uCF54\uB4DC": (c == null ? void 0 : c.code) || "",
-          "\uACFC\uC815\uBA85": (c == null ? void 0 : c.name) || "",
-          "\uBD84\uC57C": (c == null ? void 0 : c.cat) || "",
+          "\uACFC\uC815\uCF54\uB4DC": c?.code || "",
+          "\uACFC\uC815\uBA85": c?.name || "",
+          "\uBD84\uC57C": c?.cat || "",
           "\uBA74\uC811\uC77C": s.itvDate || "",
           "\uBA74\uC811\uC810\uC218": s.itvScore || "",
           "\uBA74\uC811\uB4F1\uAE09": s.itvGrade || "",
@@ -10322,11 +10299,11 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(rows);
       ws["!cols"] = [8, 5, 12, 14, 14, 10, 12, 8, 8, 8, 20, 8, 8].map((w) => ({ wch: w }));
-      XLSX.utils.book_append_sheet(wb, ws, (c == null ? void 0 : c.code) || "\uACFC\uC815");
+      XLSX.utils.book_append_sheet(wb, ws, c?.code || "\uACFC\uC815");
       const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([out], { type: "application/octet-stream" }));
-      a.download = `${(c == null ? void 0 : c.code) || "\uACFC\uC815"}_\uD6C8\uB828\uC0DD_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.xlsx`;
+      a.download = `${c?.code || "\uACFC\uC815"}_\uD6C8\uB828\uC0DD_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.xlsx`;
       a.click();
     };
     const TAB_ITEMS_DM = [
@@ -10614,8 +10591,7 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
     { id: 3, name: "\uC774\uB2F4\uB2F9", role: "staff", pw: "gjf2026" }
   ];
   const LoginScreen = ({ onLogin, accounts }) => {
-    var _a;
-    const [selId, setSelId] = useState(((_a = accounts[0]) == null ? void 0 : _a.id) || 1);
+    const [selId, setSelId] = useState(accounts[0]?.id || 1);
     const [pw, setPw] = useState("");
     const [showPw, setShowPw] = useState(false);
     const [error, setError] = useState("");
@@ -10929,56 +10905,53 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
       fontSize: 10,
       fontWeight: 700,
       color: T.mu
-    } }, /* @__PURE__ */ React.createElement("div", null, "\uB2F4\uB2F9\uC790"), /* @__PURE__ */ React.createElement("div", null, "\uB0B4\uC6A9"), /* @__PURE__ */ React.createElement("div", null, "\uC2DC\uAC01"), /* @__PURE__ */ React.createElement("div", null)), visible.slice(0, MAX_VISIBLE_LOGS).map((e) => {
-      var _a;
-      return /* @__PURE__ */ React.createElement(
-        "div",
+    } }, /* @__PURE__ */ React.createElement("div", null, "\uB2F4\uB2F9\uC790"), /* @__PURE__ */ React.createElement("div", null, "\uB0B4\uC6A9"), /* @__PURE__ */ React.createElement("div", null, "\uC2DC\uAC01"), /* @__PURE__ */ React.createElement("div", null)), visible.slice(0, MAX_VISIBLE_LOGS).map((e) => /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        key: e.id,
+        className: "row-hover",
+        style: {
+          display: "grid",
+          gridTemplateColumns: "72px 1fr 88px 36px",
+          padding: "9px 12px",
+          borderBottom: `1px solid ${T.bd}`,
+          alignItems: "center"
+        }
+      },
+      /* @__PURE__ */ React.createElement("div", { style: {
+        fontSize: 11,
+        fontWeight: 600,
+        color: T.tx,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
+      } }, e.who),
+      /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Chip, { label: e.action, bg: actionBg(e.action), color: actionColor(e.action) }), /* @__PURE__ */ React.createElement("div", { style: {
+        fontSize: 10,
+        color: T.mu,
+        marginTop: 3,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
+      } }, e.detail)),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: T.mu, lineHeight: 1.5 } }, e.when?.slice(0, 16).replace("T", "\n") || ""),
+      /* @__PURE__ */ React.createElement(
+        "button",
         {
-          key: e.id,
-          className: "row-hover",
+          onClick: () => setDetailLog(e),
           style: {
-            display: "grid",
-            gridTemplateColumns: "72px 1fr 88px 36px",
-            padding: "9px 12px",
-            borderBottom: `1px solid ${T.bd}`,
-            alignItems: "center"
+            fontSize: 10,
+            color: T.p,
+            cursor: "pointer",
+            border: "none",
+            background: "none",
+            fontWeight: 700,
+            padding: "4px 0"
           }
         },
-        /* @__PURE__ */ React.createElement("div", { style: {
-          fontSize: 11,
-          fontWeight: 600,
-          color: T.tx,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap"
-        } }, e.who),
-        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Chip, { label: e.action, bg: actionBg(e.action), color: actionColor(e.action) }), /* @__PURE__ */ React.createElement("div", { style: {
-          fontSize: 10,
-          color: T.mu,
-          marginTop: 3,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap"
-        } }, e.detail)),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: T.mu, lineHeight: 1.5 } }, ((_a = e.when) == null ? void 0 : _a.slice(0, 16).replace("T", "\n")) || ""),
-        /* @__PURE__ */ React.createElement(
-          "button",
-          {
-            onClick: () => setDetailLog(e),
-            style: {
-              fontSize: 10,
-              color: T.p,
-              cursor: "pointer",
-              border: "none",
-              background: "none",
-              fontWeight: 700,
-              padding: "4px 0"
-            }
-          },
-          "\uC0C1\uC138"
-        )
-      );
-    }), visible.length > MAX_VISIBLE_LOGS && /* @__PURE__ */ React.createElement("div", { style: { padding: "10px 12px", textAlign: "center", fontSize: 11, color: T.mu, background: T.s2 } }, "\uCD5C\uADFC ", MAX_VISIBLE_LOGS, "\uAC74\uB9CC \uD45C\uC2DC (\uC804\uCCB4 ", visible.length, "\uAC74)")));
+        "\uC0C1\uC138"
+      )
+    )), visible.length > MAX_VISIBLE_LOGS && /* @__PURE__ */ React.createElement("div", { style: { padding: "10px 12px", textAlign: "center", fontSize: 11, color: T.mu, background: T.s2 } }, "\uCD5C\uADFC ", MAX_VISIBLE_LOGS, "\uAC74\uB9CC \uD45C\uC2DC (\uC804\uCCB4 ", visible.length, "\uAC74)")));
   };
   const AccountMgmt = ({ accounts, onSave, onClose, currentUser, auditLog = [] }) => {
     const [list, setList] = useState(accounts.map((a) => ({ ...a })));
@@ -11616,11 +11589,11 @@ ${formatCoursePeriod(c)}
           setCourse(c);
           const { data: sData, error: sErr } = await sbGet("students", `select=*&cid=eq.${c.id}&order=name`);
           if (sErr) {
-            const msg = (sErr == null ? void 0 : sErr.message) || String(sErr);
+            const msg = sErr?.message || String(sErr);
             if (msg.includes("schema cache") && msg.includes("cid")) {
               throw new Error("DB \uC124\uC815 \uC624\uB958: Supabase \uB300\uC2DC\uBCF4\uB4DC \u2192 Settings \u2192 API \u2192 Schema Cache \u2192 Reload \uBC84\uD2BC\uC744 \uD074\uB9AD\uD55C \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD558\uC138\uC694.");
             }
-            console.warn("\uD559\uC0DD \uBAA9\uB85D \uB85C\uB4DC \uC624\uB958 (SEED \uD3F4\uBC31):", (sErr == null ? void 0 : sErr.message) || sErr);
+            console.warn("\uD559\uC0DD \uBAA9\uB85D \uB85C\uB4DC \uC624\uB958 (SEED \uD3F4\uBC31):", sErr?.message || sErr);
             const fallback = SEED_STUDENTS.filter((s) => Number(s.cid) === Number(c.id));
             setStudents(fallback.map(toStudent));
           } else {
@@ -11646,14 +11619,14 @@ ${formatCoursePeriod(c)}
           "attendance",
           `select=id,check_in,check_out,status,manual_add_hours,manual_deduct_hours,manual_reason,manual_memo,manual_updated_at&student_id=eq.${student.id}&date=eq.${date}&limit=1`
         );
-        const existing = (existingData == null ? void 0 : existingData[0]) || null;
-        if (type === "in" && (existing == null ? void 0 : existing.check_in)) {
+        const existing = existingData?.[0] || null;
+        if (type === "in" && existing?.check_in) {
           setCheckedId(student.id);
           setCheckedTime(existing.check_in);
           setStatus("duplicate");
           return;
         }
-        if (type === "out" && (existing == null ? void 0 : existing.check_out)) {
+        if (type === "out" && existing?.check_out) {
           setCheckedId(student.id);
           setCheckedTime(existing.check_out);
           setStatus("duplicate");
@@ -11661,15 +11634,15 @@ ${formatCoursePeriod(c)}
         }
         const now = /* @__PURE__ */ new Date();
         const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-        let attStatus = (existing == null ? void 0 : existing.status) || "U";
+        let attStatus = existing?.status || "U";
         if (type === "in") {
           attStatus = "O";
-        } else if (type === "out" && (existing == null ? void 0 : existing.check_in)) {
+        } else if (type === "out" && existing?.check_in) {
           try {
             const inParts = existing.check_in.match(/^(\d{1,2}):(\d{2})$/);
             const outParts = time.match(/^(\d{1,2}):(\d{2})$/);
-            const schedFrom = (course == null ? void 0 : course.schedTimeFrom) || "";
-            const schedTo = (course == null ? void 0 : course.schedTimeTo) || "";
+            const schedFrom = course?.schedTimeFrom || "";
+            const schedTo = course?.schedTimeTo || "";
             const fromParts = schedFrom.match(/^(\d{1,2}):(\d{2})$/);
             const toParts = schedTo.match(/^(\d{1,2}):(\d{2})$/);
             if (inParts && outParts && fromParts && toParts) {
@@ -11677,12 +11650,12 @@ ${formatCoursePeriod(c)}
               const outMins = parseInt(outParts[1]) * 60 + parseInt(outParts[2]);
               const totalDay = parseInt(toParts[1]) * 60 + parseInt(toParts[2]) - (parseInt(fromParts[1]) * 60 + parseInt(fromParts[2]));
               const attended = outMins - inMins;
-              attStatus = totalDay > 0 && attended < totalDay * 0.5 ? "A" : (existing == null ? void 0 : existing.status) || "O";
+              attStatus = totalDay > 0 && attended < totalDay * 0.5 ? "A" : existing?.status || "O";
             } else {
-              attStatus = (existing == null ? void 0 : existing.status) || "O";
+              attStatus = existing?.status || "O";
             }
           } catch (_e) {
-            attStatus = (existing == null ? void 0 : existing.status) || "O";
+            attStatus = existing?.status || "O";
           }
         }
         const { error } = await sbUpsert("attendance", [{
@@ -11690,14 +11663,14 @@ ${formatCoursePeriod(c)}
           student_id: student.id,
           date,
           status: attStatus,
-          check_in: type === "in" ? time : (existing == null ? void 0 : existing.check_in) || null,
-          check_out: type === "out" ? time : (existing == null ? void 0 : existing.check_out) || null,
+          check_in: type === "in" ? time : existing?.check_in || null,
+          check_out: type === "out" ? time : existing?.check_out || null,
           method: "qr",
-          manual_add_hours: (existing == null ? void 0 : existing.manual_add_hours) || 0,
-          manual_deduct_hours: (existing == null ? void 0 : existing.manual_deduct_hours) || 0,
-          manual_reason: (existing == null ? void 0 : existing.manual_reason) || null,
-          manual_memo: (existing == null ? void 0 : existing.manual_memo) || null,
-          manual_updated_at: (existing == null ? void 0 : existing.manual_updated_at) || null
+          manual_add_hours: existing?.manual_add_hours || 0,
+          manual_deduct_hours: existing?.manual_deduct_hours || 0,
+          manual_reason: existing?.manual_reason || null,
+          manual_memo: existing?.manual_memo || null,
+          manual_updated_at: existing?.manual_updated_at || null
         }], "student_id,date,course_id");
         if (error) throw error;
         setCheckedId(student.id);
@@ -11774,7 +11747,7 @@ ${formatCoursePeriod(c)}
         padding: "36px 28px",
         boxShadow: "0 12px 48px rgba(0,0,0,.10)",
         border: `1px solid ${typeColor}20`
-      } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 64, marginBottom: 8 } }, isDup ? "\u{1F514}" : "\u2705"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#1E293B" } }, isDup ? "\uC774\uBBF8 \uCCB4\uD06C\uB418\uC5C8\uC2B5\uB2C8\uB2E4" : `${typeLabel} \uC644\uB8CC!`), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: typeColor, marginTop: 10 } }, s == null ? void 0 : s.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 8, lineHeight: 1.8 } }, course == null ? void 0 : course.name, /* @__PURE__ */ React.createElement("br", null), fmtDate(date), " \xB7 ", typeLabel), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 6, fontSize: 22, fontWeight: 900, color: typeColor, letterSpacing: 2 } }, checkedTime), /* @__PURE__ */ React.createElement("div", { style: {
+      } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 64, marginBottom: 8 } }, isDup ? "\u{1F514}" : "\u2705"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#1E293B" } }, isDup ? "\uC774\uBBF8 \uCCB4\uD06C\uB418\uC5C8\uC2B5\uB2C8\uB2E4" : `${typeLabel} \uC644\uB8CC!`), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: typeColor, marginTop: 10 } }, s?.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 8, lineHeight: 1.8 } }, course?.name, /* @__PURE__ */ React.createElement("br", null), fmtDate(date), " \xB7 ", typeLabel), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 6, fontSize: 22, fontWeight: 900, color: typeColor, letterSpacing: 2 } }, checkedTime), /* @__PURE__ */ React.createElement("div", { style: {
         marginTop: 16,
         padding: "10px 16px",
         borderRadius: 12,
@@ -11845,7 +11818,7 @@ ${formatCoursePeriod(c)}
       alignItems: "center",
       gap: 8,
       marginBottom: 4
-    } }, /* @__PURE__ */ React.createElement("span", null, type === "in" ? "\u{1F4E5}" : "\u{1F4E4}"), typeLabel, " \uCD9C\uC11D \uCCB4\uD06C"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", fontWeight: 600 } }, course == null ? void 0 : course.name), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, fmtDate(date)), /* @__PURE__ */ React.createElement("div", { style: {
+    } }, /* @__PURE__ */ React.createElement("span", null, type === "in" ? "\u{1F4E5}" : "\u{1F4E4}"), typeLabel, " \uCD9C\uC11D \uCCB4\uD06C"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", fontWeight: 600 } }, course?.name), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, fmtDate(date)), /* @__PURE__ */ React.createElement("div", { style: {
       fontSize: 15,
       fontWeight: 900,
       color: typeColor,
@@ -11957,7 +11930,7 @@ ${formatCoursePeriod(c)}
       padding: "28px 24px",
       boxShadow: "0 8px 40px rgba(0,0,0,.09)",
       border: `1px solid ${typeColor}20`
-    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", marginBottom: 16 } }, "\uACBD\uAE30\uB3C4\uC77C\uC790\uB9AC\uC7AC\uB2E8 \uBD81\uBD80\uC0AC\uC5C5\uBCF8\uBD80 \xB7 ", course == null ? void 0 : course.name), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", { style: {
+    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", marginBottom: 16 } }, "\uACBD\uAE30\uB3C4\uC77C\uC790\uB9AC\uC7AC\uB2E8 \uBD81\uBD80\uC0AC\uC5C5\uBCF8\uBD80 \xB7 ", course?.name), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", { style: {
       width: 72,
       height: 72,
       borderRadius: 20,
@@ -12048,8 +12021,7 @@ ${formatCoursePeriod(c)}
       };
       this.subscriptions.set(table, state);
       const send = (obj) => {
-        var _a;
-        if (((_a = state.ws) == null ? void 0 : _a.readyState) === WebSocket.OPEN) {
+        if (state.ws?.readyState === WebSocket.OPEN) {
           state.ws.send(JSON.stringify(obj));
         }
       };
@@ -12062,7 +12034,7 @@ ${formatCoursePeriod(c)}
         ws.onopen = () => {
           state.retryDelay = 2e3;
           console.log(`\u2705 [Realtime] ${table} \uC5F0\uACB0\uB428`);
-          onStatus == null ? void 0 : onStatus("connected");
+          onStatus?.("connected");
           send({
             topic: channel,
             event: "phx_join",
@@ -12082,32 +12054,31 @@ ${formatCoursePeriod(c)}
           }, 25e3);
         };
         ws.onmessage = (event) => {
-          var _a, _b, _c, _d;
           try {
             const msg = JSON.parse(event.data);
             if (msg.event === "phx_reply" && msg.ref === joinRef) {
-              if (((_a = msg.payload) == null ? void 0 : _a.status) === "ok") {
-                state.subIds = (((_b = msg.payload.response) == null ? void 0 : _b.postgres_changes) || []).map((c) => c.id);
+              if (msg.payload?.status === "ok") {
+                state.subIds = (msg.payload.response?.postgres_changes || []).map((c) => c.id);
                 console.log(`\u{1F514} [Realtime] ${table} \uAD6C\uB3C5 \uD655\uC778 IDs:`, state.subIds);
               } else {
-                console.error(`\u274C [Realtime] ${table} \uAD6C\uB3C5 \uC2E4\uD328:`, (_c = msg.payload) == null ? void 0 : _c.response);
-                onStatus == null ? void 0 : onStatus("error");
+                console.error(`\u274C [Realtime] ${table} \uAD6C\uB3C5 \uC2E4\uD328:`, msg.payload?.response);
+                onStatus?.("error");
               }
               return;
             }
-            if (msg.event === "postgres_changes" && ((_d = msg.payload) == null ? void 0 : _d.data)) {
+            if (msg.event === "postgres_changes" && msg.payload?.data) {
               const ids = msg.payload.ids || [];
               if (state.subIds.length > 0 && !ids.some((id) => state.subIds.includes(id))) return;
               const { type: eventType, record: newRecord, old_record: oldRecord } = msg.payload.data;
               switch (eventType) {
                 case "INSERT":
-                  onInsert == null ? void 0 : onInsert(newRecord);
+                  onInsert?.(newRecord);
                   break;
                 case "UPDATE":
-                  onUpdate == null ? void 0 : onUpdate(newRecord, oldRecord);
+                  onUpdate?.(newRecord, oldRecord);
                   break;
                 case "DELETE":
-                  onDelete == null ? void 0 : onDelete(oldRecord);
+                  onDelete?.(oldRecord);
                   break;
               }
             }
@@ -12117,14 +12088,14 @@ ${formatCoursePeriod(c)}
         };
         ws.onerror = () => {
           console.warn(`\u26A0\uFE0F [Realtime] ${table} \uC18C\uCF13 \uC624\uB958`);
-          onStatus == null ? void 0 : onStatus("error");
+          onStatus?.("error");
         };
         ws.onclose = (ev) => {
           clearInterval(state.heartbeatId);
           state.heartbeatId = null;
           if (!state.intentionallyClosed) {
             console.warn(`\u{1F50C} [Realtime] ${table} \uC5F0\uACB0 \uB04A\uAE40 (code:${ev.code}) \u2014 ${state.retryDelay / 1e3}\uCD08 \uD6C4 \uC7AC\uC5F0\uACB0`);
-            onStatus == null ? void 0 : onStatus("disconnected");
+            onStatus?.("disconnected");
             setTimeout(connect, state.retryDelay);
             state.retryDelay = Math.min(state.retryDelay * 2, 3e4);
           }
@@ -12133,22 +12104,20 @@ ${formatCoursePeriod(c)}
       connect();
     }
     unsubscribe(table) {
-      var _a;
       const state = this.subscriptions.get(table);
       if (!state) return;
       state.intentionallyClosed = true;
       clearInterval(state.heartbeatId);
       state.heartbeatId = null;
-      (_a = state.ws) == null ? void 0 : _a.close();
+      state.ws?.close();
       this.subscriptions.delete(table);
     }
     unsubscribeAll() {
       this.subscriptions.forEach((state) => {
-        var _a;
         state.intentionallyClosed = true;
         clearInterval(state.heartbeatId);
         state.heartbeatId = null;
-        (_a = state.ws) == null ? void 0 : _a.close();
+        state.ws?.close();
       });
       this.subscriptions.clear();
     }
@@ -12232,7 +12201,7 @@ ${formatCoursePeriod(c)}
     const [auditLog, setAuditLog] = useState(() => {
       try {
         return JSON.parse(safeLocal.get("gjf_audit_log") || "[]");
-      } catch (e) {
+      } catch {
         return [];
       }
     });
@@ -12248,7 +12217,7 @@ ${formatCoursePeriod(c)}
         const next = [entry, ...prev].slice(0, 300);
         try {
           safeLocal.set("gjf_audit_log", JSON.stringify(next));
-        } catch (e) {
+        } catch {
         }
         return next;
       });
@@ -12302,19 +12271,19 @@ ${formatCoursePeriod(c)}
         return;
       }
       const diagErr = (e) => {
-        const msg = (e == null ? void 0 : e.message) || String(e) || "\uC54C \uC218 \uC5C6\uB294 \uC624\uB958";
-        const code = (e == null ? void 0 : e.code) || "";
+        const msg = e?.message || String(e) || "\uC54C \uC218 \uC5C6\uB294 \uC624\uB958";
+        const code = e?.code || "";
         if (code === "PGRST204" || msg.includes("schema cache"))
           return `\uC2A4\uD0A4\uB9C8 \uCE90\uC2DC \uC624\uB958
 
 \uC0C8 \uCEEC\uB7FC\uC774 \uCD94\uAC00\uB41C \uD6C4 PostgREST \uCE90\uC2DC\uB97C \uAC31\uC2E0\uD574\uC57C \uD569\uB2C8\uB2E4.
 Supabase \uB300\uC2DC\uBCF4\uB4DC \u2192 API \u2192 Schema Cache \u2192 Reload \uB97C \uD074\uB9AD\uD558\uC138\uC694.`;
-        if ((e == null ? void 0 : e.status) === 403 || msg.includes("permission denied") || msg.includes("row-level security"))
+        if (e?.status === 403 || msg.includes("permission denied") || msg.includes("row-level security"))
           return `\uAD8C\uD55C \uC624\uB958 (RLS)
 
 Supabase \uB300\uC2DC\uBCF4\uB4DC SQL Editor\uC5D0\uC11C
 supabase-setup.sql \uC758 "RLS \uD574\uC81C" \uAD6C\uBB38\uC744 \uC2E4\uD589\uD558\uC138\uC694.`;
-        if ((e == null ? void 0 : e.status) === 503 || msg.includes("project is paused") || msg.includes("upstream connect error"))
+        if (e?.status === 503 || msg.includes("project is paused") || msg.includes("upstream connect error"))
           return `Supabase \uD504\uB85C\uC81D\uD2B8\uAC00 \uC77C\uC2DC\uC815\uC9C0 \uC0C1\uD0DC\uC785\uB2C8\uB2E4.
 
 Supabase \uB300\uC2DC\uBCF4\uB4DC\uC5D0\uC11C \uD504\uB85C\uC81D\uD2B8\uB97C \uB2E4\uC2DC \uD65C\uC131\uD654\uD558\uC138\uC694.
@@ -12343,11 +12312,11 @@ ${msg}`;
           if (loadedCourses.length > 0) setCourses(loadedCourses);
           const loadedStudents = (sRes.data || []).map(toStudent);
           setStudents(loadedStudents);
-          if (ovRes == null ? void 0 : ovRes.error) {
+          if (ovRes?.error) {
             console.warn("\uC624\uBC84\uB77C\uC774\uB4DC \uB85C\uB4DC \uC2E4\uD328:", ovRes.error);
             setOverrides([]);
           } else {
-            const loadedOverrides = ((ovRes == null ? void 0 : ovRes.data) || []).map(toOverride).filter(Boolean);
+            const loadedOverrides = (ovRes?.data || []).map(toOverride).filter(Boolean);
             setOverrides(loadedOverrides);
             overridesRef.current = loadedOverrides;
           }
@@ -12428,14 +12397,14 @@ ${msg}`;
       return () => realtimeManager.unsubscribeAll();
     }, [currentUser]);
     const isStudentSchemaErr = (e) => {
-      const m = (e == null ? void 0 : e.message) || (e == null ? void 0 : e.hint) || JSON.stringify(e);
+      const m = e?.message || e?.hint || JSON.stringify(e);
       return m.includes("schema cache") || m.includes("Could not find");
     };
     const addStudents = useCallback(async (newOnes) => {
       const bodies = newOnes.map(fromStudent);
       let { data, error } = await sbInsert("students", bodies);
       if (error && isStudentSchemaErr(error)) {
-        const m = (error == null ? void 0 : error.message) || "";
+        const m = error?.message || "";
         const badCol = (m.match(/column ['"`]?(\w+)['"`]?/) || m.match(/'(\w+)'.*schema/) || [])[1] || "cid";
         console.warn("\u26A0\uFE0F students \uC2A4\uD0A4\uB9C8 \uCE90\uC2DC \uC624\uB958 (\uCEEC\uB7FC:", badCol, ") \u2014 Supabase \u2192 Settings \u2192 API \u2192 Reload schema");
         const fallback = bodies.map((b) => {
@@ -12452,9 +12421,8 @@ ${msg}`;
       }
       if (data && data.length > 0) {
         const newStudents = data.map((r, i) => {
-          var _a;
           const mapped = toStudent(r);
-          const intended = ((_a = newOnes[i]) == null ? void 0 : _a.personId) ? Number(newOnes[i].personId) : null;
+          const intended = newOnes[i]?.personId ? Number(newOnes[i].personId) : null;
           mapped.personId = intended || mapped.personId || mapped.id;
           return mapped;
         });
@@ -12474,12 +12442,11 @@ ${msg}`;
           setStudents(fresh.map(toStudent));
         }
       }
-      addAudit("\uD6C8\uB828\uC0DD \uB4F1\uB85D", `${newOnes.length}\uBA85 \uB4F1\uB85D (${newOnes.map((s) => s.name).join(", ")})`, currentUser == null ? void 0 : currentUser.name);
+      addAudit("\uD6C8\uB828\uC0DD \uB4F1\uB85D", `${newOnes.length}\uBA85 \uB4F1\uB85D (${newOnes.map((s) => s.name).join(", ")})`, currentUser?.name);
       console.log("\u2705 \uD559\uC0DD \uC800\uC7A5 \uC644\uB8CC:", (data || []).length, "\uBA85");
     }, [addAudit, currentUser]);
     const updateStudent = useCallback(async (updated) => {
-      var _a;
-      const existing = (((_a = window._studentsRef) == null ? void 0 : _a.current) || []).find((s) => s.id === updated.id);
+      const existing = (window._studentsRef?.current || []).find((s) => s.id === updated.id);
       const locked = existing ? { ...updated, cid: existing.cid, personId: updated.personId || existing.personId || existing.id } : updated;
       let body = fromStudent(locked);
       let { error } = await sbUpdate("students", `id=eq.${locked.id}`, body);
@@ -12493,7 +12460,7 @@ ${msg}`;
         return;
       }
       setStudents((prev) => prev.map((s) => s.id === locked.id ? locked : s));
-      addAudit("\uD6C8\uB828\uC0DD \uC218\uC815", `${locked.name} \uC815\uBCF4 \uC218\uC815`, currentUser == null ? void 0 : currentUser.name);
+      addAudit("\uD6C8\uB828\uC0DD \uC218\uC815", `${locked.name} \uC815\uBCF4 \uC218\uC815`, currentUser?.name);
     }, [addAudit, currentUser]);
     const archiveStudent = useCallback(async (id, reason = "\uC0AD\uC81C\uC694\uCCAD(\uC774\uB825\uBCF4\uC874)") => {
       const today = localDateStr();
@@ -12515,7 +12482,7 @@ ${msg}`;
         return;
       }
       setStudents((prev) => prev.map((s) => s.id === id ? { ...s, enrollmentStatus: "\uC911\uB3C4\uD0C8\uB77D", statusChangeDate: res.patch.status_change_date, dropoutReason: res.patch.dropout_reason } : s));
-      addAudit("\uD6C8\uB828\uC0DD \uC0C1\uD0DC\uBCC0\uACBD", `${(target == null ? void 0 : target.name) || id} \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC`, currentUser == null ? void 0 : currentUser.name);
+      addAudit("\uD6C8\uB828\uC0DD \uC0C1\uD0DC\uBCC0\uACBD", `${target?.name || id} \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC`, currentUser?.name);
     }, [students, addAudit, currentUser, archiveStudent]);
     const resetData = useCallback(async () => {
       if (!window.confirm("\uC804\uCCB4 \uC0AD\uC81C \uB300\uC2E0 \uC804\uCCB4 \uC774\uB825\uC744 \uC911\uB3C4\uD0C8\uB77D(\uBCF4\uC874) \uCC98\uB9AC\uD569\uB2C8\uB2E4. \uC9C4\uD589\uD560\uAE4C\uC694?")) return;
@@ -12538,7 +12505,7 @@ ${msg}`;
         statusChangeDate: today,
         dropoutReason: "\uC804\uCCB4 \uCD08\uAE30\uD654(\uC774\uB825\uBCF4\uC874)"
       })));
-      addAudit("\uC804\uCCB4 \uC0C1\uD0DC\uBCC0\uACBD", `\uBAA8\uB4E0 \uD6C8\uB828\uC0DD \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC ${ids.length}\uAC74`, currentUser == null ? void 0 : currentUser.name);
+      addAudit("\uC804\uCCB4 \uC0C1\uD0DC\uBCC0\uACBD", `\uBAA8\uB4E0 \uD6C8\uB828\uC0DD \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC ${ids.length}\uAC74`, currentUser?.name);
     }, [students, addAudit, currentUser]);
     const resetCourseStudents = useCallback(async (cid) => {
       if (!window.confirm("\uACFC\uC815 \uD6C8\uB828\uC0DD \uC0AD\uC81C \uB300\uC2E0 \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC\uD569\uB2C8\uB2E4. \uC9C4\uD589\uD560\uAE4C\uC694?")) return;
@@ -12561,7 +12528,7 @@ ${msg}`;
         statusChangeDate: today,
         dropoutReason: `\uACFC\uC815\uCD08\uAE30\uD654(${cid}) \uC774\uB825\uBCF4\uC874`
       }));
-      addAudit("\uACFC\uC815 \uC0C1\uD0DC\uBCC0\uACBD", `\uACFC\uC815 ID ${cid} \uD6C8\uB828\uC0DD \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC ${targets.length}\uAC74`, currentUser == null ? void 0 : currentUser.name);
+      addAudit("\uACFC\uC815 \uC0C1\uD0DC\uBCC0\uACBD", `\uACFC\uC815 ID ${cid} \uD6C8\uB828\uC0DD \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC ${targets.length}\uAC74`, currentUser?.name);
     }, [students, addAudit, currentUser]);
     const addCourse = useCallback(async (c) => {
       const { data, error } = await sbInsert("courses", fromCourse(c));
@@ -12579,8 +12546,8 @@ ${msg}`;
         const { data: fresh } = await sbGet("courses", `select=${COURSE_LIST_SELECT}&order=id`);
         if (fresh && fresh.length > 0) setCourses(fresh.map(toCourse));
       }
-      addAudit("\uACFC\uC815 \uB4F1\uB85D", `${c.name} (${c.code}) \uCD94\uAC00`, currentUser == null ? void 0 : currentUser.name);
-      console.log("\u2705 \uACFC\uC815 \uC800\uC7A5 \uC644\uB8CC:", data == null ? void 0 : data.name);
+      addAudit("\uACFC\uC815 \uB4F1\uB85D", `${c.name} (${c.code}) \uCD94\uAC00`, currentUser?.name);
+      console.log("\u2705 \uACFC\uC815 \uC800\uC7A5 \uC644\uB8CC:", data?.name);
     }, [addAudit, currentUser]);
     const updateCourse = useCallback(async (c) => {
       const { error } = await sbUpdate("courses", `id=eq.${c.id}`, fromCourse(c));
@@ -12589,7 +12556,7 @@ ${msg}`;
         console.error("\u274C \uACFC\uC815 \uC218\uC815 \uC2E4\uD328:", error);
         return;
       }
-      addAudit("\uACFC\uC815 \uC218\uC815", `${c.name} (${c.code}) \uC815\uBCF4 \uC218\uC815`, currentUser == null ? void 0 : currentUser.name);
+      addAudit("\uACFC\uC815 \uC218\uC815", `${c.name} (${c.code}) \uC815\uBCF4 \uC218\uC815`, currentUser?.name);
       console.log("\u2705 \uACFC\uC815 \uC218\uC815 \uC644\uB8CC:", c.name);
       setCourses((prev) => prev.map((x) => x.id === c.id ? c : x));
     }, [addAudit, currentUser]);
@@ -12601,7 +12568,7 @@ ${msg}`;
         console.error("\u274C \uACFC\uC815 \uC0AD\uC81C \uC2E4\uD328:", error);
         return;
       }
-      addAudit("\uACFC\uC815 \uC0AD\uC81C", `${(target == null ? void 0 : target.name) || id} \uC0AD\uC81C`, currentUser == null ? void 0 : currentUser.name);
+      addAudit("\uACFC\uC815 \uC0AD\uC81C", `${target?.name || id} \uC0AD\uC81C`, currentUser?.name);
       console.log("\u2705 \uACFC\uC815 \uC0AD\uC81C \uC644\uB8CC: ID", id);
       setCourses((prev) => prev.filter((c) => c.id !== id));
     }, [courses, addAudit, currentUser]);
@@ -12623,7 +12590,7 @@ ${msg}`;
       return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(GStyle, null), /* @__PURE__ */ React.createElement(LoginScreen, { accounts, onLogin: (user) => {
         try {
           safeSession.set("gjf_user", JSON.stringify(user));
-        } catch (e) {
+        } catch {
         }
         setCurrentUser(user);
         setPiDismissed(false);
@@ -12788,7 +12755,7 @@ ${msg}`;
             const savedAccounts = (freshRows || []).map(toAccount);
             setAccounts(savedAccounts);
             setCurrentUser((prev) => savedAccounts.find((a) => a.id === prev.id) || prev);
-            addAudit("Account update", `Saved account list (${savedAccounts.length})`, currentUser == null ? void 0 : currentUser.name);
+            addAudit("Account update", `Saved account list (${savedAccounts.length})`, currentUser?.name);
             console.log("Accounts saved:", savedAccounts.length);
           } catch (err) {
             console.error("Account save failed:", err);

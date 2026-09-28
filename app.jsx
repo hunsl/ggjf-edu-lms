@@ -1996,6 +1996,7 @@ const AddCourseEnrollmentModal = ({ student, students, courses, onSave, onClose 
   const available = courses.filter(c => !enrolledCids.has(Number(c.id)));
   const [cid, setCid] = useState(available[0]?.id || "");
   const [enrollmentStatus, setEnrollmentStatus] = useState("재학중");
+  const [statusChangeDate, setStatusChangeDate] = useState(localDateStr());
   const [saving, setSaving] = useState(false);
   const selStyle = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`,
     borderRadius:8, fontSize:12, outline:"none", background:T.s2, color:T.tx, cursor:"pointer" };
@@ -2003,17 +2004,22 @@ const AddCourseEnrollmentModal = ({ student, students, courses, onSave, onClose 
   const submit = async () => {
     if (!cid) return alert("추가할 과정을 선택하세요.");
     if (enrolledCids.has(Number(cid))) return alert("이미 이 과정에 등록되어 있습니다.");
+    const needsCutoffDate = enrollmentStatus === "조기취업" || enrollmentStatus === "중도탈락";
+    if (enrollmentStatus === "조기취업" && !statusChangeDate) return alert("조기취업일을 선택하세요.");
     setSaving(true);
     try {
-      const { id, rate, accumulatedHours, enrollmentStatus: _es, statusChangeDate, dropoutReason, cid: _cid, ...rest } = student;
+      const { id, rate, accumulatedHours, enrollmentStatus: _es, statusChangeDate: _date, dropoutReason, cid: _cid, ...rest } = student;
       await onSave({
         ...rest,
         cid: Number(cid),
         personId: personIdOf(student),
         enrollmentStatus,
+        status: enrollmentStatus === "조기취업" ? "취업" : (rest.status || "미취업"),
         rate: 0,
         accumulatedHours: 0,
-        statusChangeDate: (enrollmentStatus === "수료" || enrollmentStatus === "조기취업 수료") ? localDateStr() : null,
+        statusChangeDate: needsCutoffDate
+          ? statusChangeDate
+          : ((enrollmentStatus === "수료" || enrollmentStatus === "조기취업 수료") ? localDateStr() : null),
         dropoutReason: null,
       });
       onClose();
@@ -2047,10 +2053,19 @@ const AddCourseEnrollmentModal = ({ student, students, courses, onSave, onClose 
                 </select>
               </FLD>
               <FLD label="이 과정의 등록상태">
-                <select value={enrollmentStatus} onChange={e=>setEnrollmentStatus(e.target.value)} style={selStyle}>
+                <select value={enrollmentStatus} onChange={e=>{
+                  const value = e.target.value;
+                  setEnrollmentStatus(value);
+                  if ((value === "조기취업" || value === "중도탈락") && !statusChangeDate) setStatusChangeDate(localDateStr());
+                }} style={selStyle}>
                   {ENROLLMENT_STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
                 </select>
               </FLD>
+              {(enrollmentStatus === "조기취업" || enrollmentStatus === "중도탈락") && (
+                <FLD label={enrollmentStatus === "조기취업" ? "조기취업일" : "중도탈락일"} required={enrollmentStatus === "조기취업"}>
+                  <input type="date" value={statusChangeDate} onChange={e=>setStatusChangeDate(e.target.value)} style={selStyle}/>
+                </FLD>
+              )}
               <div style={{ fontSize:11, color:T.mu, lineHeight:1.55, padding:"8px 10px", background:T.s2, borderRadius:8 }}>
                 수료한 과정을 나중에 넣는 경우 상태를 <b style={{ color:T.tx }}>수료</b>로 두면 됩니다. 출석률·누적시간은 공란(0)으로 두고 이력만 살립니다.
               </div>
@@ -2161,10 +2176,30 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
   const saveWorkspace = async () => {
     if (!selectedStudent || !workspaceForm) return;
     if (!String(workspaceForm.name || "").trim()) return alert("이름은 필수 입력 항목입니다.");
+    const nextStatus = workspaceForm.enrollmentStatus || "재학중";
+    const nextDate = String(workspaceForm.statusChangeDate || "").slice(0, 10);
+    if (nextStatus === "조기취업" && !nextDate) return alert("조기취업일을 선택하세요. 등록상태 탭에서 날짜를 지정할 수 있습니다.");
+    const payload = {
+      ...selectedStudent,
+      ...workspaceForm,
+      cid: Number(workspaceForm.cid),
+      statusChangeDate: nextDate || workspaceForm.statusChangeDate || null,
+      status: nextStatus === "조기취업" ? "취업" : (workspaceForm.status || selectedStudent.status || "미취업"),
+    };
+    const prevStatus = selectedStudent.enrollmentStatus || "재학중";
+    const prevDate = String(selectedStudent.statusChangeDate || "").slice(0, 10);
+    const cutoffTouched = ["조기취업", "중도탈락"].includes(prevStatus) || ["조기취업", "중도탈락"].includes(nextStatus);
     setWorkspaceSaving(true);
     try {
-      await onUpdate({ ...selectedStudent, ...workspaceForm, cid: Number(workspaceForm.cid) });
-      alert(`${workspaceForm.name} 정보가 저장되었습니다.`);
+      await onUpdate(payload);
+      if (cutoffTouched && (prevStatus !== nextStatus || prevDate !== nextDate)) {
+        const ref = window._studentsRef;
+        if (ref?.current) {
+          ref.current = ref.current.map(s => sameId(s.id, payload.id) ? { ...s, ...payload } : s);
+        }
+        await recalculateHoursAndRate(payload.id, payload.cid);
+      }
+      alert(`${payload.name} 정보가 저장되었습니다.`);
     } finally {
       setWorkspaceSaving(false);
     }
@@ -2746,8 +2781,14 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                         {(() => {
                           const es = s.enrollmentStatus || '재학중';
                           const sc = STATUS_COLORS[es] || { bg:T.s3, color:T.mu };
+                          const cutoff = isAttendanceCutoffStatus(es) ? String(s.statusChangeDate || "").slice(0, 10) : "";
                           return (
-                            <Chip label={es} bg={sc.bg} color={sc.color} size={11}/>
+                            <div>
+                              <Chip label={es} bg={sc.bg} color={sc.color} size={11}/>
+                              {cutoff && (
+                                <div style={{ fontSize:9, color:sc.color, marginTop:3, fontWeight:700 }}>{cutoff}</div>
+                              )}
+                            </div>
                           );
                         })()}
                       </td>
@@ -2931,17 +2972,57 @@ const StudentMgmt = ({ students, courses, onAdd, onEdit, onUpdate, onDelete, onN
                       ))}
                     </div>
                     <FLD label="등록상태 직접 수정">
-                      <select value={workspaceForm.enrollmentStatus || "재학중"} onChange={e=>setWorkspace("enrollmentStatus", e.target.value)} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}>
+                      <select value={workspaceForm.enrollmentStatus || "재학중"} onChange={e=>{
+                        const value = e.target.value;
+                        setWorkspaceForm(p => {
+                          const base = { ...(p || selectedStudent || {}), enrollmentStatus: value };
+                          if (value === "조기취업") {
+                            if (!base.statusChangeDate) base.statusChangeDate = localDateStr();
+                            base.status = "취업";
+                          }
+                          if (value === "중도탈락" && !base.statusChangeDate) base.statusChangeDate = localDateStr();
+                          return base;
+                        });
+                      }} style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:T.s2 }}>
                         {ENROLLMENT_STATUSES.map(v=><option key={v} value={v}>{v}</option>)}
                       </select>
                     </FLD>
+                    {(workspaceForm.enrollmentStatus === "조기취업" || workspaceForm.enrollmentStatus === "중도탈락") && (() => {
+                      const isEarly = workspaceForm.enrollmentStatus === "조기취업";
+                      const picked = String(workspaceForm.statusChangeDate || "").slice(0, 10);
+                      const courseFrom = selectedCourse?.dateFrom || "";
+                      const courseTo = selectedCourse?.dateTo || "";
+                      const outOfRange = !!(picked && ((courseFrom && picked < courseFrom) || (courseTo && picked > courseTo)));
+                      const proportional = isEarly && picked && selectedCourse ? getProportionalCourseHours(selectedCourse, picked) : null;
+                      const fullHours = selectedCourse ? getTotalCourseHours(selectedCourse) : 0;
+                      const fieldStyle = { width:"100%", padding:"8px 10px", border:`1px solid ${T.bd}`, borderRadius:8, background:"#fff" };
+                      return (
+                        <>
+                          <FLD label={isEarly ? "조기취업일" : "중도탈락일"} required={isEarly}>
+                            <input type="date" value={picked} onChange={e=>setWorkspace("statusChangeDate", e.target.value)} style={fieldStyle}/>
+                          </FLD>
+                          {isEarly && (
+                            <FLD label="취업 기업명">
+                              <input value={workspaceForm.employerName||""} onChange={e=>setWorkspace("employerName", e.target.value)} placeholder="취업처" style={fieldStyle}/>
+                            </FLD>
+                          )}
+                          <div style={{ fontSize:11, color: outOfRange ? T.danger : (isEarly ? "#6B21A8" : T.mu), lineHeight:1.6, padding:"8px 10px", borderRadius:8, background: isEarly ? "#F3E8FF" : T.s2 }}>
+                            {isEarly
+                              ? `선택한 날짜 이후 출결은 제외되고, 과정시간은 그날까지 비례 계산됩니다.${proportional != null ? ` 기준 ${proportional}h / 전체 ${fullHours}h.` : ""}`
+                              : "선택한 날짜 이후 출결은 인정되지 않습니다."}
+                            {courseFrom && courseTo ? ` 과정 기간 ${courseFrom} ~ ${courseTo}.` : ""}
+                            {outOfRange ? " 선택한 날짜가 과정 기간 밖입니다." : ""}
+                          </div>
+                        </>
+                      );
+                    })()}
                     <button onClick={()=>setStatusTarget({ student:selectedStudent, course:selectedCourse })} disabled={!selectedCourse} style={{
                       padding:"8px 12px", borderRadius:8, border:`1px solid #15803D`,
                       background:"#F0FDF4", color:"#15803D", cursor:selectedCourse ? "pointer" : "not-allowed",
                       opacity:selectedCourse ? 1 : .55, fontSize:12, fontWeight:850 }}>
                       이력 남기며 상태변경
                     </button>
-                    <div style={{ fontSize:11, color:T.mu, lineHeight:1.6 }}>중도탈락 사유나 조기취업 기업명처럼 이력이 필요한 변경은 상태변경 절차 버튼을 사용하면 됩니다.</div>
+                    <div style={{ fontSize:11, color:T.mu, lineHeight:1.6 }}>조기취업일은 여기서 바로 고를 수 있습니다. 변경 이력을 남기려면 상태변경 절차 버튼을 사용하세요.</div>
                   </div>
                 )}
 
@@ -8427,12 +8508,18 @@ const StatusChangeDialog = ({ student, course, onStatusChanged, onClose, current
                 </div>
               </div>
 
-              {/* 변경일 */}
+              {/* 변경일 · 조기취업일은 출석 마감 기준 */}
               <div>
                 <label style={{ fontSize:11, fontWeight:600, color:T.mu, display:"block", marginBottom:5 }}>
-                  변경일 <span style={{ color:T.danger }}>*</span>
+                  {newStatus === "조기취업" ? "조기취업일" : newStatus === "중도탈락" ? "중도탈락일" : "변경일"} <span style={{ color:T.danger }}>*</span>
                 </label>
                 <input type="date" value={changeDate} onChange={e => setChangeDate(e.target.value)} style={inp}/>
+                {newStatus === "조기취업" && (
+                  <div style={{ fontSize:10, color:"#6B21A8", marginTop:5, lineHeight:1.5 }}>
+                    이 날짜 이후 출결은 제외되고, 수료 기준 시간은 그날까지 비례 계산됩니다.
+                    {course?.dateFrom && course?.dateTo ? ` 과정 기간 ${course.dateFrom} ~ ${course.dateTo}.` : ""}
+                  </div>
+                )}
               </div>
 
               {/* 중도탈락 사유 */}

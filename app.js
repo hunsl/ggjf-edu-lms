@@ -1860,7 +1860,7 @@
         borderRadius: 10,
         background: "#FFFBEB",
         border: "1px solid #FDE68A"
-      } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#92400E", marginBottom: 10 } }, "\u{1F4CB} \uC218\uC5C5 \uC694\uC77C \xB7 \uC2DC\uAC04\uB300 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 400, color: T.mu } }, "\u2014 \uC218\uAC15\uC99D\uBA85\uC11C \u2465 \uC218\uAC15\uAE30\uAC04\uC5D0 \uC790\uB3D9 \uBC18\uC601")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\uC218\uC5C5 \uC694\uC77C ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 400 } }, "(\uC608: \uC6D4, \uD654, \uBAA9)")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } }, ["\uC6D4", "\uD654", "\uC218", "\uBAA9", "\uAE08", "\uD1A0"].map((d) => {
+      } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#92400E", marginBottom: 10 } }, "\u{1F4CB} \uC218\uC5C5 \uC694\uC77C \xB7 \uC2DC\uAC04\uB300 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 400, color: T.mu } }, "\u2014 \uC218\uAC15\uC99D\uBA85\uC11C \u2465 \uC218\uAC15\uAE30\uAC04\uC5D0 \uC790\uB3D9 \uBC18\uC601")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, fontWeight: 600, color: T.mu, display: "block", marginBottom: 5 } }, "\uC218\uC5C5 \uC694\uC77C ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 400 } }, "(\uC608: \uC6D4, \uD654, \uBAA9)")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } }, ["\uC6D4", "\uD654", "\uC218", "\uBAA9", "\uAE08", "\uD1A0", "\uC77C"].map((d) => {
         const active = (form.schedDays || "").includes(d);
         return /* @__PURE__ */ React.createElement(
           "button",
@@ -1870,7 +1870,7 @@
             onClick: () => {
               const arr = (form.schedDays || "").split(",").map((x) => x.trim()).filter(Boolean);
               const next = active ? arr.filter((x) => x !== d) : [...arr, d];
-              const order = ["\uC6D4", "\uD654", "\uC218", "\uBAA9", "\uAE08", "\uD1A0"];
+              const order = ["\uC6D4", "\uD654", "\uC218", "\uBAA9", "\uAE08", "\uD1A0", "\uC77C"];
               set("schedDays", next.sort((a, b) => order.indexOf(a) - order.indexOf(b)).join(", "));
             },
             style: {

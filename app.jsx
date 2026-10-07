@@ -1684,7 +1684,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
                   수업 요일 <span style={{ fontWeight:400 }}>(예: 월, 화, 목)</span>
                 </label>
                 <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                  {["월","화","수","목","금","토"].map(d => {
+                  {["월","화","수","목","금","토","일"].map(d => {
                     const active = (form.schedDays||"").includes(d);
                     return (
                       <button key={d} type="button"
@@ -1692,7 +1692,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
                           const arr = (form.schedDays||"").split(",").map(x=>x.trim()).filter(Boolean);
                           const next = active ? arr.filter(x=>x!==d) : [...arr, d];
                           // 요일 순서 정렬
-                          const order = ["월","화","수","목","금","토"];
+                          const order = ["월","화","수","목","금","토","일"];
                           set("schedDays", next.sort((a,b)=>order.indexOf(a)-order.indexOf(b)).join(", "));
                         }}
                         style={{ width:30, height:30, borderRadius:7, border:"none", cursor:"pointer",

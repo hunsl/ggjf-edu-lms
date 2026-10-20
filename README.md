@@ -2,6 +2,10 @@
 
 엑셀 대신 웹 브라우저로 훈련생·출결·강사·강의실을 한 번에 관리하는 시스템입니다.
 
+운영 주소: **https://gyeonggi-edu-lms.pages.dev/**
+
+회사망 접속을 위한 Cloudflare Pages 배포 방법은 [CLOUDFLARE_PAGES.md](./CLOUDFLARE_PAGES.md)를 확인하세요.
+
 > **운영 중인 시스템의 데이터 보호 안내 (2026-10-20)**
 >
 > 삭제·초기화와 계정 변경을 일시 중지했습니다. 자세한 범위와 백업 안내는 [DATA_PROTECTION.md](./DATA_PROTECTION.md)를 확인하세요.

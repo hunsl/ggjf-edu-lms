@@ -32,4 +32,4 @@ node --check data-protection.js
 esbuild app.jsx --outfile=app.js --format=iife --target=es2020
 ```
 
-배포 파일은 index.html, app.js, data-protection.js입니다. GitHub Pages 운영 소스는 main 브랜치입니다. 이 학사관리 프로젝트를 gyeonggi-dashboard Cloudflare 프로젝트에 배포하지 않습니다.
+배포 파일은 index.html, app.js, data-protection.js입니다. GitHub 소스는 main 브랜치이며, 새 운영 주소는 https://gyeonggi-edu-lms.pages.dev/ 입니다. [Cloudflare 배포 안내](./CLOUDFLARE_PAGES.md)에 따라 전용 프로젝트 gyeonggi-edu-lms에 배포합니다. 이 학사관리 프로젝트를 gyeonggi-dashboard 프로젝트에 배포하지 않습니다.

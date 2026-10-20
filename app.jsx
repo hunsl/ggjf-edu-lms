@@ -78,6 +78,15 @@ const H     = {
 };
 const QR_TOKEN_SUFFIX = "2026GJF"; // QR 토큰 서픽스 — 연도 변경 시 이 상수만 수정
 
+/* ── 데이터 보호 모드: 보조 파일이 누락되어도 저장은 중지 ── */
+const DATA_PROTECTION = globalThis.LMSDataProtection;
+const protectionError = (method, table, filter, body) => DATA_PROTECTION
+  ? DATA_PROTECTION.guardMutation(method, table, filter, body)
+  : { code: "DATA_PROTECTION_UNAVAILABLE", message: "데이터 보호 기능을 불러오지 못해 저장을 중지했습니다. 새로고침 후 다시 확인해 주세요." };
+const stopDestructiveAction = () => {
+  alert(DATA_PROTECTION?.message || "데이터 보호 확인 전에는 삭제·초기화를 사용할 수 없습니다.");
+};
+
 /* ── 공통 fetch 래퍼 ── */
 const sbGet = async (table, params = "") => {
   const res = await fetch(`${API}/${table}?${params}`, { headers: H });
@@ -86,6 +95,8 @@ const sbGet = async (table, params = "") => {
   return { data, error: null };
 };
 const sbInsert = async (table, body) => {
+  const blocked = protectionError("POST", table, "", body);
+  if (blocked) return { data: null, error: blocked };
   const res = await fetch(`${API}/${table}`, {
     method: "POST", headers: H,
     body: JSON.stringify(Array.isArray(body) ? body : [body]),
@@ -95,6 +106,8 @@ const sbInsert = async (table, body) => {
   return { data: Array.isArray(body) ? data : data[0], error: null };
 };
 const sbUpsert = async (table, body, conflictCols = "") => {
+  const blocked = protectionError("POST", table, "", body);
+  if (blocked) return { data: null, error: blocked };
   const H2 = { ...H, "Prefer": "resolution=merge-duplicates,return=minimal" };
   const qp = conflictCols ? `?on_conflict=${encodeURIComponent(conflictCols)}` : "";
   const res = await fetch(`${API}/${table}${qp}`, {
@@ -108,11 +121,13 @@ const sbUpsert = async (table, body, conflictCols = "") => {
 const fmtSaveError = (err) => {
   const msg = err?.message || JSON.stringify(err);
   if (msg.includes("schema cache") || msg.includes("Could not find")) {
-    return `${msg}\n\n💡 해결 방법:\n1. supabase-setup.sql을 Supabase SQL Editor에서 다시 실행하세요.\n2. 그래도 안 되면 Supabase 대시보드 → 설정(Settings) → API → Reload schema 클릭`;
+    return `${msg}\n\n💡 해결 방법:\n1. 초기화 SQL을 재실행하지 말고 관리자에게 누락 컬럼 점검을 요청하세요.\n2. 그래도 안 되면 Supabase 대시보드 → 설정(Settings) → API → Reload schema 클릭`;
   }
   return msg;
 };
 const sbUpdate = async (table, filter, body) => {
+  const blocked = protectionError("PATCH", table, filter, body);
+  if (blocked) return { data: null, error: blocked };
   const res = await fetch(`${API}/${table}?${filter}`, {
     method: "PATCH", headers: H,
     body: JSON.stringify(body),
@@ -122,6 +137,8 @@ const sbUpdate = async (table, filter, body) => {
   return { data, error: null };
 };
 const sbDelete = async (table, filter) => {
+  const blocked = protectionError("DELETE", table, filter);
+  if (blocked) return { error: blocked };
   const res = await fetch(`${API}/${table}?${filter}`, {
     method: "DELETE", headers: H,
   });
@@ -131,6 +148,8 @@ const sbDelete = async (table, filter) => {
 
 /* ── Supabase Storage — PDF 업로드 (Base64 대신 URL 저장) ── */
 const sbStorageUpload = async (bucket, path, file) => {
+  const blocked = protectionError("POST", bucket, "", {});
+  if (blocked) return { url: null, error: blocked };
   const res = await fetch(`${SB_URL}/storage/v1/object/${bucket}/${path}`, {
     method: "POST",
     headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` },
@@ -270,7 +289,7 @@ const fromCourse = c => ({
   sched_time_to: c.schedTimeTo||null,
   break_minutes: toNum(c.breakMinutes) ?? 60,
   include_break_in_hours: c.includeBreakInHours !== false,
-  notes: c.notes||"", pdf_name: c.pdfName||"", pdf_data: c.pdfData||"",
+  notes: c.notes||"", ...(DATA_PROTECTION?.attachmentFields(c) || {}),
   links: c.links||[],
 });
 
@@ -1523,7 +1542,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
     ...course,
     dateFrom: course.dateFrom||"", dateTo: course.dateTo||"",
     links: course.links||[], notes: course.notes||"",
-    pdfName: course.pdfName||"", pdfData: course.pdfData||"",
+    pdfName: course.pdfName||"", pdfData: course.pdfData||"", _pdfChanged: false,
     schedDays: course.schedDays||"", schedTimeFrom: course.schedTimeFrom||"09:00", schedTimeTo: course.schedTimeTo||"13:00",
     breakMinutes: toNum(course.breakMinutes) ?? 60,
     includeBreakInHours: course.includeBreakInHours !== false,
@@ -1561,10 +1580,11 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
       // Storage 업로드 실패 시 Base64 폴백 (로컬 미리보기용)
       console.warn("Storage 업로드 실패 — Base64 폴백:", error);
       const r = new FileReader();
-      r.onload = ev => { set("pdfData", ev.target.result); set("pdfName", f.name); };
+      r.onload = ev => { set("pdfData", ev.target.result); set("pdfName", f.name); set("_pdfChanged", true); };
       r.readAsDataURL(f);
       return;
     }
+    set("_pdfChanged", true);
     set("pdfData", url);
     set("pdfName", f.name);
   };
@@ -1791,7 +1811,7 @@ const CourseModal = ({ course, onSave, onClose, isNew=false }) => {
                   <div style={{ fontSize:10, color:T.mu }}>업로드 완료</div>
                 </div>
                 <Btn size="sm" variant="outline" onClick={()=>{ const w=window.open(); w.document.write(`<iframe src="${form.pdfData}" style="width:100%;height:100vh;border:none;"/>`); }}>미리보기</Btn>
-                <button type="button" onClick={()=>{set("pdfData","");set("pdfName","");}} style={{
+                <button type="button" title="기존 첨부파일 보호 중" onClick={stopDestructiveAction} style={{
                   width:26,height:26,borderRadius:6,border:"none",background:"#FEF2F2",color:T.danger,cursor:"pointer",
                   display:"flex",alignItems:"center",justifyContent:"center"}}><Icon n="x" s={12}/></button>
               </div>
@@ -1846,11 +1866,13 @@ const CourseList = ({ courses, onAdd, onUpdate, onDelete }) => {
     } catch (err) {
       console.warn("PDF 데이터 로드 실패:", err);
     }
-    return c;
+    return null;
   };
-  const openEdit = async c  => {
+  const openEdit = async c => {
+    const full = await loadFullCourse(c);
+    if (!full) { alert("과정 원본을 불러오지 못해 편집을 중지했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요."); return; }
     setIsNew(false);
-    setEdit(await loadFullCourse(c));
+    setEdit(full);
   };
   const previewPdf = async (c) => {
     const full = await loadFullCourse(c);
@@ -7943,27 +7965,9 @@ const CertMgmt = ({ students, courses, currentUser, addAudit }) => {
                   🔢 일괄번호 수정
                 </button>
               )}
-              <button onClick={() => {
-                if(!window.confirm("현재 문서 종류의 발급이력을 모두 초기화하시겠습니까?")) return;
-                setCertHistory(prev => {
-                  const next = prev.filter(r => r.docType !== docType);
-                  saveCertHistory(next);
-                  addAudit?.("증명서 이력 초기화", `${DOC_TYPE_NAMES[docType] || docType}`, currentUser?.name);
-                  return next;
-                });
-                sbDelete("cert_issuances", `doc_type=eq.${encodeURIComponent(docType)}`).then(({ error }) => {
-                  if (error) {
-                    setCertDbStatus("error");
-                    setCertDbError(error.message || JSON.stringify(error));
-                    alert("로컬 이력은 초기화했지만 Supabase 이력 삭제에 실패했습니다.\n다른 PC에는 기존 이력이 남을 수 있습니다.\n\n" + (error.message || JSON.stringify(error)));
-                  }
-                }).catch(e => {
-                  setCertDbStatus("error");
-                  setCertDbError(e.message || String(e));
-                });
-              }} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:`1px solid ${T.bd}`,
+              <button onClick={stopDestructiveAction} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:`1px solid ${T.bd}`,
                 background:"#FEF2F2", color:T.danger, cursor:"pointer", fontWeight:600 }}>
-                🗑 이력 초기화
+                🔒 이력 보호 중
               </button>
               <button onClick={()=>setShowHistory(false)} style={{ fontSize:11, padding:"4px 10px",
                 borderRadius:6, border:`1px solid ${T.bd}`, background:T.s2, color:T.mu, cursor:"pointer" }}>
@@ -10790,7 +10794,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
   const TAB_ITEMS_DM = [
     { id:"status", icon:"📊", label:"현황" },
     { id:"course", icon:"📂", label:"과정별 관리" },
-    { id:"backup", icon:"💾", label:"백업 · 초기화" },
+    { id:"backup", icon:"💾", label:"내보내기 · 데이터 보호" },
   ];
 
   const selCourse = courses.find(c=>c.id===selCid);
@@ -11022,16 +11026,16 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                     <div style={{ padding:"14px 16px", borderRadius:10, background:"#FEF2F2",
                       border:"1px solid #FECACA" }}>
                       <div style={{ fontSize:12, fontWeight:700, color:T.tx, marginBottom:5 }}>
-                        🗑️ 과정 훈련생 초기화
+                        🔒 과정 훈련생 초기화 중지
                       </div>
                       <div style={{ fontSize:11, color:T.mu, marginBottom:10 }}>
-                        {selCourse.code} 훈련생 {selStudents.length}명 전체 삭제
+                        {selCourse.code} 훈련생 {selStudents.length}명 기록 보존 중
                         {selStudents.length===0 && <span style={{color:T.mu}}> (없음)</span>}
                       </div>
                       {!confirmCourse ? (
                         <Btn variant="danger" size="sm"
-                          onClick={()=>{ if(selStudents.length===0){alert("삭제할 훈련생이 없습니다.");return;} setConfirmCourse(true); }}>
-                          <Icon n="alert" s={12}/> 초기화
+                          onClick={stopDestructiveAction}>
+                          <Icon n="alert" s={12}/> 초기화 보호 중
                         </Btn>
                       ) : (
                         <div style={{ background:"#FEE2E2", borderRadius:7, padding:"10px 12px" }}>
@@ -11066,14 +11070,14 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                     display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:20 }}>💾</div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:4 }}>
-                      전체 데이터 백업
+                      훈련생 명단·집계 엑셀
                     </div>
                     <div style={{ fontSize:11, color:T.mu, lineHeight:1.7, marginBottom:10 }}>
                       훈련생 <b style={{color:T.p}}>{students.length}명</b> 전체 + 과정별 집계를
                       엑셀 2개 시트로 내보냅니다.
                     </div>
                     <Btn size="sm" onClick={backupAll}>
-                      <Icon n="dl" s={13}/> 전체 백업 파일 다운로드
+                      <Icon n="dl" s={13}/> 명단·집계 엑셀 다운로드
                     </Btn>
                   </div>
                 </div>
@@ -11082,8 +11086,8 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
               {/* 샘플 데이터 안내 */}
               <div style={{ padding:"11px 14px", borderRadius:9, background:"#FFFBEB",
                 border:"1px solid #FDE68A", fontSize:11, color:"#92400E", lineHeight:1.7 }}>
-                ℹ️ <b>샘플 데이터 포함 안내:</b> 현재 등록된 훈련생 데이터는 시스템 테스트용 샘플입니다.
-                실제 운영 시작 전에 과정별 또는 전체 초기화를 진행해 주세요.
+                🔒 <b>운영 데이터 보호:</b> 현재 자료는 실제 운영 기록입니다. 삭제·초기화를 중지했습니다.
+                명단·집계 엑셀에는 일별 출결과 첨부파일 원본이 포함되지 않습니다.
               </div>
 
               {/* 전체 초기화 */}
@@ -11095,15 +11099,15 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
                     flexShrink:0, fontSize:20 }}>🗑️</div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, fontWeight:700, color:T.tx, marginBottom:4 }}>
-                      전체 훈련생 초기화
+                      전체 훈련생 초기화 중지
                     </div>
                     <div style={{ fontSize:11, color:T.mu, lineHeight:1.7, marginBottom:10 }}>
-                      <b style={{color:T.danger}}>모든 과정의 훈련생 {students.length}명</b> 데이터가
-                      삭제됩니다. 되돌릴 수 없습니다.
+                      <b style={{color:T.danger}}>모든 과정의 훈련생 {students.length}명</b> 기록을 보존합니다.
+                      전체 초기화와 일괄 중도탈락 처리를 사용할 수 없습니다.
                     </div>
                     {!confirmAll ? (
-                      <Btn variant="danger" size="sm" onClick={()=>setConfirmAll(true)}>
-                        <Icon n="alert" s={13}/> 전체 초기화
+                      <Btn variant="danger" size="sm" onClick={stopDestructiveAction}>
+                        <Icon n="alert" s={13}/> 초기화 보호 중
                       </Btn>
                     ) : (
                       <div style={{ background:"#FEE2E2", borderRadius:8, padding:"12px 14px" }}>
@@ -11126,7 +11130,7 @@ const DataManager = ({ students, courses, onResetAll, onResetCourse, onClose }) 
               </div>
 
               <div style={{ fontSize:11, color:T.mu, textAlign:"center", padding:"4px 0" }}>
-                💡 초기화 전에 반드시 백업을 먼저 받아두세요
+                💡 원본 백업에는 일별 출결과 첨부파일도 함께 보관해야 합니다
               </div>
             </div>
           )}
@@ -12637,7 +12641,7 @@ function App() {
   const [collapsed,      setCollapsed]      = useState(false);
   const [mobileSidebar,  setMobileSidebar]  = useState(false);
   const [students,   setStudents]   = useState([]);
-  const [courses,    setCourses]    = useState(COURSES); // 로딩 전 시드로 표시
+  const [courses,    setCourses]    = useState([]); // 서버에서 읽은 과정만 표시
   const [overrides,  setOverrides]  = useState([]);
   const [editTarget, setEditTarget] = useState(null);
   const [showNew,    setShowNew]    = useState(false);
@@ -12717,7 +12721,7 @@ function App() {
       if (code === "PGRST204" || msg.includes("schema cache"))
         return `스키마 캐시 오류\n\n새 컬럼이 추가된 후 PostgREST 캐시를 갱신해야 합니다.\nSupabase 대시보드 → API → Schema Cache → Reload 를 클릭하세요.`;
       if (e?.status === 403 || msg.includes("permission denied") || msg.includes("row-level security"))
-        return `권한 오류 (RLS)\n\nSupabase 대시보드 SQL Editor에서\nsupabase-setup.sql 의 "RLS 해제" 구문을 실행하세요.`;
+        return `권한 오류 (RLS)\n\n관리자에게 로그인과 접근 권한 확인을 요청하세요. 보호 규칙을 해제하거나 초기화 SQL을 실행하지 마세요.`;
       if (e?.status === 503 || msg.includes("project is paused") || msg.includes("upstream connect error"))
         return `Supabase 프로젝트가 일시정지 상태입니다.\n\nSupabase 대시보드에서 프로젝트를 다시 활성화하세요.\n(무료 플랜은 1주일 미사용 시 자동 정지됩니다)`;
       if (msg.includes("Failed to fetch") || msg.includes("NetworkError") || msg.includes("ECONNREFUSED"))
@@ -12736,7 +12740,7 @@ function App() {
         if (cRes.error) throw cRes.error;
         if (sRes.error) throw sRes.error;
         const loadedCourses = (cRes.data || []).map(toCourse);
-        if (loadedCourses.length > 0) setCourses(loadedCourses);
+        setCourses(loadedCourses);
         const loadedStudents = (sRes.data || []).map(toStudent);
         setStudents(loadedStudents);
         if (ovRes?.error) {
@@ -12846,14 +12850,6 @@ function App() {
   const addStudents = useCallback(async (newOnes) => {
     const bodies = newOnes.map(fromStudent);
     let { data, error } = await sbInsert("students", bodies);
-    // 스키마 캐시 오류 → 문제 컬럼 제거 후 재시도
-    if (error && isStudentSchemaErr(error)) {
-      const m = error?.message || "";
-      const badCol = (m.match(/column ['"`]?(\w+)['"`]?/) || m.match(/'(\w+)'.*schema/) || [])[1] || "cid";
-      console.warn("⚠️ students 스키마 캐시 오류 (컬럼:", badCol, ") — Supabase → Settings → API → Reload schema");
-      const fallback = bodies.map(b => { const f = {...b}; delete f[badCol]; return f; });
-      ({ data, error } = await sbInsert("students", fallback));
-    }
     if (error) { 
       alert("저장 오류:\n" + fmtSaveError(error)); 
       console.error("❌ 학생 저장 실패:", error);
@@ -12894,79 +12890,14 @@ function App() {
       : updated;
     let body = fromStudent(locked);
     let { error } = await sbUpdate("students", `id=eq.${locked.id}`, body);
-    // cid 컬럼 스키마 캐시 오류 → cid 제외 후 재시도
-    if (error && isStudentSchemaErr(error)) {
-      console.warn("⚠️ students.cid 스키마 캐시 오류 — Supabase 대시보드 → Settings → API → Schema Cache → Reload");
-      const { cid, ...fallback } = body;
-      ({ error } = await sbUpdate("students", `id=eq.${locked.id}`, fallback));
-    }
     if (error) { alert("수정 오류: " + (error.message||JSON.stringify(error))); return; }
     setStudents(prev => prev.map(s => s.id===locked.id ? locked : s));
     addAudit("훈련생 수정", `${locked.name} 정보 수정`, currentUser?.name);
   }, [addAudit, currentUser]);
 
-  const archiveStudent = useCallback(async (id, reason = "삭제요청(이력보존)") => {
-    const today = localDateStr();
-    const patch = {
-      enrollment_status: "중도탈락",
-      status_change_date: today,
-      dropout_reason: reason,
-    };
-    const { error } = await sbUpdate("students", `id=eq.${id}`, patch);
-    if (error) return { ok: false, error };
-    return { ok: true, patch };
-  }, []);
-
-  const deleteStudent = useCallback(async (id) => {
-    if (!window.confirm("이 훈련생을 삭제하지 않고 이력 보존 상태(중도탈락)로 변경할까요?")) return;
-    const target = students.find(s => s.id === id);
-    const res = await archiveStudent(id, "개별 삭제요청(이력보존)");
-    if (!res.ok) { alert("상태 변경 오류: " + (res.error.message||JSON.stringify(res.error))); return; }
-    setStudents(prev => prev.map(s => s.id===id ? ({ ...s, enrollmentStatus: "중도탈락", statusChangeDate: res.patch.status_change_date, dropoutReason: res.patch.dropout_reason }) : s));
-    addAudit("훈련생 상태변경", `${target?.name || id} 중도탈락(이력보존) 처리`, currentUser?.name);
-  }, [students, addAudit, currentUser, archiveStudent]);
-
-  const resetData = useCallback(async () => {
-    if (!window.confirm("전체 삭제 대신 전체 이력을 중도탈락(보존) 처리합니다. 진행할까요?")) return;
-    const ids = students.map(s => s.id);
-    if (ids.length === 0) return;
-    const today = localDateStr();
-    const patch = {
-      enrollment_status: "중도탈락",
-      status_change_date: today,
-      dropout_reason: "전체 초기화(이력보존)"
-    };
-    const { error } = await sbUpdate("students", `id=in.(${ids.join(",")})`, patch);
-    if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => prev.map(s => ({
-      ...s,
-      enrollmentStatus: "중도탈락",
-      statusChangeDate: today,
-      dropoutReason: "전체 초기화(이력보존)"
-    })));
-    addAudit("전체 상태변경", `모든 훈련생 중도탈락(이력보존) 처리 ${ids.length}건`, currentUser?.name);
-  }, [students, addAudit, currentUser]);
-
-  const resetCourseStudents = useCallback(async (cid) => {
-    if (!window.confirm("과정 훈련생 삭제 대신 중도탈락(이력보존) 처리합니다. 진행할까요?")) return;
-    const targets = students.filter(s => Number(s.cid) === Number(cid));
-    if (targets.length === 0) return;
-    const today = localDateStr();
-    const patch = {
-      enrollment_status: "중도탈락",
-      status_change_date: today,
-      dropout_reason: `과정초기화(${cid}) 이력보존`
-    };
-    const { error } = await sbUpdate("students", `cid=eq.${cid}`, patch);
-    if (error) { alert("초기화 오류: " + (error.message||JSON.stringify(error))); return; }
-    setStudents(prev => prev.map(s => Number(s.cid) !== Number(cid) ? s : ({
-      ...s,
-      enrollmentStatus: "중도탈락",
-      statusChangeDate: today,
-      dropoutReason: `과정초기화(${cid}) 이력보존`
-    })));
-    addAudit("과정 상태변경", `과정 ID ${cid} 훈련생 중도탈락(이력보존) 처리 ${targets.length}건`, currentUser?.name);
-  }, [students, addAudit, currentUser]);
+  const deleteStudent = useCallback(async () => { stopDestructiveAction(); }, []);
+  const resetData = useCallback(async () => { stopDestructiveAction(); }, []);
+  const resetCourseStudents = useCallback(async () => { stopDestructiveAction(); }, []);
 
   // ── 과정 CRUD ──
   const addCourse = useCallback(async (c) => {
@@ -13146,6 +13077,7 @@ function App() {
           auditLog={auditLog}
           onSave={async (updated) => {
             try {
+              if (DATA_PROTECTION?.enabled) { stopDestructiveAction(); return; }
               console.log("Saving accounts...");
               const { data: existingRows, error: loadErr } = await sbGet("accounts", "select=id&order=id");
               if (loadErr) throw loadErr;
@@ -13184,6 +13116,9 @@ function App() {
         fontFamily:"'Pretendard',-apple-system,sans-serif", overflow:"hidden",
         flexDirection:"column" }}>
 
+        <div role="status" style={{ background:"#ECFDF5", color:"#065F46", padding:"9px 22px", fontSize:12, flexShrink:0 }}>
+          🔒 데이터 보호 모드 · 삭제·초기화 중지 · 과정 저장 시 기존 첨부파일 보존
+        </div>
         {/* ── 개인정보 상단 배너 ── */}
         {!piDismissed && (
           <div style={{ background:"linear-gradient(90deg,#7C2D12,#B91C1C)",

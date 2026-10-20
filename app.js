@@ -122,6 +122,11 @@
     "Prefer": "return=representation"
   };
   const QR_TOKEN_SUFFIX = "2026GJF";
+  const DATA_PROTECTION = globalThis.LMSDataProtection;
+  const protectionError = (method, table, filter, body) => DATA_PROTECTION ? DATA_PROTECTION.guardMutation(method, table, filter, body) : { code: "DATA_PROTECTION_UNAVAILABLE", message: "\uB370\uC774\uD130 \uBCF4\uD638 \uAE30\uB2A5\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD574 \uC800\uC7A5\uC744 \uC911\uC9C0\uD588\uC2B5\uB2C8\uB2E4. \uC0C8\uB85C\uACE0\uCE68 \uD6C4 \uB2E4\uC2DC \uD655\uC778\uD574 \uC8FC\uC138\uC694." };
+  const stopDestructiveAction = () => {
+    alert(DATA_PROTECTION?.message || "\uB370\uC774\uD130 \uBCF4\uD638 \uD655\uC778 \uC804\uC5D0\uB294 \uC0AD\uC81C\xB7\uCD08\uAE30\uD654\uB97C \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+  };
   const sbGet = async (table, params = "") => {
     const res = await fetch(`${API}/${table}?${params}`, { headers: H });
     const data = await res.json();
@@ -129,6 +134,8 @@
     return { data, error: null };
   };
   const sbInsert = async (table, body) => {
+    const blocked = protectionError("POST", table, "", body);
+    if (blocked) return { data: null, error: blocked };
     const res = await fetch(`${API}/${table}`, {
       method: "POST",
       headers: H,
@@ -139,6 +146,8 @@
     return { data: Array.isArray(body) ? data : data[0], error: null };
   };
   const sbUpsert = async (table, body, conflictCols = "") => {
+    const blocked = protectionError("POST", table, "", body);
+    if (blocked) return { data: null, error: blocked };
     const H2 = { ...H, "Prefer": "resolution=merge-duplicates,return=minimal" };
     const qp = conflictCols ? `?on_conflict=${encodeURIComponent(conflictCols)}` : "";
     const res = await fetch(`${API}/${table}${qp}`, {
@@ -158,12 +167,14 @@
       return `${msg}
 
 \u{1F4A1} \uD574\uACB0 \uBC29\uBC95:
-1. supabase-setup.sql\uC744 Supabase SQL Editor\uC5D0\uC11C \uB2E4\uC2DC \uC2E4\uD589\uD558\uC138\uC694.
+1. \uCD08\uAE30\uD654 SQL\uC744 \uC7AC\uC2E4\uD589\uD558\uC9C0 \uB9D0\uACE0 \uAD00\uB9AC\uC790\uC5D0\uAC8C \uB204\uB77D \uCEEC\uB7FC \uC810\uAC80\uC744 \uC694\uCCAD\uD558\uC138\uC694.
 2. \uADF8\uB798\uB3C4 \uC548 \uB418\uBA74 Supabase \uB300\uC2DC\uBCF4\uB4DC \u2192 \uC124\uC815(Settings) \u2192 API \u2192 Reload schema \uD074\uB9AD`;
     }
     return msg;
   };
   const sbUpdate = async (table, filter, body) => {
+    const blocked = protectionError("PATCH", table, filter, body);
+    if (blocked) return { data: null, error: blocked };
     const res = await fetch(`${API}/${table}?${filter}`, {
       method: "PATCH",
       headers: H,
@@ -174,6 +185,8 @@
     return { data, error: null };
   };
   const sbDelete = async (table, filter) => {
+    const blocked = protectionError("DELETE", table, filter);
+    if (blocked) return { error: blocked };
     const res = await fetch(`${API}/${table}?${filter}`, {
       method: "DELETE",
       headers: H
@@ -185,6 +198,8 @@
     return { error: null };
   };
   const sbStorageUpload = async (bucket, path, file) => {
+    const blocked = protectionError("POST", bucket, "", {});
+    if (blocked) return { url: null, error: blocked };
     const res = await fetch(`${SB_URL}/storage/v1/object/${bucket}/${path}`, {
       method: "POST",
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` },
@@ -369,8 +384,7 @@
     break_minutes: toNum(c.breakMinutes) ?? 60,
     include_break_in_hours: c.includeBreakInHours !== false,
     notes: c.notes || "",
-    pdf_name: c.pdfName || "",
-    pdf_data: c.pdfData || "",
+    ...DATA_PROTECTION?.attachmentFields(c) || {},
     links: c.links || []
   });
   const toAccount = (r) => r ? {
@@ -1703,6 +1717,7 @@
       notes: course.notes || "",
       pdfName: course.pdfName || "",
       pdfData: course.pdfData || "",
+      _pdfChanged: false,
       schedDays: course.schedDays || "",
       schedTimeFrom: course.schedTimeFrom || "09:00",
       schedTimeTo: course.schedTimeTo || "13:00",
@@ -1750,10 +1765,12 @@
         r.onload = (ev) => {
           set("pdfData", ev.target.result);
           set("pdfName", f.name);
+          set("_pdfChanged", true);
         };
         r.readAsDataURL(f);
         return;
       }
+      set("_pdfChanged", true);
       set("pdfData", url);
       set("pdfName", f.name);
     };
@@ -1976,10 +1993,7 @@
       } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, "\u{1F4D5}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.p } }, form.pdfName), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: T.mu } }, "\uC5C5\uB85C\uB4DC \uC644\uB8CC")), /* @__PURE__ */ React.createElement(Btn, { size: "sm", variant: "outline", onClick: () => {
         const w = window.open();
         w.document.write(`<iframe src="${form.pdfData}" style="width:100%;height:100vh;border:none;"/>`);
-      } }, "\uBBF8\uB9AC\uBCF4\uAE30"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => {
-        set("pdfData", "");
-        set("pdfName", "");
-      }, style: {
+      } }, "\uBBF8\uB9AC\uBCF4\uAE30"), /* @__PURE__ */ React.createElement("button", { type: "button", title: "\uAE30\uC874 \uCCA8\uBD80\uD30C\uC77C \uBCF4\uD638 \uC911", onClick: stopDestructiveAction, style: {
         width: 26,
         height: 26,
         borderRadius: 6,
@@ -2028,11 +2042,16 @@
       } catch (err) {
         console.warn("PDF \uB370\uC774\uD130 \uB85C\uB4DC \uC2E4\uD328:", err);
       }
-      return c;
+      return null;
     };
     const openEdit = async (c) => {
+      const full = await loadFullCourse(c);
+      if (!full) {
+        alert("\uACFC\uC815 \uC6D0\uBCF8\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD574 \uD3B8\uC9D1\uC744 \uC911\uC9C0\uD588\uC2B5\uB2C8\uB2E4. \uC5F0\uACB0 \uC0C1\uD0DC\uB97C \uD655\uC778\uD55C \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.");
+        return;
+      }
       setIsNew(false);
-      setEdit(await loadFullCourse(c));
+      setEdit(full);
     };
     const previewPdf = async (c) => {
       const full = await loadFullCourse(c);
@@ -7278,25 +7297,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       color: "#92400E",
       cursor: "pointer",
       fontWeight: 700
-    } }, "\u{1F522} \uC77C\uAD04\uBC88\uD638 \uC218\uC815"), /* @__PURE__ */ React.createElement("button", { onClick: () => {
-      if (!window.confirm("\uD604\uC7AC \uBB38\uC11C \uC885\uB958\uC758 \uBC1C\uAE09\uC774\uB825\uC744 \uBAA8\uB450 \uCD08\uAE30\uD654\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?")) return;
-      setCertHistory((prev) => {
-        const next = prev.filter((r) => r.docType !== docType);
-        saveCertHistory(next);
-        addAudit?.("\uC99D\uBA85\uC11C \uC774\uB825 \uCD08\uAE30\uD654", `${DOC_TYPE_NAMES[docType] || docType}`, currentUser?.name);
-        return next;
-      });
-      sbDelete("cert_issuances", `doc_type=eq.${encodeURIComponent(docType)}`).then(({ error }) => {
-        if (error) {
-          setCertDbStatus("error");
-          setCertDbError(error.message || JSON.stringify(error));
-          alert("\uB85C\uCEEC \uC774\uB825\uC740 \uCD08\uAE30\uD654\uD588\uC9C0\uB9CC Supabase \uC774\uB825 \uC0AD\uC81C\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.\n\uB2E4\uB978 PC\uC5D0\uB294 \uAE30\uC874 \uC774\uB825\uC774 \uB0A8\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\n\n" + (error.message || JSON.stringify(error)));
-        }
-      }).catch((e) => {
-        setCertDbStatus("error");
-        setCertDbError(e.message || String(e));
-      });
-    }, style: {
+    } }, "\u{1F522} \uC77C\uAD04\uBC88\uD638 \uC218\uC815"), /* @__PURE__ */ React.createElement("button", { onClick: stopDestructiveAction, style: {
       fontSize: 11,
       padding: "4px 10px",
       borderRadius: 6,
@@ -7305,7 +7306,7 @@ document.querySelectorAll('[contenteditable="true"]').forEach(function(el){
       color: T.danger,
       cursor: "pointer",
       fontWeight: 600
-    } }, "\u{1F5D1} \uC774\uB825 \uCD08\uAE30\uD654"), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowHistory(false), style: {
+    } }, "\u{1F512} \uC774\uB825 \uBCF4\uD638 \uC911"), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowHistory(false), style: {
       fontSize: 11,
       padding: "4px 10px",
       borderRadius: 6,
@@ -10309,7 +10310,7 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
     const TAB_ITEMS_DM = [
       { id: "status", icon: "\u{1F4CA}", label: "\uD604\uD669" },
       { id: "course", icon: "\u{1F4C2}", label: "\uACFC\uC815\uBCC4 \uAD00\uB9AC" },
-      { id: "backup", icon: "\u{1F4BE}", label: "\uBC31\uC5C5 \xB7 \uCD08\uAE30\uD654" }
+      { id: "backup", icon: "\u{1F4BE}", label: "\uB0B4\uBCF4\uB0B4\uAE30 \xB7 \uB370\uC774\uD130 \uBCF4\uD638" }
     ];
     const selCourse = courses.find((c) => c.id === selCid);
     const selStudents = students.filter((s) => s.cid === selCid);
@@ -10521,21 +10522,15 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
         borderRadius: 10,
         background: "#FEF2F2",
         border: "1px solid #FECACA"
-      } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.tx, marginBottom: 5 } }, "\u{1F5D1}\uFE0F \uACFC\uC815 \uD6C8\uB828\uC0DD \uCD08\uAE30\uD654"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 10 } }, selCourse.code, " \uD6C8\uB828\uC0DD ", selStudents.length, "\uBA85 \uC804\uCCB4 \uC0AD\uC81C", selStudents.length === 0 && /* @__PURE__ */ React.createElement("span", { style: { color: T.mu } }, " (\uC5C6\uC74C)")), !confirmCourse ? /* @__PURE__ */ React.createElement(
+      } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.tx, marginBottom: 5 } }, "\u{1F512} \uACFC\uC815 \uD6C8\uB828\uC0DD \uCD08\uAE30\uD654 \uC911\uC9C0"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 10 } }, selCourse.code, " \uD6C8\uB828\uC0DD ", selStudents.length, "\uBA85 \uAE30\uB85D \uBCF4\uC874 \uC911", selStudents.length === 0 && /* @__PURE__ */ React.createElement("span", { style: { color: T.mu } }, " (\uC5C6\uC74C)")), !confirmCourse ? /* @__PURE__ */ React.createElement(
         Btn,
         {
           variant: "danger",
           size: "sm",
-          onClick: () => {
-            if (selStudents.length === 0) {
-              alert("\uC0AD\uC81C\uD560 \uD6C8\uB828\uC0DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.");
-              return;
-            }
-            setConfirmCourse(true);
-          }
+          onClick: stopDestructiveAction
         },
         /* @__PURE__ */ React.createElement(Icon, { n: "alert", s: 12 }),
-        " \uCD08\uAE30\uD654"
+        " \uCD08\uAE30\uD654 \uBCF4\uD638 \uC911"
       ) : /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 7, padding: "10px 12px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: T.danger, marginBottom: 7 } }, "\u26A0\uFE0F ", selCourse.code, " \uD6C8\uB828\uC0DD ", selStudents.length, "\uBA85\uC744 \uC0AD\uC81C\uD569\uB2C8\uB2E4"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", size: "sm", onClick: () => setConfirmCourse(false) }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { variant: "danger", size: "sm", onClick: () => {
         onResetCourse(selCid);
         setConfirmCourse(false);
@@ -10555,7 +10550,7 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
         justifyContent: "center",
         flexShrink: 0,
         fontSize: 20
-      } }, "\u{1F4BE}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, marginBottom: 4 } }, "\uC804\uCCB4 \uB370\uC774\uD130 \uBC31\uC5C5"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.7, marginBottom: 10 } }, "\uD6C8\uB828\uC0DD ", /* @__PURE__ */ React.createElement("b", { style: { color: T.p } }, students.length, "\uBA85"), " \uC804\uCCB4 + \uACFC\uC815\uBCC4 \uC9D1\uACC4\uB97C \uC5D1\uC140 2\uAC1C \uC2DC\uD2B8\uB85C \uB0B4\uBCF4\uB0C5\uB2C8\uB2E4."), /* @__PURE__ */ React.createElement(Btn, { size: "sm", onClick: backupAll }, /* @__PURE__ */ React.createElement(Icon, { n: "dl", s: 13 }), " \uC804\uCCB4 \uBC31\uC5C5 \uD30C\uC77C \uB2E4\uC6B4\uB85C\uB4DC")))), /* @__PURE__ */ React.createElement("div", { style: {
+      } }, "\u{1F4BE}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, marginBottom: 4 } }, "\uD6C8\uB828\uC0DD \uBA85\uB2E8\xB7\uC9D1\uACC4 \uC5D1\uC140"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.7, marginBottom: 10 } }, "\uD6C8\uB828\uC0DD ", /* @__PURE__ */ React.createElement("b", { style: { color: T.p } }, students.length, "\uBA85"), " \uC804\uCCB4 + \uACFC\uC815\uBCC4 \uC9D1\uACC4\uB97C \uC5D1\uC140 2\uAC1C \uC2DC\uD2B8\uB85C \uB0B4\uBCF4\uB0C5\uB2C8\uB2E4."), /* @__PURE__ */ React.createElement(Btn, { size: "sm", onClick: backupAll }, /* @__PURE__ */ React.createElement(Icon, { n: "dl", s: 13 }), " \uBA85\uB2E8\xB7\uC9D1\uACC4 \uC5D1\uC140 \uB2E4\uC6B4\uB85C\uB4DC")))), /* @__PURE__ */ React.createElement("div", { style: {
         padding: "11px 14px",
         borderRadius: 9,
         background: "#FFFBEB",
@@ -10563,7 +10558,7 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
         fontSize: 11,
         color: "#92400E",
         lineHeight: 1.7
-      } }, "\u2139\uFE0F ", /* @__PURE__ */ React.createElement("b", null, "\uC0D8\uD50C \uB370\uC774\uD130 \uD3EC\uD568 \uC548\uB0B4:"), " \uD604\uC7AC \uB4F1\uB85D\uB41C \uD6C8\uB828\uC0DD \uB370\uC774\uD130\uB294 \uC2DC\uC2A4\uD15C \uD14C\uC2A4\uD2B8\uC6A9 \uC0D8\uD50C\uC785\uB2C8\uB2E4. \uC2E4\uC81C \uC6B4\uC601 \uC2DC\uC791 \uC804\uC5D0 \uACFC\uC815\uBCC4 \uB610\uB294 \uC804\uCCB4 \uCD08\uAE30\uD654\uB97C \uC9C4\uD589\uD574 \uC8FC\uC138\uC694."), /* @__PURE__ */ React.createElement("div", { style: {
+      } }, "\u{1F512} ", /* @__PURE__ */ React.createElement("b", null, "\uC6B4\uC601 \uB370\uC774\uD130 \uBCF4\uD638:"), " \uD604\uC7AC \uC790\uB8CC\uB294 \uC2E4\uC81C \uC6B4\uC601 \uAE30\uB85D\uC785\uB2C8\uB2E4. \uC0AD\uC81C\xB7\uCD08\uAE30\uD654\uB97C \uC911\uC9C0\uD588\uC2B5\uB2C8\uB2E4. \uBA85\uB2E8\xB7\uC9D1\uACC4 \uC5D1\uC140\uC5D0\uB294 \uC77C\uBCC4 \uCD9C\uACB0\uACFC \uCCA8\uBD80\uD30C\uC77C \uC6D0\uBCF8\uC774 \uD3EC\uD568\uB418\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4."), /* @__PURE__ */ React.createElement("div", { style: {
         padding: 18,
         background: "#FEF2F2",
         borderRadius: 12,
@@ -10579,10 +10574,10 @@ Supabase SQL Editor\uC5D0\uC11C supabase-setup.sql \uC804\uCCB4\uB97C \uC2E4\uD5
         justifyContent: "center",
         flexShrink: 0,
         fontSize: 20
-      } }, "\u{1F5D1}\uFE0F"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, marginBottom: 4 } }, "\uC804\uCCB4 \uD6C8\uB828\uC0DD \uCD08\uAE30\uD654"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.7, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("b", { style: { color: T.danger } }, "\uBAA8\uB4E0 \uACFC\uC815\uC758 \uD6C8\uB828\uC0DD ", students.length, "\uBA85"), " \uB370\uC774\uD130\uAC00 \uC0AD\uC81C\uB429\uB2C8\uB2E4. \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."), !confirmAll ? /* @__PURE__ */ React.createElement(Btn, { variant: "danger", size: "sm", onClick: () => setConfirmAll(true) }, /* @__PURE__ */ React.createElement(Icon, { n: "alert", s: 13 }), " \uC804\uCCB4 \uCD08\uAE30\uD654") : /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 8, padding: "12px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.danger, marginBottom: 4 } }, "\u26A0\uFE0F \uC815\uB9D0\uB85C \uD6C8\uB828\uC0DD ", students.length, "\uBA85\uC744 \uBAA8\uB450 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 10 } }, "\uCD08\uAE30\uD654 \uC804\uC5D0 \uBC18\uB4DC\uC2DC \uBC31\uC5C5\uC744 \uBA3C\uC800 \uBC1B\uC544\uB450\uC138\uC694."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", size: "sm", onClick: () => setConfirmAll(false) }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { variant: "danger", size: "sm", onClick: () => {
+      } }, "\u{1F5D1}\uFE0F"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: T.tx, marginBottom: 4 } }, "\uC804\uCCB4 \uD6C8\uB828\uC0DD \uCD08\uAE30\uD654 \uC911\uC9C0"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, lineHeight: 1.7, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("b", { style: { color: T.danger } }, "\uBAA8\uB4E0 \uACFC\uC815\uC758 \uD6C8\uB828\uC0DD ", students.length, "\uBA85"), " \uAE30\uB85D\uC744 \uBCF4\uC874\uD569\uB2C8\uB2E4. \uC804\uCCB4 \uCD08\uAE30\uD654\uC640 \uC77C\uAD04 \uC911\uB3C4\uD0C8\uB77D \uCC98\uB9AC\uB97C \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."), !confirmAll ? /* @__PURE__ */ React.createElement(Btn, { variant: "danger", size: "sm", onClick: stopDestructiveAction }, /* @__PURE__ */ React.createElement(Icon, { n: "alert", s: 13 }), " \uCD08\uAE30\uD654 \uBCF4\uD638 \uC911") : /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 8, padding: "12px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: T.danger, marginBottom: 4 } }, "\u26A0\uFE0F \uC815\uB9D0\uB85C \uD6C8\uB828\uC0DD ", students.length, "\uBA85\uC744 \uBAA8\uB450 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, marginBottom: 10 } }, "\uCD08\uAE30\uD654 \uC804\uC5D0 \uBC18\uB4DC\uC2DC \uBC31\uC5C5\uC744 \uBA3C\uC800 \uBC1B\uC544\uB450\uC138\uC694."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", size: "sm", onClick: () => setConfirmAll(false) }, "\uCDE8\uC18C"), /* @__PURE__ */ React.createElement(Btn, { variant: "danger", size: "sm", onClick: () => {
         onResetAll();
         onClose();
-      } }, "\uB124, \uC804\uCCB4 \uC0AD\uC81C\uD569\uB2C8\uB2E4")))))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, textAlign: "center", padding: "4px 0" } }, "\u{1F4A1} \uCD08\uAE30\uD654 \uC804\uC5D0 \uBC18\uB4DC\uC2DC \uBC31\uC5C5\uC744 \uBA3C\uC800 \uBC1B\uC544\uB450\uC138\uC694"))))
+      } }, "\uB124, \uC804\uCCB4 \uC0AD\uC81C\uD569\uB2C8\uB2E4")))))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: T.mu, textAlign: "center", padding: "4px 0" } }, "\u{1F4A1} \uC6D0\uBCF8 \uBC31\uC5C5\uC5D0\uB294 \uC77C\uBCC4 \uCD9C\uACB0\uACFC \uCCA8\uBD80\uD30C\uC77C\uB3C4 \uD568\uAED8 \uBCF4\uAD00\uD574\uC57C \uD569\uB2C8\uB2E4"))))
     );
   };
   const INIT_ACCOUNTS = [
@@ -12181,7 +12176,7 @@ ${formatCoursePeriod(c)}
     const [collapsed, setCollapsed] = useState(false);
     const [mobileSidebar, setMobileSidebar] = useState(false);
     const [students, setStudents] = useState([]);
-    const [courses, setCourses] = useState(COURSES);
+    const [courses, setCourses] = useState([]);
     const [overrides, setOverrides] = useState([]);
     const [editTarget, setEditTarget] = useState(null);
     const [showNew, setShowNew] = useState(false);
@@ -12281,8 +12276,7 @@ Supabase \uB300\uC2DC\uBCF4\uB4DC \u2192 API \u2192 Schema Cache \u2192 Reload \
         if (e?.status === 403 || msg.includes("permission denied") || msg.includes("row-level security"))
           return `\uAD8C\uD55C \uC624\uB958 (RLS)
 
-Supabase \uB300\uC2DC\uBCF4\uB4DC SQL Editor\uC5D0\uC11C
-supabase-setup.sql \uC758 "RLS \uD574\uC81C" \uAD6C\uBB38\uC744 \uC2E4\uD589\uD558\uC138\uC694.`;
+\uAD00\uB9AC\uC790\uC5D0\uAC8C \uB85C\uADF8\uC778\uACFC \uC811\uADFC \uAD8C\uD55C \uD655\uC778\uC744 \uC694\uCCAD\uD558\uC138\uC694. \uBCF4\uD638 \uADDC\uCE59\uC744 \uD574\uC81C\uD558\uAC70\uB098 \uCD08\uAE30\uD654 SQL\uC744 \uC2E4\uD589\uD558\uC9C0 \uB9C8\uC138\uC694.`;
         if (e?.status === 503 || msg.includes("project is paused") || msg.includes("upstream connect error"))
           return `Supabase \uD504\uB85C\uC81D\uD2B8\uAC00 \uC77C\uC2DC\uC815\uC9C0 \uC0C1\uD0DC\uC785\uB2C8\uB2E4.
 
@@ -12309,7 +12303,7 @@ ${msg}`;
           if (cRes.error) throw cRes.error;
           if (sRes.error) throw sRes.error;
           const loadedCourses = (cRes.data || []).map(toCourse);
-          if (loadedCourses.length > 0) setCourses(loadedCourses);
+          setCourses(loadedCourses);
           const loadedStudents = (sRes.data || []).map(toStudent);
           setStudents(loadedStudents);
           if (ovRes?.error) {
@@ -12403,17 +12397,6 @@ ${msg}`;
     const addStudents = useCallback(async (newOnes) => {
       const bodies = newOnes.map(fromStudent);
       let { data, error } = await sbInsert("students", bodies);
-      if (error && isStudentSchemaErr(error)) {
-        const m = error?.message || "";
-        const badCol = (m.match(/column ['"`]?(\w+)['"`]?/) || m.match(/'(\w+)'.*schema/) || [])[1] || "cid";
-        console.warn("\u26A0\uFE0F students \uC2A4\uD0A4\uB9C8 \uCE90\uC2DC \uC624\uB958 (\uCEEC\uB7FC:", badCol, ") \u2014 Supabase \u2192 Settings \u2192 API \u2192 Reload schema");
-        const fallback = bodies.map((b) => {
-          const f = { ...b };
-          delete f[badCol];
-          return f;
-        });
-        ({ data, error } = await sbInsert("students", fallback));
-      }
       if (error) {
         alert("\uC800\uC7A5 \uC624\uB958:\n" + fmtSaveError(error));
         console.error("\u274C \uD559\uC0DD \uC800\uC7A5 \uC2E4\uD328:", error);
@@ -12450,11 +12433,6 @@ ${msg}`;
       const locked = existing ? { ...updated, cid: existing.cid, personId: updated.personId || existing.personId || existing.id } : updated;
       let body = fromStudent(locked);
       let { error } = await sbUpdate("students", `id=eq.${locked.id}`, body);
-      if (error && isStudentSchemaErr(error)) {
-        console.warn("\u26A0\uFE0F students.cid \uC2A4\uD0A4\uB9C8 \uCE90\uC2DC \uC624\uB958 \u2014 Supabase \uB300\uC2DC\uBCF4\uB4DC \u2192 Settings \u2192 API \u2192 Schema Cache \u2192 Reload");
-        const { cid, ...fallback } = body;
-        ({ error } = await sbUpdate("students", `id=eq.${locked.id}`, fallback));
-      }
       if (error) {
         alert("\uC218\uC815 \uC624\uB958: " + (error.message || JSON.stringify(error)));
         return;
@@ -12462,74 +12440,15 @@ ${msg}`;
       setStudents((prev) => prev.map((s) => s.id === locked.id ? locked : s));
       addAudit("\uD6C8\uB828\uC0DD \uC218\uC815", `${locked.name} \uC815\uBCF4 \uC218\uC815`, currentUser?.name);
     }, [addAudit, currentUser]);
-    const archiveStudent = useCallback(async (id, reason = "\uC0AD\uC81C\uC694\uCCAD(\uC774\uB825\uBCF4\uC874)") => {
-      const today = localDateStr();
-      const patch = {
-        enrollment_status: "\uC911\uB3C4\uD0C8\uB77D",
-        status_change_date: today,
-        dropout_reason: reason
-      };
-      const { error } = await sbUpdate("students", `id=eq.${id}`, patch);
-      if (error) return { ok: false, error };
-      return { ok: true, patch };
+    const deleteStudent = useCallback(async () => {
+      stopDestructiveAction();
     }, []);
-    const deleteStudent = useCallback(async (id) => {
-      if (!window.confirm("\uC774 \uD6C8\uB828\uC0DD\uC744 \uC0AD\uC81C\uD558\uC9C0 \uC54A\uACE0 \uC774\uB825 \uBCF4\uC874 \uC0C1\uD0DC(\uC911\uB3C4\uD0C8\uB77D)\uB85C \uBCC0\uACBD\uD560\uAE4C\uC694?")) return;
-      const target = students.find((s) => s.id === id);
-      const res = await archiveStudent(id, "\uAC1C\uBCC4 \uC0AD\uC81C\uC694\uCCAD(\uC774\uB825\uBCF4\uC874)");
-      if (!res.ok) {
-        alert("\uC0C1\uD0DC \uBCC0\uACBD \uC624\uB958: " + (res.error.message || JSON.stringify(res.error)));
-        return;
-      }
-      setStudents((prev) => prev.map((s) => s.id === id ? { ...s, enrollmentStatus: "\uC911\uB3C4\uD0C8\uB77D", statusChangeDate: res.patch.status_change_date, dropoutReason: res.patch.dropout_reason } : s));
-      addAudit("\uD6C8\uB828\uC0DD \uC0C1\uD0DC\uBCC0\uACBD", `${target?.name || id} \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC`, currentUser?.name);
-    }, [students, addAudit, currentUser, archiveStudent]);
     const resetData = useCallback(async () => {
-      if (!window.confirm("\uC804\uCCB4 \uC0AD\uC81C \uB300\uC2E0 \uC804\uCCB4 \uC774\uB825\uC744 \uC911\uB3C4\uD0C8\uB77D(\uBCF4\uC874) \uCC98\uB9AC\uD569\uB2C8\uB2E4. \uC9C4\uD589\uD560\uAE4C\uC694?")) return;
-      const ids = students.map((s) => s.id);
-      if (ids.length === 0) return;
-      const today = localDateStr();
-      const patch = {
-        enrollment_status: "\uC911\uB3C4\uD0C8\uB77D",
-        status_change_date: today,
-        dropout_reason: "\uC804\uCCB4 \uCD08\uAE30\uD654(\uC774\uB825\uBCF4\uC874)"
-      };
-      const { error } = await sbUpdate("students", `id=in.(${ids.join(",")})`, patch);
-      if (error) {
-        alert("\uCD08\uAE30\uD654 \uC624\uB958: " + (error.message || JSON.stringify(error)));
-        return;
-      }
-      setStudents((prev) => prev.map((s) => ({
-        ...s,
-        enrollmentStatus: "\uC911\uB3C4\uD0C8\uB77D",
-        statusChangeDate: today,
-        dropoutReason: "\uC804\uCCB4 \uCD08\uAE30\uD654(\uC774\uB825\uBCF4\uC874)"
-      })));
-      addAudit("\uC804\uCCB4 \uC0C1\uD0DC\uBCC0\uACBD", `\uBAA8\uB4E0 \uD6C8\uB828\uC0DD \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC ${ids.length}\uAC74`, currentUser?.name);
-    }, [students, addAudit, currentUser]);
-    const resetCourseStudents = useCallback(async (cid) => {
-      if (!window.confirm("\uACFC\uC815 \uD6C8\uB828\uC0DD \uC0AD\uC81C \uB300\uC2E0 \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC\uD569\uB2C8\uB2E4. \uC9C4\uD589\uD560\uAE4C\uC694?")) return;
-      const targets = students.filter((s) => Number(s.cid) === Number(cid));
-      if (targets.length === 0) return;
-      const today = localDateStr();
-      const patch = {
-        enrollment_status: "\uC911\uB3C4\uD0C8\uB77D",
-        status_change_date: today,
-        dropout_reason: `\uACFC\uC815\uCD08\uAE30\uD654(${cid}) \uC774\uB825\uBCF4\uC874`
-      };
-      const { error } = await sbUpdate("students", `cid=eq.${cid}`, patch);
-      if (error) {
-        alert("\uCD08\uAE30\uD654 \uC624\uB958: " + (error.message || JSON.stringify(error)));
-        return;
-      }
-      setStudents((prev) => prev.map((s) => Number(s.cid) !== Number(cid) ? s : {
-        ...s,
-        enrollmentStatus: "\uC911\uB3C4\uD0C8\uB77D",
-        statusChangeDate: today,
-        dropoutReason: `\uACFC\uC815\uCD08\uAE30\uD654(${cid}) \uC774\uB825\uBCF4\uC874`
-      }));
-      addAudit("\uACFC\uC815 \uC0C1\uD0DC\uBCC0\uACBD", `\uACFC\uC815 ID ${cid} \uD6C8\uB828\uC0DD \uC911\uB3C4\uD0C8\uB77D(\uC774\uB825\uBCF4\uC874) \uCC98\uB9AC ${targets.length}\uAC74`, currentUser?.name);
-    }, [students, addAudit, currentUser]);
+      stopDestructiveAction();
+    }, []);
+    const resetCourseStudents = useCallback(async () => {
+      stopDestructiveAction();
+    }, []);
     const addCourse = useCallback(async (c) => {
       const { data, error } = await sbInsert("courses", fromCourse(c));
       if (error) {
@@ -12738,6 +12657,10 @@ ${msg}`;
         auditLog,
         onSave: async (updated) => {
           try {
+            if (DATA_PROTECTION?.enabled) {
+              stopDestructiveAction();
+              return;
+            }
             console.log("Saving accounts...");
             const { data: existingRows, error: loadErr } = await sbGet("accounts", "select=id&order=id");
             if (loadErr) throw loadErr;
@@ -12771,7 +12694,7 @@ ${msg}`;
       fontFamily: "'Pretendard',-apple-system,sans-serif",
       overflow: "hidden",
       flexDirection: "column"
-    } }, !piDismissed && /* @__PURE__ */ React.createElement("div", { style: {
+    } }, /* @__PURE__ */ React.createElement("div", { role: "status", style: { background: "#ECFDF5", color: "#065F46", padding: "9px 22px", fontSize: 12, flexShrink: 0 } }, "\u{1F512} \uB370\uC774\uD130 \uBCF4\uD638 \uBAA8\uB4DC \xB7 \uC0AD\uC81C\xB7\uCD08\uAE30\uD654 \uC911\uC9C0 \xB7 \uACFC\uC815 \uC800\uC7A5 \uC2DC \uAE30\uC874 \uCCA8\uBD80\uD30C\uC77C \uBCF4\uC874"), !piDismissed && /* @__PURE__ */ React.createElement("div", { style: {
       background: "linear-gradient(90deg,#7C2D12,#B91C1C)",
       padding: "7px 22px",
       display: "flex",
